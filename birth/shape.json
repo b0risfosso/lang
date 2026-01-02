@@ -1,0 +1,28 @@
+{
+  "exported_at": "2026-01-01T00:00:00Z",
+  "roots": [
+    {
+      "id": 1,
+      "name": "English",
+      "type": "lang",
+      "parent_writing_id": null,
+      "children": [
+        {
+          "id": 10,
+          "name": "Verb Rules",
+          "type": "grammar",
+          "parent_writing_id": 1,
+          "children": [
+            {
+              "id": 25,
+              "name": "Irregular Verbs",
+              "parent_writing_id": 10,
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
