@@ -1,0 +1,47 @@
+1) Leaf-as-page: write the language onto the leaf (physical inscription)
+Ink / marker: write node names or IDs directly on the leaf surface.
+Micro-labels: tiny sticker tags (IDs/QR codes) placed on veins.
+Laser etch (careful): lightly etch a pattern onto dried leaves (archival).
+“Alive with the leaf” happens if you treat the leaf’s aging as part of the language: as it dries, curls, or decays, parts of the tree become unreadable—meaning changes with the leaf’s life.
+2) Leaf-as-QR / steganography: encode your JSON as a pattern
+Encode a compressed slice of your JSON into:
+a QR code printed on ultra-thin paper and adhered to the leaf, or
+a vein-following pattern (like a maze) where left/right turns encode bits.
+Then the leaf becomes a carrier medium: your language is literally “on” it.
+3) Leaf-as-sensor: the leaf drives the language
+Let the leaf’s state rewrite your JSON.
+Signals you can measure cheaply:
+light intensity hitting the leaf
+leaf moisture
+temperature
+leaf angle / motion (wind)
+Mapping examples:
+moisture ↓ → prune branches / collapse synonyms
+light ↑ → expand children / add “growth” nodes
+wind ↑ → shuffle order / introduce “mutation” nodes
+Now the leaf isn’t just storage; it’s a co-author.
+4) Leaf-as-ritual interface: a daily “leaf export”
+Treat the leaf like a living clock:
+Every sunrise, pick a leaf.
+Choose a path through your tree based on leaf features:
+number of lobes
+vein count from stem to edge
+blemishes/spots
+That path becomes the day’s “spoken language” subset.
+Your JSON “lives with” the leaf because the leaf selects what gets expressed.
+5) Leaf-as-network node: a tag that points to the language
+If you want a practical version:
+attach an NFC sticker or QR to a leaf in a garden/public place
+scanning it opens:
+a GitHub Pages tree viewer
+the raw JSON
+or a “this leaf’s node of the day” page
+Then the leaf is the physical “portal” into the language.
+6) Leaf-as-biology metaphor made literal: tree structure matches leaf veins
+Make a rendering where:
+the root sits at the stem
+branches follow primary veins
+sub-branches follow secondary veins
+leaves/words sit at the edges
+Print it onto transparent film laid over the leaf (or project it with light).
+The language becomes anatomically aligned to the leaf’s structure.

@@ -1,0 +1,17 @@
+data.gov is a collection of datasets
+- lang connects with datasets.
+
+data.gov is a physical system.
+- lang interacts physically with data.gov
+
+
+words that exist in data.gov: climate & environment, health, economics & labor, transportation, energy, education, agriculture, justice, ...
+- lang connects with words.
+
+entities that exist in data.gov: agencies, researchers & scientists, journalists, educators & students,...
+- lang connects with entities. 
+
+
+data.gov is language? 
+- lang <-> language <-> data.gov
+
