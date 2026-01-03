@@ -1,0 +1,286 @@
+{
+    "parent": {
+      "word": "solar panel",
+      "type": "Craigslist (Dallas / DFW)"
+    },
+    "children": {
+      "pages": [
+        {
+          "word": "for_sale_results",
+          "type": "for sale",
+          "children": {
+            "meta": [
+              {
+                "word": "Results range: 1–9 of 102",
+                "children": {}
+              },
+              {
+                "word": "Sort: relevance",
+                "children": {}
+              },
+              {
+                "word": "Average price: $7,771",
+                "children": {}
+              }
+            ],
+            "filters": [
+              {
+                "word": "price",
+                "children": {
+                  "options": [
+                    { "word": "free", "children": {} },
+                    { "word": "$ min – $ max", "children": {} },
+                    { "word": "slider: $0 $10k $20k $30k $40k $115k", "children": {} }
+                  ]
+                }
+              },
+              {
+                "word": "seller_type",
+                "children": {
+                  "options": [
+                    { "word": "all owner dealer", "children": {} },
+                    { "word": "owner", "children": {} },
+                    { "word": "dealer", "children": {} }
+                  ]
+                }
+              },
+              {
+                "word": "posting_filters",
+                "children": {
+                  "options": [
+                    { "word": "search titles only", "children": {} },
+                    { "word": "has image", "children": {} },
+                    { "word": "posted today", "children": {} },
+                    { "word": "hide duplicates", "children": {} }
+                  ]
+                }
+              },
+              {
+                "word": "distance",
+                "children": {
+                  "options": [
+                    { "word": "miles from zip", "children": {} },
+                    { "word": "use map", "children": {} }
+                  ]
+                }
+              },
+              {
+                "word": "categories",
+                "children": {
+                  "options": [
+                    { "word": "general for sale (19)", "children": {} },
+                    { "word": "cars & trucks (14)", "children": {} },
+                    { "word": "farm & garden (9)", "children": {} },
+                    { "word": "recreational vehicles (9)", "children": {} },
+                    { "word": "household items (8)", "children": {} },
+                    { "word": "+ show 14 more", "children": {} }
+                  ]
+                }
+              }
+            ],
+            "listings": [
+              { "word": "Solar panel", "price": "$500", "location": "dallas", "date": "1/1", "children": {} },
+              { "word": "Solar panel.", "price": "$50", "location": "Mesquite", "date": "12/22", "children": {} },
+              {
+                "word": "Monarch Deer Feeder with Solar Panel",
+                "price": "$50",
+                "location": "Corsicana",
+                "date": "12/15",
+                "children": {}
+              },
+              {
+                "word": "Pole Mount Street Light or electric gate Solar Panels",
+                "price": "$75",
+                "location": "NW Austin",
+                "date": "2h ago",
+                "children": {}
+              },
+              {
+                "word": "Midnite Solar Classic CLASSIC200-SL MPPT Charge Controller",
+                "price": "$395",
+                "location": "Euless",
+                "date": "7h ago",
+                "children": {}
+              },
+              {
+                "word": "New Solar Black Outdoor Integrated LED Landscape Pathway Light 6-",
+                "price": "$25",
+                "location": "north DFW",
+                "date": "1/2",
+                "children": {}
+              },
+              {
+                "word": "Emerson Solar-Powered Lighted Address Plaque Model 295WI OEM New",
+                "price": "$10",
+                "location": "DFW",
+                "date": "1/2",
+                "children": {}
+              },
+              {
+                "word": "Sunforce Solar Triple Head Motion Activated Security Light 1500 Lumens",
+                "price": "$30",
+                "location": "Duncanville",
+                "date": "12/30",
+                "children": {}
+              },
+              {
+                "word": "Open Box Gama Solar Royal - 23\" 11 LED Solar Post Mount with GS Solar",
+                "price": "$100",
+                "location": "Anna",
+                "date": "12/30",
+                "children": {}
+              },
+              {
+                "word": "400w Hyundai Solar Panels - 24 available",
+                "price": "$125",
+                "location": "Dallas",
+                "date": "12/29",
+                "children": {}
+              },
+              {
+                "word": "Solar Power System, 10KW System, 14KW Li Baterries",
+                "price": "$15,000",
+                "location": "Lake of the Arbuckles",
+                "date": "12/28",
+                "children": {}
+              },
+              {
+                "word": "Off Grid Power Portable Solar/Diesel - $24,000 (Davis, OK)",
+                "price": "$24,000",
+                "location": "Carrollton",
+                "date": "12/27",
+                "children": {}
+              },
+              {
+                "word": "Enphase Complete Solar Power System",
+                "price": "$8,000",
+                "location": "Ferris",
+                "date": "12/25",
+                "children": {}
+              },
+              {
+                "word": "Enphase IQ7+ACM Microinverter",
+                "price": "$60",
+                "location": "Dallas",
+                "date": "12/26",
+                "children": {}
+              },
+              {
+                "word": "Used solar system 42 panels",
+                "price": "$3,500",
+                "location": "Fort Worth",
+                "date": "11/19",
+                "children": {}
+              }
+            ]
+          }
+        },
+        {
+          "word": "services_results",
+          "type": "services",
+          "children": {
+            "meta": [
+              {
+                "word": "Results range: 1–9 of 266",
+                "children": {}
+              },
+              {
+                "word": "Sort: relevance",
+                "children": {}
+              }
+            ],
+            "filters": [
+              {
+                "word": "service_categories",
+                "children": {
+                  "options": [
+                    { "word": "skilled trade services (256)", "children": {} },
+                    { "word": "household services (5)", "children": {} },
+                    { "word": "labor / hauling / moving (1)", "children": {} },
+                    { "word": "small biz ads (1)", "children": {} }
+                  ]
+                }
+              },
+              {
+                "word": "posting_filters",
+                "children": {
+                  "options": [
+                    { "word": "search titles only", "children": {} },
+                    { "word": "has image", "children": {} },
+                    { "word": "posted today", "children": {} },
+                    { "word": "hide duplicates", "children": {} }
+                  ]
+                }
+              },
+              {
+                "word": "distance",
+                "children": {
+                  "options": [
+                    { "word": "miles from zip", "children": {} },
+                    { "word": "use map", "children": {} }
+                  ]
+                }
+              }
+            ],
+            "listings": [
+              {
+                "word": "SOLAR PANEL Installation and Removal (773)600-3473",
+                "location": "Dfw",
+                "date": "1/2",
+                "children": {}
+              },
+              {
+                "word": "Solar Panel Removal & Reinstall – Fast, Affordable, Professional –",
+                "location": "Dallas",
+                "date": "12/17",
+                "children": {}
+              },
+              {
+                "word": "Ecoflow Smart Panel Certified /Master electrician",
+                "location": "fort worth",
+                "date": "12/19",
+                "children": {}
+              },
+              {
+                "word": "Solar detach and re install",
+                "location": "Plano",
+                "date": "12/10",
+                "children": {}
+              },
+              {
+                "word": "ELECTRICIAN - Repairs, Upgrades & Installs - We Show Up - Call",
+                "location": "DFW",
+                "date": "12/29",
+                "children": {}
+              },
+              {
+                "word": "Electrician - Honest Service for Your Electrical Needs - Call Us",
+                "location": "Expert Electrical Help - Call Us Today",
+                "date": "12/16",
+                "children": {}
+              },
+              {
+                "word": "Plumber • Electrician • AC Repair – Same Day Service",
+                "location": "469-656-4000 - Repairs, Installations You Can Count On",
+                "date": "12/31",
+                "children": {}
+              },
+              {
+                "word": "SAME DAY SERVICE PAINTING DRYWALL FLOORING HANDYMAN",
+                "location": "CALL (972) 585-3591---ALL DFW AREAS",
+                "date": "1/2",
+                "children": {}
+              },
+              {
+                "word": "FLOORING FLOORS FLOOR CARPET VINYL Plank. TILE LAMINATE INSTALLATION",
+                "location": "DFW 972 595 2705 Richard installation",
+                "date": "1/2",
+                "children": {}
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+  

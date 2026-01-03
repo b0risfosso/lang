@@ -1,0 +1,165 @@
+{
+    "parent": {
+      "word": "solar panels",
+      "type": "Google Search"
+    },
+    "children": {
+      "search_context": [
+        {
+          "word": "Dallas, TX 75248",
+          "children": {}
+        }
+      ],
+      "filters": {
+        "power_range": [
+          { "word": "Under 100W", "children": {} },
+          { "word": "100–200W", "children": {} },
+          { "word": "200–320W", "children": {} },
+          { "word": "320–550W", "children": {} },
+          { "word": "Over 550W", "children": {} }
+        ],
+        "use_case": [
+          { "word": "Home", "children": {} },
+          { "word": "RV", "children": {} },
+          { "word": "Roof", "children": {} }
+        ],
+        "price": [
+          { "word": "Under $1,500", "children": {} }
+        ],
+        "availability": [
+          { "word": "For Sale", "children": {} },
+          { "word": "On Sale", "children": {} },
+          { "word": "Nearby", "children": {} }
+        ]
+      },
+      "sponsored_products": [
+        {
+          "word": "Talesun Solar 450W Bifacial Panel",
+          "price": "$179.99",
+          "vendor": "US Solar Supplier",
+          "children": {}
+        },
+        {
+          "word": "Sungoldpower 12 x 450W Monocrystalline Panels",
+          "price": "$2,295.00",
+          "vendor": "Sungoldpower",
+          "children": {}
+        },
+        {
+          "word": "VEVOR 2400W Complete Solar Power Kit",
+          "price": "$2,871.99",
+          "vendor": "VEVOR",
+          "children": {}
+        },
+        {
+          "word": "Eco-Worthy 100W Monocrystalline Solar Panel",
+          "price": "$59.99",
+          "vendor": "Eco-Worthy",
+          "children": {}
+        }
+      ],
+      "popular_products": [
+        {
+          "word": "Renogy 200W Monocrystalline Solar Panel",
+          "price": "$144.99",
+          "rating": "4.7",
+          "retailer": "Best Buy",
+          "children": {}
+        },
+        {
+          "word": "VEVOR Portable 200W Foldable Solar Panel",
+          "price": "$149.98",
+          "rating": "4.5",
+          "retailer": "Home Depot",
+          "children": {}
+        },
+        {
+          "word": "EcoFlow 125W Bifacial Solar Panel",
+          "price": "$249.00",
+          "rating": "4.6",
+          "retailer": "EcoFlow",
+          "children": {}
+        }
+      ],
+      "sponsored_services": [
+        {
+          "word": "Solartime USA",
+          "description": "Solar panel installation, battery storage, and EV charger solutions in DFW.",
+          "children": {}
+        },
+        {
+          "word": "SunPower",
+          "description": "Residential solar panels with $0 down financing options.",
+          "children": {}
+        },
+        {
+          "word": "Aurora Solar",
+          "description": "Solar quotes and system design tools.",
+          "children": {}
+        },
+        {
+          "word": "Tesla Solar Panels",
+          "description": "Home solar panels and systems by Tesla.",
+          "children": {}
+        }
+      ],
+      "organic_results": [
+        {
+          "word": "Solar panel",
+          "source": "Wikipedia",
+          "children": {}
+        },
+        {
+          "word": "Homeowner’s Guide to Solar",
+          "source": "Department of Energy",
+          "children": {}
+        },
+        {
+          "word": "Your Guide to Home Solar in 2025",
+          "source": "EnergySage",
+          "children": {}
+        }
+      ],
+      "people_also_ask": [
+        { "word": "How many solar panels are needed to power a house?", "children": {} },
+        { "word": "Is it worth putting solar panels on a house?", "children": {} },
+        { "word": "What is the average cost of 10 solar panels?", "children": {} },
+        { "word": "Why are people getting rid of their solar panels?", "children": {} }
+      ],
+      "community_content": [
+        {
+          "word": "Reddit discussions",
+          "topics": [
+            "Solar panel pricing",
+            "Performance and maintenance",
+            "Local solar recommendations"
+          ],
+          "children": {}
+        },
+        {
+          "word": "YouTube videos",
+          "topics": [
+            "Solar panels worth it?",
+            "Solar energy reviews"
+          ],
+          "children": {}
+        },
+        {
+          "word": "X (Twitter) posts",
+          "topics": [
+            "Global solar panel overproduction",
+            "Falling solar panel prices"
+          ],
+          "children": {}
+        }
+      ],
+      "related_searches": [
+        { "word": "Solar panels for home", "children": {} },
+        { "word": "Solar panels for sale", "children": {} },
+        { "word": "Solar panels cost", "children": {} },
+        { "word": "Solar panels jobs", "children": {} },
+        { "word": "Solar panels for cameras", "children": {} }
+      ]
+    }
+  }
+  

@@ -1,0 +1,132 @@
+{
+    "parent": {
+      "word": "solar panel",
+      "type": "data.gov"
+    },
+    "children": {
+      "topics": [],
+      "topic_categories": [],
+      "tags": [
+        { "word": "Local Government", "children": {} },
+        { "word": "geospatial", "children": {} },
+        { "word": "__", "children": {} },
+        { "word": "wind", "children": {} },
+        { "word": "a2e", "children": {} },
+        { "word": "atmosphere-to-electrons", "children": {} },
+        { "word": "eere", "children": {} },
+        { "word": "sodar", "children": {} },
+        { "word": "weto", "children": {} },
+        { "word": "wfip2", "children": {} },
+        { "word": "wind-forecast-impro...", "children": {} },
+        { "word": "wind-energy", "children": {} }
+      ],
+      "formats": [
+        { "word": "XML", "children": {} },
+        { "word": "ZIP", "children": {} },
+        { "word": "HTML", "children": {} },
+        { "word": "BIN", "children": {} },
+        { "word": "00", "children": {} },
+        { "word": "a0", "children": {} },
+        { "word": "b0", "children": {} },
+        { "word": "PDF", "children": {} },
+        { "word": "CSV", "children": {} },
+        { "word": "JPEG", "children": {} }
+      ],
+      "organization_types": [
+        { "word": "Federal Government", "children": {} },
+        { "word": "City Government", "children": {} },
+        { "word": "State Government", "children": {} }
+      ],
+      "organizations": [
+        { "word": "Department of the Interior", "children": {} },
+        { "word": "Department of Energy", "children": {} },
+        { "word": "National...", "children": {} },
+        { "word": "National Oceanic...", "children": {} },
+        { "word": "City of Bloomington", "children": {} },
+        { "word": "U.S. Environmental...", "children": {} },
+        { "word": "City of Chicago", "children": {} },
+        { "word": "City of Los Angeles", "children": {} },
+        { "word": "City of New Orleans", "children": {} },
+        { "word": "Department of Agriculture", "children": {} }
+      ],
+      "bureaus": [
+        { "word": "Wind Energy...", "children": {} },
+        { "word": "National Park Service", "children": {} },
+        { "word": "National...", "children": {} },
+        { "word": "ORNL_DAAC", "children": {} },
+        { "word": "U.S. Geological Survey", "children": {} },
+        { "word": "data.bloomington.in.gov", "children": {} },
+        { "word": "NASA/JPL/PODAAC", "children": {} },
+        { "word": "SPURS...", "children": {} },
+        { "word": "U.S. EPA Office of...", "children": {} },
+        { "word": "Agricultural...", "children": {} }
+      ],
+      "publishers": [
+        { "word": "Energy Programs", "children": {} },
+        { "word": "National Park Service", "children": {} },
+        { "word": "National...", "children": {} },
+        { "word": "United States...", "children": {} },
+        { "word": "Environmental...", "children": {} },
+        { "word": "Agricultural...", "children": {} }
+      ],
+      "datasets": [
+        {
+          "word": "U.S. Wind and Solar PV Supply Curves with Future Land-use Change",
+          "children": {}
+        },
+        {
+          "word": "Viewsheds from Key Observation Points for Nicodemus National Historic Site (NICO)",
+          "children": {}
+        },
+        {
+          "word": "Viewsheds from Key Observation Points for Capulin Volcano National Monument (CAVO)",
+          "children": {}
+        },
+        {
+          "word": "NASA 3D Models: Satellite Kit",
+          "children": {}
+        },
+        {
+          "word": "Solar Footprints in California",
+          "children": {}
+        },
+        {
+          "word": "De-Icing Comparison Experiment (D-ICE) campaign data",
+          "children": {}
+        },
+        {
+          "word": "Viewsheds from Key Observation Points for Theodore Roosevelt National Park (THRO)",
+          "children": {}
+        },
+        {
+          "word": "HDLC Solar Panel Review Area",
+          "children": {}
+        },
+        {
+          "word": "Mount Riley",
+          "children": {}
+        },
+        {
+          "word": "Viewsheds from Key Observation Points for Badlands National Park (BADL)",
+          "children": {}
+        },
+        {
+          "word": "Installed Solar Panel Capacity",
+          "children": {}
+        },
+        {
+          "word": "United States Large-Scale Solar Photovoltaic Database (ver. 3.0, April 2025)",
+          "children": {}
+        },
+        {
+          "word": "Renewable Energy Waste Management: Solar Panel Circular Economy",
+          "children": {}
+        },
+        {
+          "word": "Delta-X: In Situ Water Surface Reflectance across MRD, LA, USA, 2021, V3",
+          "children": {}
+        }
+      ]
+    }
+  }
+  

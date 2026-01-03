@@ -1,0 +1,287 @@
+{
+    "parent": {
+      "word": "solar panels",
+      "type": "YouTube"
+    },
+    "children": {
+      "top_navigation_filters": [
+        { "word": "All", "children": {} },
+        { "word": "Shorts", "children": {} },
+        { "word": "Videos", "children": {} },
+        { "word": "Unwatched", "children": {} },
+        { "word": "Watched", "children": {} },
+        { "word": "Recently uploaded", "children": {} },
+        { "word": "Live", "children": {} },
+        { "word": "Kids", "children": {} },
+        { "word": "Diy", "children": {} },
+        { "word": "Installation", "children": {} },
+        { "word": "Work in hindi", "children": {} },
+        { "word": "Filters", "children": {} }
+      ],
+      "sponsored_products": [
+        {
+          "word": "Anker SOLIX C2000 Gen 2 + 400W Solar Panel",
+          "price": "$1,199.99",
+          "vendor": "ankersolix.com",
+          "children": {}
+        },
+        {
+          "word": "Anker SOLIX F3000 + 2× 400W Solar Panel",
+          "price": "$6,000.00",
+          "vendor": "ankersolix.com",
+          "children": {}
+        },
+        {
+          "word": "Talesun Solar 450W BIPRO Bifacial 144 Cells All Black TD6I72M-450 Solar Panel",
+          "price": "$179.99",
+          "vendor": "US Solar Supplier",
+          "children": {}
+        },
+        {
+          "word": "2× Anker SOLIX F3800 Plus + Smart Home Power Kit + 8× 440W Rigid Solar Panel",
+          "price": "$8,487.90",
+          "vendor": "ankersolix.com",
+          "children": {}
+        },
+        {
+          "word": "Anker SOLIX F3000 + 400W Portable Solar Panel",
+          "price": "$1,399.00",
+          "vendor": "ankersolix.com",
+          "children": {}
+        },
+        {
+          "word": "Runergy 405W Mono P-Type Bifacial Solar Panel HY-DH108P8B",
+          "price": "$144.99",
+          "vendor": "US Solar Supplier",
+          "children": {}
+        },
+        {
+          "word": "ZNshine 400W ZXM7-SH108-400/... All Black Monocrystalline Solar Panel",
+          "price": "$144.99",
+          "vendor": "US Solar Supplier",
+          "children": {}
+        },
+        {
+          "word": "Anker SOLIX F3800 Plus + Smart Home Power Kit + 8× 440W Rigid Solar Panel",
+          "price": "$7,297.00",
+          "vendor": "ankersolix.com",
+          "children": {}
+        }
+      ],
+      "video_results": [
+        {
+          "word": "What Type of Solar Panel Should You Buy?",
+          "views": "40K views",
+          "age": "3 months ago",
+          "duration": "10:16",
+          "features": ["4K", "CC", "chapters"],
+          "children": {}
+        },
+        {
+          "word": "Is Solar worth it? My Experience 2 Years Later",
+          "views": "370K views",
+          "age": "1 year ago",
+          "features": ["4K", "chapters"],
+          "children": {}
+        },
+        {
+          "word": "Basic Solar Components & How They Work - Solar Panels, Inverter, Batteries, & More Explained (Ep. 2)",
+          "views": "63K views",
+          "age": "1 year ago",
+          "duration": "10:26",
+          "features": ["4K", "CC", "chapters"],
+          "children": {}
+        },
+        {
+          "word": "How do solar panels work? - Richard Komp",
+          "views": "26M views",
+          "age": "9 years ago",
+          "duration": "4:59",
+          "features": ["CC", "Summary"],
+          "children": {}
+        },
+        {
+          "word": "What Are the Different Types of Solar Panels?",
+          "views": "35K views",
+          "age": "1 year ago",
+          "duration": "10:43",
+          "features": ["moments"],
+          "children": {}
+        },
+        {
+          "word": "Should You Go Solar? A Super Helpful Beginner's Guide to Home Solar Power",
+          "views": "521K views",
+          "age": "2 years ago",
+          "duration": "11:35",
+          "features": ["chapters"],
+          "children": {}
+        },
+        {
+          "word": "Solar Power System For Home: Ultimate Beginners Guide",
+          "views": "2.8M views",
+          "age": "6 years ago",
+          "duration": "12:24",
+          "features": ["CC", "moments"],
+          "children": {}
+        },
+        {
+          "word": "I Bought a $1,000 Solar Setup",
+          "views": "1.9M views",
+          "age": "1 year ago",
+          "duration": "13:05",
+          "features": ["4K", "chapters"],
+          "children": {}
+        },
+        {
+          "word": "Tesla Solar Roof Review: Was it Worth It??",
+          "views": "16M views",
+          "age": "2 years ago",
+          "duration": "30:27",
+          "features": ["4K", "CC"],
+          "children": {}
+        },
+        {
+          "word": "Tesla Solar Roof vs Solar Panels: Which is Worth It?",
+          "views": "1.6M views",
+          "age": "1 year ago",
+          "duration": "16:47",
+          "features": ["4K", "CC"],
+          "children": {}
+        },
+        {
+          "word": "Different Types of Solar Panels and Their Advantages",
+          "views": "373K views",
+          "age": "2 years ago",
+          "features": ["CC", "Summary"],
+          "children": {}
+        },
+        {
+          "word": "Solar Panels After 1 Year: Are They Worth It?",
+          "views": "1.7M views",
+          "age": "11 months ago",
+          "features": ["4K", "chapters"],
+          "children": {}
+        },
+        {
+          "word": "Understanding SOLAR PANEL TECHNICAL SPECIFICATIONS and their role in solar system design",
+          "views": "5.3K views",
+          "age": "8 months ago",
+          "children": {}
+        },
+        {
+          "word": "Generate Electricity - How Solar Panels Work!",
+          "views": "1.8M views",
+          "age": "2 years ago",
+          "features": ["4K"],
+          "children": {}
+        },
+        {
+          "word": "True Cost of Solar Panels | DON'T WASTE YOUR MONEY",
+          "views": "234K views",
+          "age": "2 years ago",
+          "children": {}
+        },
+        {
+          "word": "The BEST Solar Panels of 2025!",
+          "views": "102K views",
+          "age": "10 months ago",
+          "features": ["4K", "chapters"],
+          "children": {}
+        },
+        {
+          "word": "I Tested a \"Revolutionary\" New Solar Panel",
+          "views": "724K views",
+          "age": "7 months ago",
+          "features": ["4K", "Summary"],
+          "children": {}
+        },
+        {
+          "word": "Are solar panels worth it in 2024?",
+          "views": "445K views",
+          "age": "2 years ago",
+          "features": ["4K", "CC"],
+          "children": {}
+        },
+        {
+          "word": "What's The Best Solar Panel In 2026? 6 Key Metrics - Aiko / Longi / JA Solar / Eurener…",
+          "views": "52K views",
+          "age": "3 weeks ago",
+          "features": ["4K", "chapters"],
+          "children": {}
+        },
+        {
+          "word": "Finding & Connecting the RIGHT Solar Panel - Power Stations 101 Series",
+          "views": "131K views",
+          "age": "3 years ago",
+          "children": {}
+        }
+      ],
+      "shorts": [
+        { "word": "Solar Power Bank PANELS", "views": "11M views", "children": {} },
+        {
+          "word": "Paper-Thin Solar Panels With No Installation Needed",
+          "views": "14M views",
+          "children": {}
+        },
+        { "word": "The Solar Powered Aptera EV", "views": "6.6M views", "children": {} },
+        { "word": "How I Built a 7kWh Solar Shed for Just $180!", "views": "773K views", "children": {} },
+        { "word": "Types of Solar Panels #electrical #solarpower …", "views": "268K views", "children": {} },
+        { "word": "RV solar 1000 Watts. 10 panels #campping #rv …", "views": "21K views", "children": {} },
+        { "word": "Jinko Solar Panels 550w …", "views": "339K views", "children": {} },
+        { "word": "Understanding Off Grid Solar", "views": "319K views", "children": {} },
+        { "word": "10KW Solar System #panel #solar #greenenergy …", "views": "116K views", "children": {} },
+        { "word": "New RYOBI 60-Watt Foldable Solar Panel", "views": "539K views", "children": {} }
+      ],
+      "sponsored_blocks": [
+        {
+          "word": "Solar Panels on Clearance",
+          "sponsor": "A1 SolarStore",
+          "children": {}
+        },
+        {
+          "word": "10 Best VPNs Ranked for 2025",
+          "sponsor": "Cybernews",
+          "children": {}
+        },
+        {
+          "word": "SunGoldPower® Official Shop",
+          "sponsor": "Sungoldpower Official",
+          "children": {}
+        },
+        {
+          "word": "Claude Code adapts to your coding standards and patterns",
+          "sponsor": "Claude",
+          "children": {}
+        }
+      ],
+      "channels_mentioned": [
+        { "word": "The Solar Lab", "children": {} },
+        { "word": "Smart Home Solver", "children": {} },
+        { "word": "TED-Ed", "children": {} },
+        { "word": "History of Simple Things", "children": {} },
+        { "word": "Exploring Alternatives", "children": {} },
+        { "word": "Best Electric", "children": {} },
+        { "word": "Footprint Hero with Alex Beale", "children": {} },
+        { "word": "Marques Brownlee", "children": {} },
+        { "word": "Undecided with Matt Ferrell", "children": {} },
+        { "word": "MapperX", "children": {} },
+        { "word": "Shelby Church", "children": {} },
+        { "word": "solaracademyzone", "children": {} },
+        { "word": "The Engineering Mindset", "children": {} },
+        { "word": "23ABC News | KERO", "children": {} },
+        { "word": "Jack The Solar Guy", "children": {} },
+        { "word": "Spirit Energy", "children": {} },
+        { "word": "Jasonoid - Solar Power, Batteries, and More!", "children": {} }
+      ],
+      "ui_elements": [
+        { "word": "Watch", "children": {} },
+        { "word": "Sign up", "children": {} },
+        { "word": "Create", "children": {} },
+        { "word": "Home", "children": {} },
+        { "word": "Shorts", "children": {} },
+        { "word": "Subscriptions", "children": {} },
+        { "word": "You", "children": {} }
+      ]
+    }
+  }
+  

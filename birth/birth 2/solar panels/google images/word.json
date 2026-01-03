@@ -1,0 +1,118 @@
+{
+    "parent": {
+      "word": "solar panel",
+      "type": "Google Search (general / visual-discovery)"
+    },
+    "children": {
+      "search_navigation": [
+        { "word": "AI Mode", "children": {} },
+        { "word": "All", "children": {} },
+        { "word": "Shopping", "children": {} },
+        { "word": "Images", "children": {} },
+        { "word": "Videos", "children": {} },
+        { "word": "News", "children": {} },
+        { "word": "Short videos", "children": {} },
+        { "word": "More", "children": {} },
+        { "word": "Tools", "children": {} }
+      ],
+      "related_searches": {
+        "visual_assets": [
+          { "word": "solar panel images hd", "children": {} },
+          { "word": "solar panels clipart", "children": {} },
+          { "word": "solar panel texture", "children": {} },
+          { "word": "solar panel png", "children": {} },
+          { "word": "solar panel drawing", "children": {} },
+          { "word": "solar panel diagram", "children": {} }
+        ],
+        "learning_queries": [
+          { "word": "how do solar panels work", "children": {} },
+          { "word": "solar panel system", "children": {} },
+          { "word": "solar energy", "children": {} }
+        ],
+        "shopping_intent": [
+          { "word": "solar panel price", "children": {} },
+          { "word": "single solar panel", "children": {} },
+          { "word": "small solar panel", "children": {} },
+          { "word": "solar panel for home", "children": {} },
+          { "word": "roof solar panel", "children": {} },
+          { "word": "solar panel installation", "children": {} }
+        ]
+      },
+      "sponsored_products": [
+        {
+          "word": "Talesun Solar 450W Bifacial Panel",
+          "price": "$179.99",
+          "vendor": "US Solar Supplier",
+          "children": {}
+        },
+        {
+          "word": "Renogy 200W ShadowFlux N-Type Solar Panel",
+          "price": "$239.99",
+          "vendor": "Renogy",
+          "children": {}
+        },
+        {
+          "word": "Thunderbolt Solar 100W Monocrystalline Panel",
+          "price": "$119.99",
+          "vendor": "Harbor Freight",
+          "children": {}
+        },
+        {
+          "word": "Hyundai 640W HiN-T Solar Panel",
+          "price": "$335.33",
+          "vendor": "US Solar Supplier",
+          "children": {}
+        },
+        {
+          "word": "Wholesale Monocrystalline Solar Panels",
+          "price": "$6.00",
+          "vendor": "Alibaba",
+          "children": {}
+        }
+      ],
+      "educational_sources": [
+        { "word": "Solar panel - Wikipedia", "children": {} },
+        { "word": "Solar energy | Britannica", "children": {} },
+        { "word": "Department of Energy – Solar Energy", "children": {} },
+        { "word": "EnergySage – Solar Panel Guides", "children": {} },
+        { "word": "SolarReviews", "children": {} },
+        { "word": "This Old House – Types of Solar Panels", "children": {} },
+        { "word": "Forbes – Are Solar Panels Worth It?", "children": {} },
+        { "word": "MIT News – Solar Photovoltaics", "children": {} },
+        { "word": "EPA – Solar Panel Recycling", "children": {} }
+      ],
+      "buyer_guides_and_tools": [
+        { "word": "Solar panel size and wattage guides", "children": {} },
+        { "word": "Installation cost calculators", "children": {} },
+        { "word": "Pros and cons of solar panels", "children": {} },
+        { "word": "Solar panel efficiency comparisons", "children": {} },
+        { "word": "Financing and tax credit resources", "children": {} }
+      ],
+      "visual_results": [
+        {
+          "word": "Image grid",
+          "content": [
+            "Rooftop solar installations",
+            "Ground-mounted arrays",
+            "Single solar panels",
+            "Solar panel diagrams",
+            "Residential and commercial systems"
+          ],
+          "children": {}
+        }
+      ],
+      "ecosystem_representation": [
+        { "word": "Manufacturers", "examples": ["Qcells", "REC", "Jinko", "Hyundai"], "children": {} },
+        { "word": "Retailers", "examples": ["Amazon", "Home Depot", "Harbor Freight"], "children": {} },
+        { "word": "Media & Research", "examples": ["Scientific American", "NASA", "MIT"], "children": {} },
+        { "word": "Utilities & Policy", "examples": ["DOE", "EPA"], "children": {} }
+      ],
+      "intent_summary": [
+        { "word": "Visual inspiration", "children": {} },
+        { "word": "Consumer shopping", "children": {} },
+        { "word": "Educational research", "children": {} },
+        { "word": "Installation planning", "children": {} }
+      ]
+    }
+  }
+  

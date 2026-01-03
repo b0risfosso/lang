@@ -1,0 +1,110 @@
+{
+    "parent": {
+        "word": "solar panels",
+        "type": "GitHub"
+    },
+    "children": {
+        "filter_category": [
+        { "word": "Code", "children": {} },
+        { "word": "Repositories", "children": {} },
+        { "word": "Issues", "children": {} },
+        { "word": "Pull requests", "children": {} },
+        { "word": "Discussions", "children": {} },
+        { "word": "Users", "children": {} },
+        { "word": "More", "children": {} }
+        ],
+        "languages": [
+        { "word": "Python", "children": {} },
+        { "word": "C++", "children": {} },
+        { "word": "Jupyter Notebook", "children": {} },
+        { "word": "HTML", "children": {} },
+        { "word": "JavaScript", "children": {} },
+        { "word": "TypeScript", "children": {} },
+        { "word": "Java", "children": {} },
+        { "word": "C", "children": {} },
+        { "word": "CSS", "children": {} },
+        { "word": "C#", "children": {} }
+        ],
+        "advanced_filters": [
+        { "word": "Owner", "children": {} },
+        { "word": "Size", "children": {} },
+        { "word": "Number of followers", "children": {} },
+        { "word": "Sponsor", "children": {} }
+        ],
+        "repositories": [
+        {
+            "word": "DiedB/Homey-SolarPanels",
+            "description": "Connects production statistics of a wide range of PV inverters to Homey.",
+            "children": {}
+        },
+        {
+            "word": "wangzhecheng/DeepSolar",
+            "description": "Nationwide household-level solar panel identification with deep learning.",
+            "children": {}
+        },
+        {
+            "word": "cdeldon/thermography",
+            "description": "Automatic detection of defected solar panel modules using image processing techniques.",
+            "children": {}
+        },
+        {
+            "word": "ColasGael/Machine-Learning-for-Solar-Energy-Prediction",
+            "description": "Predict the power production of a solar panel farm from weather measurements using machine learning.",
+            "children": {}
+        },
+        {
+            "word": "msabvid/Solar-Panels-Detection",
+            "description": "Detection and location of solar panels in aerial images using U-Net.",
+            "children": {}
+        },
+        {
+            "word": "david-abel/solar_panels_rl",
+            "description": "Repository for code experimenting with reinforcement learning and solar tracking.",
+            "children": {}
+        },
+        {
+            "word": "saizk/Deep-Learning-for-Solar-Panel-Recognition",
+            "description": "CNN models for solar panel detection and segmentation in aerial images.",
+            "children": {}
+        },
+        {
+            "word": "gabrieltseng/solar-panel-segmentation",
+            "description": "A U-Net for solar panel identification and segmentation.",
+            "children": {}
+        },
+        {
+            "word": "post-kerbin-mining-corporation/NearFutureSolar",
+            "description": "Adds more solar panel parts to Kerbal Space Program.",
+            "children": {}
+        },
+        {
+            "word": "suhasmaddali/Solar-Panels-Dust-Detection",
+            "description": "Project on solar panel dust detection using convolutional neural network architectures.",
+            "children": {}
+        }
+        ],
+        "sort_options": [
+        { "word": "Best match", "children": {} }
+        ],
+        "ui_actions": [
+        { "word": "Save", "children": {} },
+        { "word": "Star", "children": {} }
+        ],
+        "pagination": [
+        { "word": "Previous", "children": {} },
+        { "word": "Next", "children": {} },
+        { "word": "1", "children": {} },
+        { "word": "2", "children": {} },
+        { "word": "3", "children": {} },
+        { "word": "4", "children": {} },
+        { "word": "5", "children": {} },
+        { "word": "6", "children": {} },
+        { "word": "7", "children": {} },
+        { "word": "… 100", "children": {} }
+        ],
+        "meta": [
+        { "word": "4.9k results", "children": {} },
+        { "word": "231 ms", "children": {} }
+        ]
+    }
+}

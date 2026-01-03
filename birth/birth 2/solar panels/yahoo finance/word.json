@@ -1,0 +1,200 @@
+{
+    "parent": {
+      "word": "Solar Industry",
+      "type": "Yahoo Finance"
+    },
+    "children": {
+      "industry_overview": [
+        {
+          "word": "Solar",
+          "sector": "Technology",
+          "market_cap": "$61.493B",
+          "industry_weight": "0.26%",
+          "companies": 30,
+          "employees": 86275,
+          "children": {}
+        }
+      ],
+      "performance_comparison": {
+        "day_return": [
+          { "word": "Solar Industry +5.74%", "children": {} },
+          { "word": "S&P 500 +0.19%", "children": {} }
+        ],
+        "ytd_return": [
+          { "word": "Solar Industry +5.74%", "children": {} },
+          { "word": "S&P 500 -0.55%", "children": {} }
+        ],
+        "one_year_return": [
+          { "word": "Solar Industry +38.23%", "children": {} },
+          { "word": "S&P 500 +16.61%", "children": {} }
+        ],
+        "three_year_return": [
+          { "word": "Solar Industry -31.24%", "children": {} },
+          { "word": "S&P 500 +78.63%", "children": {} }
+        ],
+        "five_year_return": [
+          { "word": "Solar Industry -30.08%", "children": {} },
+          { "word": "S&P 500 +85.33%", "children": {} }
+        ]
+      },
+      "top_performing_companies": [
+        {
+          "word": "FTC Solar, Inc. (FTCI)",
+          "ytd_return": "+12.10%",
+          "children": {}
+        },
+        {
+          "word": "SolarEdge Technologies (SEDG)",
+          "ytd_return": "+8.70%",
+          "children": {}
+        },
+        {
+          "word": "Shoals Technologies (SHLS)",
+          "ytd_return": "+6.94%",
+          "children": {}
+        },
+        {
+          "word": "Canadian Solar Inc. (CSIQ)",
+          "ytd_return": "+6.90%",
+          "children": {}
+        },
+        {
+          "word": "Nextpower Inc. (NXT)",
+          "ytd_return": "+6.51%",
+          "children": {}
+        }
+      ],
+      "high_growth_companies": [
+        {
+          "word": "First Solar, Inc. (FSLR)",
+          "growth_estimate": "+70.93%",
+          "children": {}
+        },
+        {
+          "word": "Nextpower Inc. (NXT)",
+          "growth_estimate": "+7.19%",
+          "children": {}
+        },
+        {
+          "word": "FTC Solar, Inc. (FTCI)",
+          "growth_estimate": "+6.67%",
+          "children": {}
+        },
+        {
+          "word": "Array Technologies (ARRY)",
+          "growth_estimate": "-43.36%",
+          "children": {}
+        },
+        {
+          "word": "Shoals Technologies (SHLS)",
+          "growth_estimate": "-44.62%",
+          "children": {}
+        }
+      ],
+      "company_market_table": [
+        {
+          "word": "First Solar, Inc. (FSLR)",
+          "market_cap": "$29.439B",
+          "market_weight": "49.45%",
+          "analyst_rating": "BUY",
+          "children": {}
+        },
+        {
+          "word": "Nextpower Inc. (NXT)",
+          "market_cap": "$14.082B",
+          "market_weight": "23.66%",
+          "analyst_rating": "BUY",
+          "children": {}
+        },
+        {
+          "word": "Sunrun Inc. (RUN)",
+          "market_cap": "$4.511B",
+          "market_weight": "7.58%",
+          "analyst_rating": "BUY",
+          "children": {}
+        },
+        {
+          "word": "Enphase Energy, Inc. (ENPH)",
+          "market_cap": "$4.417B",
+          "market_weight": "7.42%",
+          "analyst_rating": "HOLD",
+          "children": {}
+        },
+        {
+          "word": "SolarEdge Technologies (SEDG)",
+          "market_cap": "$1.875B",
+          "market_weight": "3.15%",
+          "analyst_rating": "HOLD",
+          "children": {}
+        }
+      ],
+      "analyst_reports": [
+        {
+          "word": "First Solar, Inc.",
+          "source": "Morningstar",
+          "focus": "Thin-film cadmium telluride solar technology",
+          "children": {}
+        },
+        {
+          "word": "Nextpower Inc.",
+          "source": "Argus",
+          "focus": "Price target revision and growth outlook",
+          "children": {}
+        },
+        {
+          "word": "Sunrun Inc.",
+          "source": "Argus",
+          "focus": "Risk profile and valuation",
+          "children": {}
+        },
+        {
+          "word": "Enphase Energy, Inc.",
+          "source": "Argus",
+          "focus": "Financial strength and growth balance",
+          "children": {}
+        }
+      ],
+      "solar_news_feed": [
+        {
+          "word": "Is Nextpower Stock a Buy Now?",
+          "source": "Motley Fool",
+          "children": {}
+        },
+        {
+          "word": "First Solar's Expanding Footprint Positions It for Sustained Growth",
+          "source": "Zacks",
+          "children": {}
+        },
+        {
+          "word": "Array Technologies Drops Ahead of Tax Credit Deadline",
+          "source": "Insider Monkey",
+          "children": {}
+        },
+        {
+          "word": "Sunrun Price Target Raised Amid Partnership with NRG Energy",
+          "source": "Insider Monkey",
+          "children": {}
+        }
+      ],
+      "community_sentiment": [
+        {
+          "word": "Investor Comments",
+          "sentiment": "Mixed / Bearish vs Bullish",
+          "themes": [
+            "Policy risk",
+            "Comparison with nuclear energy",
+            "Skepticism on long-term returns"
+          ],
+          "children": {}
+        }
+      ],
+      "market_context": [
+        { "word": "U.S. Markets Closed", "children": {} },
+        { "word": "Trending Tickers", "children": {} },
+        { "word": "Top Gainers", "children": {} },
+        { "word": "Top Losers", "children": {} },
+        { "word": "Economic Events Calendar", "children": {} }
+      ]
+    }
+  }
+  
