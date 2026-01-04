@@ -1,0 +1,2694 @@
+{
+  "lang_word": "solar panels",
+  "children": [
+    {
+      "seed_word": {
+        "word": "solar panels",
+        "type": "ChatGPT"
+      },
+      "children": {
+        "definition": [
+          {
+            "word": "Solar panels convert sunlight into electricity",
+            "children": {}
+          },
+          {
+            "word": "Generate clean, renewable power for homes and businesses",
+            "children": {}
+          }
+        ],
+        "how_they_work": [
+          {
+            "word": "Photovoltaic (PV) cells absorb sunlight",
+            "children": {}
+          },
+          {
+            "word": "Light frees electrons, creating direct current (DC) electricity",
+            "children": {}
+          },
+          {
+            "word": "Inverter converts DC to alternating current (AC)",
+            "children": {}
+          },
+          {
+            "word": "Power is used on-site, stored in a battery, or exported to the grid",
+            "children": {}
+          }
+        ],
+        "main_types": [
+          {
+            "word": "Monocrystalline",
+            "attributes": [
+              "Highest efficiency",
+              "Sleek look",
+              "Higher cost"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Polycrystalline",
+            "attributes": [
+              "Slightly lower efficiency",
+              "More affordable"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Thin-film",
+            "attributes": [
+              "Lightweight/flexible",
+              "Lowest efficiency",
+              "Niche uses"
+            ],
+            "children": {}
+          }
+        ],
+        "benefits": [
+          {
+            "word": "Lower electricity bills",
+            "children": {}
+          },
+          {
+            "word": "Reduced carbon footprint",
+            "children": {}
+          },
+          {
+            "word": "Low maintenance",
+            "children": {}
+          },
+          {
+            "word": "Long lifespan (25–30 years typical)",
+            "children": {}
+          },
+          {
+            "word": "Potential incentives/tax credits (location-dependent)",
+            "children": {}
+          }
+        ],
+        "things_to_consider": [
+          {
+            "word": "Roof orientation & shading",
+            "children": {
+              "ideal_conditions": [
+                {
+                  "word": "South-facing",
+                  "children": {}
+                },
+                {
+                  "word": "Minimal shade",
+                  "children": {}
+                }
+              ]
+            }
+          }
+        ],
+        "ui_context": [
+          {
+            "word": "ChatGPT interface elements",
+            "children": {}
+          },
+          {
+            "word": "Disclaimer: ChatGPT can make mistakes. Check important info.",
+            "children": {}
+          },
+          {
+            "word": "Project / chat navigation list",
+            "children": {}
+          }
+        ]
+      }
+    },
+    {
+      "seed_word": {
+        "word": "solar panel",
+        "type": "Craigslist (Dallas / DFW)"
+      },
+      "children": {
+        "pages": [
+          {
+            "word": "for_sale_results",
+            "type": "for sale",
+            "children": {
+              "meta": [
+                {
+                  "word": "Results range: 1–9 of 102",
+                  "children": {}
+                },
+                {
+                  "word": "Sort: relevance",
+                  "children": {}
+                },
+                {
+                  "word": "Average price: $7,771",
+                  "children": {}
+                }
+              ],
+              "filters": [
+                {
+                  "word": "price",
+                  "children": {
+                    "options": [
+                      {
+                        "word": "free",
+                        "children": {}
+                      },
+                      {
+                        "word": "$ min – $ max",
+                        "children": {}
+                      },
+                      {
+                        "word": "slider: $0 $10k $20k $30k $40k $115k",
+                        "children": {}
+                      }
+                    ]
+                  }
+                },
+                {
+                  "word": "seller_type",
+                  "children": {
+                    "options": [
+                      {
+                        "word": "all owner dealer",
+                        "children": {}
+                      },
+                      {
+                        "word": "owner",
+                        "children": {}
+                      },
+                      {
+                        "word": "dealer",
+                        "children": {}
+                      }
+                    ]
+                  }
+                },
+                {
+                  "word": "posting_filters",
+                  "children": {
+                    "options": [
+                      {
+                        "word": "search titles only",
+                        "children": {}
+                      },
+                      {
+                        "word": "has image",
+                        "children": {}
+                      },
+                      {
+                        "word": "posted today",
+                        "children": {}
+                      },
+                      {
+                        "word": "hide duplicates",
+                        "children": {}
+                      }
+                    ]
+                  }
+                },
+                {
+                  "word": "distance",
+                  "children": {
+                    "options": [
+                      {
+                        "word": "miles from zip",
+                        "children": {}
+                      },
+                      {
+                        "word": "use map",
+                        "children": {}
+                      }
+                    ]
+                  }
+                },
+                {
+                  "word": "categories",
+                  "children": {
+                    "options": [
+                      {
+                        "word": "general for sale (19)",
+                        "children": {}
+                      },
+                      {
+                        "word": "cars & trucks (14)",
+                        "children": {}
+                      },
+                      {
+                        "word": "farm & garden (9)",
+                        "children": {}
+                      },
+                      {
+                        "word": "recreational vehicles (9)",
+                        "children": {}
+                      },
+                      {
+                        "word": "household items (8)",
+                        "children": {}
+                      },
+                      {
+                        "word": "+ show 14 more",
+                        "children": {}
+                      }
+                    ]
+                  }
+                }
+              ],
+              "listings": [
+                {
+                  "word": "Solar panel",
+                  "price": "$500",
+                  "location": "dallas",
+                  "date": "1/1",
+                  "children": {}
+                },
+                {
+                  "word": "Solar panel.",
+                  "price": "$50",
+                  "location": "Mesquite",
+                  "date": "12/22",
+                  "children": {}
+                },
+                {
+                  "word": "Monarch Deer Feeder with Solar Panel",
+                  "price": "$50",
+                  "location": "Corsicana",
+                  "date": "12/15",
+                  "children": {}
+                },
+                {
+                  "word": "Pole Mount Street Light or electric gate Solar Panels",
+                  "price": "$75",
+                  "location": "NW Austin",
+                  "date": "2h ago",
+                  "children": {}
+                },
+                {
+                  "word": "Midnite Solar Classic CLASSIC200-SL MPPT Charge Controller",
+                  "price": "$395",
+                  "location": "Euless",
+                  "date": "7h ago",
+                  "children": {}
+                },
+                {
+                  "word": "New Solar Black Outdoor Integrated LED Landscape Pathway Light 6-",
+                  "price": "$25",
+                  "location": "north DFW",
+                  "date": "1/2",
+                  "children": {}
+                },
+                {
+                  "word": "Emerson Solar-Powered Lighted Address Plaque Model 295WI OEM New",
+                  "price": "$10",
+                  "location": "DFW",
+                  "date": "1/2",
+                  "children": {}
+                },
+                {
+                  "word": "Sunforce Solar Triple Head Motion Activated Security Light 1500 Lumens",
+                  "price": "$30",
+                  "location": "Duncanville",
+                  "date": "12/30",
+                  "children": {}
+                },
+                {
+                  "word": "Open Box Gama Solar Royal - 23\" 11 LED Solar Post Mount with GS Solar",
+                  "price": "$100",
+                  "location": "Anna",
+                  "date": "12/30",
+                  "children": {}
+                },
+                {
+                  "word": "400w Hyundai Solar Panels - 24 available",
+                  "price": "$125",
+                  "location": "Dallas",
+                  "date": "12/29",
+                  "children": {}
+                },
+                {
+                  "word": "Solar Power System, 10KW System, 14KW Li Baterries",
+                  "price": "$15,000",
+                  "location": "Lake of the Arbuckles",
+                  "date": "12/28",
+                  "children": {}
+                },
+                {
+                  "word": "Off Grid Power Portable Solar/Diesel - $24,000 (Davis, OK)",
+                  "price": "$24,000",
+                  "location": "Carrollton",
+                  "date": "12/27",
+                  "children": {}
+                },
+                {
+                  "word": "Enphase Complete Solar Power System",
+                  "price": "$8,000",
+                  "location": "Ferris",
+                  "date": "12/25",
+                  "children": {}
+                },
+                {
+                  "word": "Enphase IQ7+ACM Microinverter",
+                  "price": "$60",
+                  "location": "Dallas",
+                  "date": "12/26",
+                  "children": {}
+                },
+                {
+                  "word": "Used solar system 42 panels",
+                  "price": "$3,500",
+                  "location": "Fort Worth",
+                  "date": "11/19",
+                  "children": {}
+                }
+              ]
+            }
+          },
+          {
+            "word": "services_results",
+            "type": "services",
+            "children": {
+              "meta": [
+                {
+                  "word": "Results range: 1–9 of 266",
+                  "children": {}
+                },
+                {
+                  "word": "Sort: relevance",
+                  "children": {}
+                }
+              ],
+              "filters": [
+                {
+                  "word": "service_categories",
+                  "children": {
+                    "options": [
+                      {
+                        "word": "skilled trade services (256)",
+                        "children": {}
+                      },
+                      {
+                        "word": "household services (5)",
+                        "children": {}
+                      },
+                      {
+                        "word": "labor / hauling / moving (1)",
+                        "children": {}
+                      },
+                      {
+                        "word": "small biz ads (1)",
+                        "children": {}
+                      }
+                    ]
+                  }
+                },
+                {
+                  "word": "posting_filters",
+                  "children": {
+                    "options": [
+                      {
+                        "word": "search titles only",
+                        "children": {}
+                      },
+                      {
+                        "word": "has image",
+                        "children": {}
+                      },
+                      {
+                        "word": "posted today",
+                        "children": {}
+                      },
+                      {
+                        "word": "hide duplicates",
+                        "children": {}
+                      }
+                    ]
+                  }
+                },
+                {
+                  "word": "distance",
+                  "children": {
+                    "options": [
+                      {
+                        "word": "miles from zip",
+                        "children": {}
+                      },
+                      {
+                        "word": "use map",
+                        "children": {}
+                      }
+                    ]
+                  }
+                }
+              ],
+              "listings": [
+                {
+                  "word": "SOLAR PANEL Installation and Removal (773)600-3473",
+                  "location": "Dfw",
+                  "date": "1/2",
+                  "children": {}
+                },
+                {
+                  "word": "Solar Panel Removal & Reinstall – Fast, Affordable, Professional –",
+                  "location": "Dallas",
+                  "date": "12/17",
+                  "children": {}
+                },
+                {
+                  "word": "Ecoflow Smart Panel Certified /Master electrician",
+                  "location": "fort worth",
+                  "date": "12/19",
+                  "children": {}
+                },
+                {
+                  "word": "Solar detach and re install",
+                  "location": "Plano",
+                  "date": "12/10",
+                  "children": {}
+                },
+                {
+                  "word": "ELECTRICIAN - Repairs, Upgrades & Installs - We Show Up - Call",
+                  "location": "DFW",
+                  "date": "12/29",
+                  "children": {}
+                },
+                {
+                  "word": "Electrician - Honest Service for Your Electrical Needs - Call Us",
+                  "location": "Expert Electrical Help - Call Us Today",
+                  "date": "12/16",
+                  "children": {}
+                },
+                {
+                  "word": "Plumber • Electrician • AC Repair – Same Day Service",
+                  "location": "469-656-4000 - Repairs, Installations You Can Count On",
+                  "date": "12/31",
+                  "children": {}
+                },
+                {
+                  "word": "SAME DAY SERVICE PAINTING DRYWALL FLOORING HANDYMAN",
+                  "location": "CALL (972) 585-3591---ALL DFW AREAS",
+                  "date": "1/2",
+                  "children": {}
+                },
+                {
+                  "word": "FLOORING FLOORS FLOOR CARPET VINYL Plank. TILE LAMINATE INSTALLATION",
+                  "location": "DFW 972 595 2705 Richard installation",
+                  "date": "1/2",
+                  "children": {}
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "seed_word": {
+        "word": "solar panel",
+        "type": "data.gov"
+      },
+      "children": {
+        "topics": [],
+        "topic_categories": [],
+        "tags": [
+          {
+            "word": "Local Government",
+            "children": {}
+          },
+          {
+            "word": "geospatial",
+            "children": {}
+          },
+          {
+            "word": "__",
+            "children": {}
+          },
+          {
+            "word": "wind",
+            "children": {}
+          },
+          {
+            "word": "a2e",
+            "children": {}
+          },
+          {
+            "word": "atmosphere-to-electrons",
+            "children": {}
+          },
+          {
+            "word": "eere",
+            "children": {}
+          },
+          {
+            "word": "sodar",
+            "children": {}
+          },
+          {
+            "word": "weto",
+            "children": {}
+          },
+          {
+            "word": "wfip2",
+            "children": {}
+          },
+          {
+            "word": "wind-forecast-impro...",
+            "children": {}
+          },
+          {
+            "word": "wind-energy",
+            "children": {}
+          }
+        ],
+        "formats": [
+          {
+            "word": "XML",
+            "children": {}
+          },
+          {
+            "word": "ZIP",
+            "children": {}
+          },
+          {
+            "word": "HTML",
+            "children": {}
+          },
+          {
+            "word": "BIN",
+            "children": {}
+          },
+          {
+            "word": "00",
+            "children": {}
+          },
+          {
+            "word": "a0",
+            "children": {}
+          },
+          {
+            "word": "b0",
+            "children": {}
+          },
+          {
+            "word": "PDF",
+            "children": {}
+          },
+          {
+            "word": "CSV",
+            "children": {}
+          },
+          {
+            "word": "JPEG",
+            "children": {}
+          }
+        ],
+        "organization_types": [
+          {
+            "word": "Federal Government",
+            "children": {}
+          },
+          {
+            "word": "City Government",
+            "children": {}
+          },
+          {
+            "word": "State Government",
+            "children": {}
+          }
+        ],
+        "organizations": [
+          {
+            "word": "Department of the Interior",
+            "children": {}
+          },
+          {
+            "word": "Department of Energy",
+            "children": {}
+          },
+          {
+            "word": "National...",
+            "children": {}
+          },
+          {
+            "word": "National Oceanic...",
+            "children": {}
+          },
+          {
+            "word": "City of Bloomington",
+            "children": {}
+          },
+          {
+            "word": "U.S. Environmental...",
+            "children": {}
+          },
+          {
+            "word": "City of Chicago",
+            "children": {}
+          },
+          {
+            "word": "City of Los Angeles",
+            "children": {}
+          },
+          {
+            "word": "City of New Orleans",
+            "children": {}
+          },
+          {
+            "word": "Department of Agriculture",
+            "children": {}
+          }
+        ],
+        "bureaus": [
+          {
+            "word": "Wind Energy...",
+            "children": {}
+          },
+          {
+            "word": "National Park Service",
+            "children": {}
+          },
+          {
+            "word": "National...",
+            "children": {}
+          },
+          {
+            "word": "ORNL_DAAC",
+            "children": {}
+          },
+          {
+            "word": "U.S. Geological Survey",
+            "children": {}
+          },
+          {
+            "word": "data.bloomington.in.gov",
+            "children": {}
+          },
+          {
+            "word": "NASA/JPL/PODAAC",
+            "children": {}
+          },
+          {
+            "word": "SPURS...",
+            "children": {}
+          },
+          {
+            "word": "U.S. EPA Office of...",
+            "children": {}
+          },
+          {
+            "word": "Agricultural...",
+            "children": {}
+          }
+        ],
+        "publishers": [
+          {
+            "word": "Energy Programs",
+            "children": {}
+          },
+          {
+            "word": "National Park Service",
+            "children": {}
+          },
+          {
+            "word": "National...",
+            "children": {}
+          },
+          {
+            "word": "United States...",
+            "children": {}
+          },
+          {
+            "word": "Environmental...",
+            "children": {}
+          },
+          {
+            "word": "Agricultural...",
+            "children": {}
+          }
+        ],
+        "datasets": [
+          {
+            "word": "U.S. Wind and Solar PV Supply Curves with Future Land-use Change",
+            "children": {}
+          },
+          {
+            "word": "Viewsheds from Key Observation Points for Nicodemus National Historic Site (NICO)",
+            "children": {}
+          },
+          {
+            "word": "Viewsheds from Key Observation Points for Capulin Volcano National Monument (CAVO)",
+            "children": {}
+          },
+          {
+            "word": "NASA 3D Models: Satellite Kit",
+            "children": {}
+          },
+          {
+            "word": "Solar Footprints in California",
+            "children": {}
+          },
+          {
+            "word": "De-Icing Comparison Experiment (D-ICE) campaign data",
+            "children": {}
+          },
+          {
+            "word": "Viewsheds from Key Observation Points for Theodore Roosevelt National Park (THRO)",
+            "children": {}
+          },
+          {
+            "word": "HDLC Solar Panel Review Area",
+            "children": {}
+          },
+          {
+            "word": "Mount Riley",
+            "children": {}
+          },
+          {
+            "word": "Viewsheds from Key Observation Points for Badlands National Park (BADL)",
+            "children": {}
+          },
+          {
+            "word": "Installed Solar Panel Capacity",
+            "children": {}
+          },
+          {
+            "word": "United States Large-Scale Solar Photovoltaic Database (ver. 3.0, April 2025)",
+            "children": {}
+          },
+          {
+            "word": "Renewable Energy Waste Management: Solar Panel Circular Economy",
+            "children": {}
+          },
+          {
+            "word": "Delta-X: In Situ Water Surface Reflectance across MRD, LA, USA, 2021, V3",
+            "children": {}
+          }
+        ]
+      }
+    },
+    {
+      "seed_word": {
+        "word": "solar panels",
+        "type": "GitHub"
+      },
+      "children": {
+        "filter_category": [
+          {
+            "word": "Code",
+            "children": {}
+          },
+          {
+            "word": "Repositories",
+            "children": {}
+          },
+          {
+            "word": "Issues",
+            "children": {}
+          },
+          {
+            "word": "Pull requests",
+            "children": {}
+          },
+          {
+            "word": "Discussions",
+            "children": {}
+          },
+          {
+            "word": "Users",
+            "children": {}
+          },
+          {
+            "word": "More",
+            "children": {}
+          }
+        ],
+        "languages": [
+          {
+            "word": "Python",
+            "children": {}
+          },
+          {
+            "word": "C++",
+            "children": {}
+          },
+          {
+            "word": "Jupyter Notebook",
+            "children": {}
+          },
+          {
+            "word": "HTML",
+            "children": {}
+          },
+          {
+            "word": "JavaScript",
+            "children": {}
+          },
+          {
+            "word": "TypeScript",
+            "children": {}
+          },
+          {
+            "word": "Java",
+            "children": {}
+          },
+          {
+            "word": "C",
+            "children": {}
+          },
+          {
+            "word": "CSS",
+            "children": {}
+          },
+          {
+            "word": "C#",
+            "children": {}
+          }
+        ],
+        "advanced_filters": [
+          {
+            "word": "Owner",
+            "children": {}
+          },
+          {
+            "word": "Size",
+            "children": {}
+          },
+          {
+            "word": "Number of followers",
+            "children": {}
+          },
+          {
+            "word": "Sponsor",
+            "children": {}
+          }
+        ],
+        "repositories": [
+          {
+            "word": "DiedB/Homey-SolarPanels",
+            "description": "Connects production statistics of a wide range of PV inverters to Homey.",
+            "children": {}
+          },
+          {
+            "word": "wangzhecheng/DeepSolar",
+            "description": "Nationwide household-level solar panel identification with deep learning.",
+            "children": {}
+          },
+          {
+            "word": "cdeldon/thermography",
+            "description": "Automatic detection of defected solar panel modules using image processing techniques.",
+            "children": {}
+          },
+          {
+            "word": "ColasGael/Machine-Learning-for-Solar-Energy-Prediction",
+            "description": "Predict the power production of a solar panel farm from weather measurements using machine learning.",
+            "children": {}
+          },
+          {
+            "word": "msabvid/Solar-Panels-Detection",
+            "description": "Detection and location of solar panels in aerial images using U-Net.",
+            "children": {}
+          },
+          {
+            "word": "david-abel/solar_panels_rl",
+            "description": "Repository for code experimenting with reinforcement learning and solar tracking.",
+            "children": {}
+          },
+          {
+            "word": "saizk/Deep-Learning-for-Solar-Panel-Recognition",
+            "description": "CNN models for solar panel detection and segmentation in aerial images.",
+            "children": {}
+          },
+          {
+            "word": "gabrieltseng/solar-panel-segmentation",
+            "description": "A U-Net for solar panel identification and segmentation.",
+            "children": {}
+          },
+          {
+            "word": "post-kerbin-mining-corporation/NearFutureSolar",
+            "description": "Adds more solar panel parts to Kerbal Space Program.",
+            "children": {}
+          },
+          {
+            "word": "suhasmaddali/Solar-Panels-Dust-Detection",
+            "description": "Project on solar panel dust detection using convolutional neural network architectures.",
+            "children": {}
+          }
+        ],
+        "sort_options": [
+          {
+            "word": "Best match",
+            "children": {}
+          }
+        ],
+        "ui_actions": [
+          {
+            "word": "Save",
+            "children": {}
+          },
+          {
+            "word": "Star",
+            "children": {}
+          }
+        ],
+        "pagination": [
+          {
+            "word": "Previous",
+            "children": {}
+          },
+          {
+            "word": "Next",
+            "children": {}
+          },
+          {
+            "word": "1",
+            "children": {}
+          },
+          {
+            "word": "2",
+            "children": {}
+          },
+          {
+            "word": "3",
+            "children": {}
+          },
+          {
+            "word": "4",
+            "children": {}
+          },
+          {
+            "word": "5",
+            "children": {}
+          },
+          {
+            "word": "6",
+            "children": {}
+          },
+          {
+            "word": "7",
+            "children": {}
+          },
+          {
+            "word": "… 100",
+            "children": {}
+          }
+        ],
+        "meta": [
+          {
+            "word": "4.9k results",
+            "children": {}
+          },
+          {
+            "word": "231 ms",
+            "children": {}
+          }
+        ]
+      }
+    },
+    {
+      "seed_word": {
+        "word": "solar panel",
+        "type": "Google Search (general / visual-discovery)"
+      },
+      "children": {
+        "search_navigation": [
+          {
+            "word": "AI Mode",
+            "children": {}
+          },
+          {
+            "word": "All",
+            "children": {}
+          },
+          {
+            "word": "Shopping",
+            "children": {}
+          },
+          {
+            "word": "Images",
+            "children": {}
+          },
+          {
+            "word": "Videos",
+            "children": {}
+          },
+          {
+            "word": "News",
+            "children": {}
+          },
+          {
+            "word": "Short videos",
+            "children": {}
+          },
+          {
+            "word": "More",
+            "children": {}
+          },
+          {
+            "word": "Tools",
+            "children": {}
+          }
+        ],
+        "related_searches": {
+          "visual_assets": [
+            {
+              "word": "solar panel images hd",
+              "children": {}
+            },
+            {
+              "word": "solar panels clipart",
+              "children": {}
+            },
+            {
+              "word": "solar panel texture",
+              "children": {}
+            },
+            {
+              "word": "solar panel png",
+              "children": {}
+            },
+            {
+              "word": "solar panel drawing",
+              "children": {}
+            },
+            {
+              "word": "solar panel diagram",
+              "children": {}
+            }
+          ],
+          "learning_queries": [
+            {
+              "word": "how do solar panels work",
+              "children": {}
+            },
+            {
+              "word": "solar panel system",
+              "children": {}
+            },
+            {
+              "word": "solar energy",
+              "children": {}
+            }
+          ],
+          "shopping_intent": [
+            {
+              "word": "solar panel price",
+              "children": {}
+            },
+            {
+              "word": "single solar panel",
+              "children": {}
+            },
+            {
+              "word": "small solar panel",
+              "children": {}
+            },
+            {
+              "word": "solar panel for home",
+              "children": {}
+            },
+            {
+              "word": "roof solar panel",
+              "children": {}
+            },
+            {
+              "word": "solar panel installation",
+              "children": {}
+            }
+          ]
+        },
+        "sponsored_products": [
+          {
+            "word": "Talesun Solar 450W Bifacial Panel",
+            "price": "$179.99",
+            "vendor": "US Solar Supplier",
+            "children": {}
+          },
+          {
+            "word": "Renogy 200W ShadowFlux N-Type Solar Panel",
+            "price": "$239.99",
+            "vendor": "Renogy",
+            "children": {}
+          },
+          {
+            "word": "Thunderbolt Solar 100W Monocrystalline Panel",
+            "price": "$119.99",
+            "vendor": "Harbor Freight",
+            "children": {}
+          },
+          {
+            "word": "Hyundai 640W HiN-T Solar Panel",
+            "price": "$335.33",
+            "vendor": "US Solar Supplier",
+            "children": {}
+          },
+          {
+            "word": "Wholesale Monocrystalline Solar Panels",
+            "price": "$6.00",
+            "vendor": "Alibaba",
+            "children": {}
+          }
+        ],
+        "educational_sources": [
+          {
+            "word": "Solar panel - Wikipedia",
+            "children": {}
+          },
+          {
+            "word": "Solar energy | Britannica",
+            "children": {}
+          },
+          {
+            "word": "Department of Energy – Solar Energy",
+            "children": {}
+          },
+          {
+            "word": "EnergySage – Solar Panel Guides",
+            "children": {}
+          },
+          {
+            "word": "SolarReviews",
+            "children": {}
+          },
+          {
+            "word": "This Old House – Types of Solar Panels",
+            "children": {}
+          },
+          {
+            "word": "Forbes – Are Solar Panels Worth It?",
+            "children": {}
+          },
+          {
+            "word": "MIT News – Solar Photovoltaics",
+            "children": {}
+          },
+          {
+            "word": "EPA – Solar Panel Recycling",
+            "children": {}
+          }
+        ],
+        "buyer_guides_and_tools": [
+          {
+            "word": "Solar panel size and wattage guides",
+            "children": {}
+          },
+          {
+            "word": "Installation cost calculators",
+            "children": {}
+          },
+          {
+            "word": "Pros and cons of solar panels",
+            "children": {}
+          },
+          {
+            "word": "Solar panel efficiency comparisons",
+            "children": {}
+          },
+          {
+            "word": "Financing and tax credit resources",
+            "children": {}
+          }
+        ],
+        "visual_results": [
+          {
+            "word": "Image grid",
+            "content": [
+              "Rooftop solar installations",
+              "Ground-mounted arrays",
+              "Single solar panels",
+              "Solar panel diagrams",
+              "Residential and commercial systems"
+            ],
+            "children": {}
+          }
+        ],
+        "ecosystem_representation": [
+          {
+            "word": "Manufacturers",
+            "examples": [
+              "Qcells",
+              "REC",
+              "Jinko",
+              "Hyundai"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Retailers",
+            "examples": [
+              "Amazon",
+              "Home Depot",
+              "Harbor Freight"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Media & Research",
+            "examples": [
+              "Scientific American",
+              "NASA",
+              "MIT"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Utilities & Policy",
+            "examples": [
+              "DOE",
+              "EPA"
+            ],
+            "children": {}
+          }
+        ],
+        "intent_summary": [
+          {
+            "word": "Visual inspiration",
+            "children": {}
+          },
+          {
+            "word": "Consumer shopping",
+            "children": {}
+          },
+          {
+            "word": "Educational research",
+            "children": {}
+          },
+          {
+            "word": "Installation planning",
+            "children": {}
+          }
+        ]
+      }
+    },
+    {
+      "seed_word": {
+        "word": "solar panels",
+        "type": "Google Search"
+      },
+      "children": {
+        "search_context": [
+          {
+            "word": "Dallas, TX 75248",
+            "children": {}
+          }
+        ],
+        "filters": {
+          "power_range": [
+            {
+              "word": "Under 100W",
+              "children": {}
+            },
+            {
+              "word": "100–200W",
+              "children": {}
+            },
+            {
+              "word": "200–320W",
+              "children": {}
+            },
+            {
+              "word": "320–550W",
+              "children": {}
+            },
+            {
+              "word": "Over 550W",
+              "children": {}
+            }
+          ],
+          "use_case": [
+            {
+              "word": "Home",
+              "children": {}
+            },
+            {
+              "word": "RV",
+              "children": {}
+            },
+            {
+              "word": "Roof",
+              "children": {}
+            }
+          ],
+          "price": [
+            {
+              "word": "Under $1,500",
+              "children": {}
+            }
+          ],
+          "availability": [
+            {
+              "word": "For Sale",
+              "children": {}
+            },
+            {
+              "word": "On Sale",
+              "children": {}
+            },
+            {
+              "word": "Nearby",
+              "children": {}
+            }
+          ]
+        },
+        "sponsored_products": [
+          {
+            "word": "Talesun Solar 450W Bifacial Panel",
+            "price": "$179.99",
+            "vendor": "US Solar Supplier",
+            "children": {}
+          },
+          {
+            "word": "Sungoldpower 12 x 450W Monocrystalline Panels",
+            "price": "$2,295.00",
+            "vendor": "Sungoldpower",
+            "children": {}
+          },
+          {
+            "word": "VEVOR 2400W Complete Solar Power Kit",
+            "price": "$2,871.99",
+            "vendor": "VEVOR",
+            "children": {}
+          },
+          {
+            "word": "Eco-Worthy 100W Monocrystalline Solar Panel",
+            "price": "$59.99",
+            "vendor": "Eco-Worthy",
+            "children": {}
+          }
+        ],
+        "popular_products": [
+          {
+            "word": "Renogy 200W Monocrystalline Solar Panel",
+            "price": "$144.99",
+            "rating": "4.7",
+            "retailer": "Best Buy",
+            "children": {}
+          },
+          {
+            "word": "VEVOR Portable 200W Foldable Solar Panel",
+            "price": "$149.98",
+            "rating": "4.5",
+            "retailer": "Home Depot",
+            "children": {}
+          },
+          {
+            "word": "EcoFlow 125W Bifacial Solar Panel",
+            "price": "$249.00",
+            "rating": "4.6",
+            "retailer": "EcoFlow",
+            "children": {}
+          }
+        ],
+        "sponsored_services": [
+          {
+            "word": "Solartime USA",
+            "description": "Solar panel installation, battery storage, and EV charger solutions in DFW.",
+            "children": {}
+          },
+          {
+            "word": "SunPower",
+            "description": "Residential solar panels with $0 down financing options.",
+            "children": {}
+          },
+          {
+            "word": "Aurora Solar",
+            "description": "Solar quotes and system design tools.",
+            "children": {}
+          },
+          {
+            "word": "Tesla Solar Panels",
+            "description": "Home solar panels and systems by Tesla.",
+            "children": {}
+          }
+        ],
+        "organic_results": [
+          {
+            "word": "Solar panel",
+            "source": "Wikipedia",
+            "children": {}
+          },
+          {
+            "word": "Homeowner’s Guide to Solar",
+            "source": "Department of Energy",
+            "children": {}
+          },
+          {
+            "word": "Your Guide to Home Solar in 2025",
+            "source": "EnergySage",
+            "children": {}
+          }
+        ],
+        "people_also_ask": [
+          {
+            "word": "How many solar panels are needed to power a house?",
+            "children": {}
+          },
+          {
+            "word": "Is it worth putting solar panels on a house?",
+            "children": {}
+          },
+          {
+            "word": "What is the average cost of 10 solar panels?",
+            "children": {}
+          },
+          {
+            "word": "Why are people getting rid of their solar panels?",
+            "children": {}
+          }
+        ],
+        "community_content": [
+          {
+            "word": "Reddit discussions",
+            "topics": [
+              "Solar panel pricing",
+              "Performance and maintenance",
+              "Local solar recommendations"
+            ],
+            "children": {}
+          },
+          {
+            "word": "YouTube videos",
+            "topics": [
+              "Solar panels worth it?",
+              "Solar energy reviews"
+            ],
+            "children": {}
+          },
+          {
+            "word": "X (Twitter) posts",
+            "topics": [
+              "Global solar panel overproduction",
+              "Falling solar panel prices"
+            ],
+            "children": {}
+          }
+        ],
+        "related_searches": [
+          {
+            "word": "Solar panels for home",
+            "children": {}
+          },
+          {
+            "word": "Solar panels for sale",
+            "children": {}
+          },
+          {
+            "word": "Solar panels cost",
+            "children": {}
+          },
+          {
+            "word": "Solar panels jobs",
+            "children": {}
+          },
+          {
+            "word": "Solar panels for cameras",
+            "children": {}
+          }
+        ]
+      }
+    },
+    {
+      "seed_word": {
+        "word": "solar panels scientific papers",
+        "type": "Google Search"
+      },
+      "children": {
+        "search_context": [
+          {
+            "word": "Academic / Scholarly search",
+            "children": {}
+          },
+          {
+            "word": "Location: Dallas, TX 75248",
+            "children": {}
+          }
+        ],
+        "scholarly_results": [
+          {
+            "word": "A comprehensive review on solar photovoltaics",
+            "authors": "A. Mdallal",
+            "year": "2025",
+            "citations": 24,
+            "publisher": "ScienceDirect",
+            "focus": "Recent improvements and advances in solar PV technologies",
+            "children": {}
+          },
+          {
+            "word": "Solar energy technology and its roles in sustainable development",
+            "authors": "A. O. M. Maka",
+            "year": "2022",
+            "citations": 699,
+            "publisher": "Oxford Academic",
+            "focus": "Solar energy applications, sustainability, and employment impacts",
+            "children": {}
+          },
+          {
+            "word": "The economic and environmental analysis of solar energy",
+            "authors": "L. Zhang",
+            "year": "2022",
+            "citations": 6,
+            "publisher": "National Institutes of Health (PubMed Central)",
+            "focus": "Economic and environmental impacts of solar energy systems",
+            "children": {}
+          },
+          {
+            "word": "Publications | Solar Research | NLR",
+            "publisher": "National Renewable Energy Laboratory (NREL)",
+            "focus": "Ongoing solar research, journals, conference papers, and technical reports",
+            "children": {}
+          },
+          {
+            "word": "Solar PV Energy Factsheet",
+            "publisher": "Center for Sustainable Systems (University of Michigan)",
+            "focus": "Efficiency benchmarks and performance statistics for solar PV systems",
+            "children": {}
+          },
+          {
+            "word": "Science’s 2025 Breakthrough of the Year",
+            "publisher": "Science | AAAS",
+            "year": "2025",
+            "focus": "Major scientific breakthroughs including solar and wind energy expansion",
+            "children": {}
+          },
+          {
+            "word": "Surprisingly diverse innovations led to dramatically declining solar costs",
+            "publisher": "MIT News",
+            "year": "2025",
+            "focus": "Technological and manufacturing innovations driving cost reduction",
+            "children": {}
+          },
+          {
+            "word": "Comprehensive Analysis of Solar Panel Performance",
+            "authors": "P. Sarmah",
+            "year": "2023",
+            "citations": 41,
+            "publisher": "ACS Publications",
+            "focus": "Performance dependence on environmental and operating conditions",
+            "children": {}
+          },
+          {
+            "word": "A comprehensive analysis of advanced solar panel performance",
+            "authors": "A. Basem",
+            "year": "2025",
+            "citations": 19,
+            "publisher": "Nature",
+            "focus": "Energy and exergy performance evaluation of solar cells",
+            "children": {}
+          },
+          {
+            "word": "A Comprehensive Review of Solar Panel Performance Degradation",
+            "authors": "H. Yang",
+            "year": "2025",
+            "citations": 6,
+            "publisher": "Wiley",
+            "focus": "Degradation mechanisms in residential and industrial solar panels",
+            "children": {}
+          }
+        ],
+        "research_themes": [
+          {
+            "word": "Solar panel efficiency improvements",
+            "children": {}
+          },
+          {
+            "word": "Performance degradation over time",
+            "children": {}
+          },
+          {
+            "word": "Energy and exergy analysis",
+            "children": {}
+          },
+          {
+            "word": "Economic feasibility of solar energy",
+            "children": {}
+          },
+          {
+            "word": "Environmental impact of photovoltaic systems",
+            "children": {}
+          },
+          {
+            "word": "Sustainable development and renewable energy policy",
+            "children": {}
+          }
+        ],
+        "institutions_and_publishers": [
+          {
+            "word": "ScienceDirect",
+            "children": {}
+          },
+          {
+            "word": "Oxford Academic",
+            "children": {}
+          },
+          {
+            "word": "National Institutes of Health (NIH)",
+            "children": {}
+          },
+          {
+            "word": "National Renewable Energy Laboratory (NREL)",
+            "children": {}
+          },
+          {
+            "word": "Center for Sustainable Systems",
+            "children": {}
+          },
+          {
+            "word": "MIT News",
+            "children": {}
+          },
+          {
+            "word": "Science | AAAS",
+            "children": {}
+          },
+          {
+            "word": "ACS Publications",
+            "children": {}
+          },
+          {
+            "word": "Nature",
+            "children": {}
+          },
+          {
+            "word": "Wiley",
+            "children": {}
+          }
+        ],
+        "people_also_ask": [
+          {
+            "word": "What is the 33% rule in solar panels?",
+            "children": {}
+          },
+          {
+            "word": "What is the 20% rule for solar panels?",
+            "children": {}
+          },
+          {
+            "word": "Why are people getting rid of their solar panels?",
+            "children": {}
+          },
+          {
+            "word": "Why is my electric bill so high if I have solar panels?",
+            "children": {}
+          }
+        ],
+        "sponsored_academic_content": [
+          {
+            "word": "Solar energy: Analyzing key parameters in photovoltaic systems",
+            "publisher": "AIP Publishing",
+            "focus": "Efficiency enhancement and PV system parameter analysis",
+            "children": {}
+          }
+        ],
+        "related_searches": [
+          {
+            "word": "Solar panels scientific papers PDF",
+            "children": {}
+          },
+          {
+            "word": "Solar panels scientific papers free",
+            "children": {}
+          },
+          {
+            "word": "Solar panels scientific papers 2022",
+            "children": {}
+          },
+          {
+            "word": "Solar energy research paper PDF",
+            "children": {}
+          },
+          {
+            "word": "Solar energy articles for students",
+            "children": {}
+          }
+        ],
+        "pagination": [
+          {
+            "word": "Page 1",
+            "children": {}
+          },
+          {
+            "word": "Page 2",
+            "children": {}
+          },
+          {
+            "word": "Page 3",
+            "children": {}
+          },
+          {
+            "word": "Page 4",
+            "children": {}
+          },
+          {
+            "word": "Page 5",
+            "children": {}
+          },
+          {
+            "word": "Page 6",
+            "children": {}
+          },
+          {
+            "word": "Page 7",
+            "children": {}
+          },
+          {
+            "word": "Page 8",
+            "children": {}
+          },
+          {
+            "word": "Page 9",
+            "children": {}
+          },
+          {
+            "word": "Page 10",
+            "children": {}
+          },
+          {
+            "word": "Next",
+            "children": {}
+          }
+        ]
+      }
+    },
+    {
+      "seed_word": {
+        "word": "solar panel",
+        "type": "Reddit Search"
+      },
+      "children": {
+        "search_context": [
+          {
+            "word": "Relevance",
+            "children": {}
+          },
+          {
+            "word": "All time",
+            "children": {}
+          }
+        ],
+        "content_types": [
+          {
+            "word": "Posts",
+            "children": {}
+          },
+          {
+            "word": "Communities",
+            "children": {}
+          },
+          {
+            "word": "Comments",
+            "children": {}
+          },
+          {
+            "word": "Media",
+            "children": {}
+          },
+          {
+            "word": "People",
+            "children": {}
+          }
+        ],
+        "top_posts": [
+          {
+            "word": "Solar Panel Owners — What Do You Wish You Knew Before Installing?",
+            "subreddit": "r/Frugal_Ind",
+            "votes": 570,
+            "comments": 112,
+            "theme": "Installation advice and system sizing",
+            "children": {}
+          },
+          {
+            "word": "Groundbreaking study shows how solar panels age after 30 years of use",
+            "subreddit": "r/energy",
+            "votes": 3100,
+            "comments": 212,
+            "theme": "Long-term durability and performance degradation",
+            "children": {}
+          },
+          {
+            "word": "Are solar panels worth it?",
+            "subreddit": "r/Home",
+            "votes": 39,
+            "comments": 94,
+            "theme": "Cost effectiveness and utility credits",
+            "children": {}
+          },
+          {
+            "word": "Bought a house with \"free\" solar panels — $45K owed",
+            "subreddit": "r/legaladvice",
+            "votes": 3000,
+            "comments": 449,
+            "theme": "Solar leases, debt, and legal risks",
+            "children": {}
+          },
+          {
+            "word": "What is your biggest regret with solar panels?",
+            "subreddit": "r/SolarUK",
+            "votes": 34,
+            "comments": 115,
+            "theme": "User regrets and export vs gas economics",
+            "children": {}
+          },
+          {
+            "word": "Why China Built 162 Square Miles of Solar Panels on the World’s Highest Plateau",
+            "subreddit": "r/energy",
+            "votes": 916,
+            "comments": 128,
+            "theme": "Utility-scale solar and geopolitics",
+            "children": {}
+          },
+          {
+            "word": "China installs 100 solar panels a second as total PV capacity tops 1 terawatt",
+            "subreddit": "r/climatechange",
+            "votes": 2100,
+            "comments": 220,
+            "theme": "Global solar expansion and economics",
+            "children": {}
+          }
+        ],
+        "discussion_themes": [
+          {
+            "word": "Cost vs savings",
+            "children": {}
+          },
+          {
+            "word": "Net metering and utility credits",
+            "children": {}
+          },
+          {
+            "word": "Long-term panel degradation",
+            "children": {}
+          },
+          {
+            "word": "Solar leases and hidden debt",
+            "children": {}
+          },
+          {
+            "word": "DIY vs professional installation",
+            "children": {}
+          },
+          {
+            "word": "Large-scale solar infrastructure",
+            "children": {}
+          },
+          {
+            "word": "Solar as dominant future energy source",
+            "children": {}
+          }
+        ],
+        "communities": [
+          {
+            "word": "r/solar",
+            "members": 185000,
+            "focus": "General solar photovoltaic discussion",
+            "children": {}
+          },
+          {
+            "word": "r/SolarDIY",
+            "members": 115000,
+            "focus": "DIY solar systems and projects",
+            "children": {}
+          },
+          {
+            "word": "r/solarenergy",
+            "members": 44000,
+            "focus": "Solar technology news and advice",
+            "children": {}
+          },
+          {
+            "word": "r/solarpanels",
+            "members": 6000,
+            "focus": "Solar panel news, pricing, and DIY",
+            "children": {}
+          },
+          {
+            "word": "r/solarpower",
+            "members": 5400,
+            "focus": "General solar power topics",
+            "children": {}
+          }
+        ],
+        "people_accounts": [
+          {
+            "word": "u/solarpanel",
+            "karma": 1,
+            "children": {}
+          },
+          {
+            "word": "u/solarpanelsoklahoma",
+            "karma": 1,
+            "children": {}
+          },
+          {
+            "word": "u/solarpanelsystemcost",
+            "karma": 1,
+            "children": {}
+          },
+          {
+            "word": "u/solarpanel990",
+            "karma": -28,
+            "children": {}
+          },
+          {
+            "word": "u/SolarPanelFunding",
+            "karma": 1,
+            "children": {}
+          }
+        ],
+        "platform_context": [
+          {
+            "word": "Community-driven discussion",
+            "children": {}
+          },
+          {
+            "word": "High-engagement voting system",
+            "children": {}
+          },
+          {
+            "word": "Crowdsourced advice and sentiment",
+            "children": {}
+          }
+        ]
+      }
+    },
+    {
+      "seed_word": {
+        "word": "Solar Industry",
+        "type": "Yahoo Finance"
+      },
+      "children": {
+        "industry_overview": [
+          {
+            "word": "Solar",
+            "sector": "Technology",
+            "market_cap": "$61.493B",
+            "industry_weight": "0.26%",
+            "companies": 30,
+            "employees": 86275,
+            "children": {}
+          }
+        ],
+        "performance_comparison": {
+          "day_return": [
+            {
+              "word": "Solar Industry +5.74%",
+              "children": {}
+            },
+            {
+              "word": "S&P 500 +0.19%",
+              "children": {}
+            }
+          ],
+          "ytd_return": [
+            {
+              "word": "Solar Industry +5.74%",
+              "children": {}
+            },
+            {
+              "word": "S&P 500 -0.55%",
+              "children": {}
+            }
+          ],
+          "one_year_return": [
+            {
+              "word": "Solar Industry +38.23%",
+              "children": {}
+            },
+            {
+              "word": "S&P 500 +16.61%",
+              "children": {}
+            }
+          ],
+          "three_year_return": [
+            {
+              "word": "Solar Industry -31.24%",
+              "children": {}
+            },
+            {
+              "word": "S&P 500 +78.63%",
+              "children": {}
+            }
+          ],
+          "five_year_return": [
+            {
+              "word": "Solar Industry -30.08%",
+              "children": {}
+            },
+            {
+              "word": "S&P 500 +85.33%",
+              "children": {}
+            }
+          ]
+        },
+        "top_performing_companies": [
+          {
+            "word": "FTC Solar, Inc. (FTCI)",
+            "ytd_return": "+12.10%",
+            "children": {}
+          },
+          {
+            "word": "SolarEdge Technologies (SEDG)",
+            "ytd_return": "+8.70%",
+            "children": {}
+          },
+          {
+            "word": "Shoals Technologies (SHLS)",
+            "ytd_return": "+6.94%",
+            "children": {}
+          },
+          {
+            "word": "Canadian Solar Inc. (CSIQ)",
+            "ytd_return": "+6.90%",
+            "children": {}
+          },
+          {
+            "word": "Nextpower Inc. (NXT)",
+            "ytd_return": "+6.51%",
+            "children": {}
+          }
+        ],
+        "high_growth_companies": [
+          {
+            "word": "First Solar, Inc. (FSLR)",
+            "growth_estimate": "+70.93%",
+            "children": {}
+          },
+          {
+            "word": "Nextpower Inc. (NXT)",
+            "growth_estimate": "+7.19%",
+            "children": {}
+          },
+          {
+            "word": "FTC Solar, Inc. (FTCI)",
+            "growth_estimate": "+6.67%",
+            "children": {}
+          },
+          {
+            "word": "Array Technologies (ARRY)",
+            "growth_estimate": "-43.36%",
+            "children": {}
+          },
+          {
+            "word": "Shoals Technologies (SHLS)",
+            "growth_estimate": "-44.62%",
+            "children": {}
+          }
+        ],
+        "company_market_table": [
+          {
+            "word": "First Solar, Inc. (FSLR)",
+            "market_cap": "$29.439B",
+            "market_weight": "49.45%",
+            "analyst_rating": "BUY",
+            "children": {}
+          },
+          {
+            "word": "Nextpower Inc. (NXT)",
+            "market_cap": "$14.082B",
+            "market_weight": "23.66%",
+            "analyst_rating": "BUY",
+            "children": {}
+          },
+          {
+            "word": "Sunrun Inc. (RUN)",
+            "market_cap": "$4.511B",
+            "market_weight": "7.58%",
+            "analyst_rating": "BUY",
+            "children": {}
+          },
+          {
+            "word": "Enphase Energy, Inc. (ENPH)",
+            "market_cap": "$4.417B",
+            "market_weight": "7.42%",
+            "analyst_rating": "HOLD",
+            "children": {}
+          },
+          {
+            "word": "SolarEdge Technologies (SEDG)",
+            "market_cap": "$1.875B",
+            "market_weight": "3.15%",
+            "analyst_rating": "HOLD",
+            "children": {}
+          }
+        ],
+        "analyst_reports": [
+          {
+            "word": "First Solar, Inc.",
+            "source": "Morningstar",
+            "focus": "Thin-film cadmium telluride solar technology",
+            "children": {}
+          },
+          {
+            "word": "Nextpower Inc.",
+            "source": "Argus",
+            "focus": "Price target revision and growth outlook",
+            "children": {}
+          },
+          {
+            "word": "Sunrun Inc.",
+            "source": "Argus",
+            "focus": "Risk profile and valuation",
+            "children": {}
+          },
+          {
+            "word": "Enphase Energy, Inc.",
+            "source": "Argus",
+            "focus": "Financial strength and growth balance",
+            "children": {}
+          }
+        ],
+        "solar_news_feed": [
+          {
+            "word": "Is Nextpower Stock a Buy Now?",
+            "source": "Motley Fool",
+            "children": {}
+          },
+          {
+            "word": "First Solar's Expanding Footprint Positions It for Sustained Growth",
+            "source": "Zacks",
+            "children": {}
+          },
+          {
+            "word": "Array Technologies Drops Ahead of Tax Credit Deadline",
+            "source": "Insider Monkey",
+            "children": {}
+          },
+          {
+            "word": "Sunrun Price Target Raised Amid Partnership with NRG Energy",
+            "source": "Insider Monkey",
+            "children": {}
+          }
+        ],
+        "community_sentiment": [
+          {
+            "word": "Investor Comments",
+            "sentiment": "Mixed / Bearish vs Bullish",
+            "themes": [
+              "Policy risk",
+              "Comparison with nuclear energy",
+              "Skepticism on long-term returns"
+            ],
+            "children": {}
+          }
+        ],
+        "market_context": [
+          {
+            "word": "U.S. Markets Closed",
+            "children": {}
+          },
+          {
+            "word": "Trending Tickers",
+            "children": {}
+          },
+          {
+            "word": "Top Gainers",
+            "children": {}
+          },
+          {
+            "word": "Top Losers",
+            "children": {}
+          },
+          {
+            "word": "Economic Events Calendar",
+            "children": {}
+          }
+        ]
+      }
+    },
+    {
+      "seed_word": {
+        "word": "solar panels",
+        "type": "YouTube"
+      },
+      "children": {
+        "top_navigation_filters": [
+          {
+            "word": "All",
+            "children": {}
+          },
+          {
+            "word": "Shorts",
+            "children": {}
+          },
+          {
+            "word": "Videos",
+            "children": {}
+          },
+          {
+            "word": "Unwatched",
+            "children": {}
+          },
+          {
+            "word": "Watched",
+            "children": {}
+          },
+          {
+            "word": "Recently uploaded",
+            "children": {}
+          },
+          {
+            "word": "Live",
+            "children": {}
+          },
+          {
+            "word": "Kids",
+            "children": {}
+          },
+          {
+            "word": "Diy",
+            "children": {}
+          },
+          {
+            "word": "Installation",
+            "children": {}
+          },
+          {
+            "word": "Work in hindi",
+            "children": {}
+          },
+          {
+            "word": "Filters",
+            "children": {}
+          }
+        ],
+        "sponsored_products": [
+          {
+            "word": "Anker SOLIX C2000 Gen 2 + 400W Solar Panel",
+            "price": "$1,199.99",
+            "vendor": "ankersolix.com",
+            "children": {}
+          },
+          {
+            "word": "Anker SOLIX F3000 + 2× 400W Solar Panel",
+            "price": "$6,000.00",
+            "vendor": "ankersolix.com",
+            "children": {}
+          },
+          {
+            "word": "Talesun Solar 450W BIPRO Bifacial 144 Cells All Black TD6I72M-450 Solar Panel",
+            "price": "$179.99",
+            "vendor": "US Solar Supplier",
+            "children": {}
+          },
+          {
+            "word": "2× Anker SOLIX F3800 Plus + Smart Home Power Kit + 8× 440W Rigid Solar Panel",
+            "price": "$8,487.90",
+            "vendor": "ankersolix.com",
+            "children": {}
+          },
+          {
+            "word": "Anker SOLIX F3000 + 400W Portable Solar Panel",
+            "price": "$1,399.00",
+            "vendor": "ankersolix.com",
+            "children": {}
+          },
+          {
+            "word": "Runergy 405W Mono P-Type Bifacial Solar Panel HY-DH108P8B",
+            "price": "$144.99",
+            "vendor": "US Solar Supplier",
+            "children": {}
+          },
+          {
+            "word": "ZNshine 400W ZXM7-SH108-400/... All Black Monocrystalline Solar Panel",
+            "price": "$144.99",
+            "vendor": "US Solar Supplier",
+            "children": {}
+          },
+          {
+            "word": "Anker SOLIX F3800 Plus + Smart Home Power Kit + 8× 440W Rigid Solar Panel",
+            "price": "$7,297.00",
+            "vendor": "ankersolix.com",
+            "children": {}
+          }
+        ],
+        "video_results": [
+          {
+            "word": "What Type of Solar Panel Should You Buy?",
+            "views": "40K views",
+            "age": "3 months ago",
+            "duration": "10:16",
+            "features": [
+              "4K",
+              "CC",
+              "chapters"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Is Solar worth it? My Experience 2 Years Later",
+            "views": "370K views",
+            "age": "1 year ago",
+            "features": [
+              "4K",
+              "chapters"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Basic Solar Components & How They Work - Solar Panels, Inverter, Batteries, & More Explained (Ep. 2)",
+            "views": "63K views",
+            "age": "1 year ago",
+            "duration": "10:26",
+            "features": [
+              "4K",
+              "CC",
+              "chapters"
+            ],
+            "children": {}
+          },
+          {
+            "word": "How do solar panels work? - Richard Komp",
+            "views": "26M views",
+            "age": "9 years ago",
+            "duration": "4:59",
+            "features": [
+              "CC",
+              "Summary"
+            ],
+            "children": {}
+          },
+          {
+            "word": "What Are the Different Types of Solar Panels?",
+            "views": "35K views",
+            "age": "1 year ago",
+            "duration": "10:43",
+            "features": [
+              "moments"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Should You Go Solar? A Super Helpful Beginner's Guide to Home Solar Power",
+            "views": "521K views",
+            "age": "2 years ago",
+            "duration": "11:35",
+            "features": [
+              "chapters"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Solar Power System For Home: Ultimate Beginners Guide",
+            "views": "2.8M views",
+            "age": "6 years ago",
+            "duration": "12:24",
+            "features": [
+              "CC",
+              "moments"
+            ],
+            "children": {}
+          },
+          {
+            "word": "I Bought a $1,000 Solar Setup",
+            "views": "1.9M views",
+            "age": "1 year ago",
+            "duration": "13:05",
+            "features": [
+              "4K",
+              "chapters"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Tesla Solar Roof Review: Was it Worth It??",
+            "views": "16M views",
+            "age": "2 years ago",
+            "duration": "30:27",
+            "features": [
+              "4K",
+              "CC"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Tesla Solar Roof vs Solar Panels: Which is Worth It?",
+            "views": "1.6M views",
+            "age": "1 year ago",
+            "duration": "16:47",
+            "features": [
+              "4K",
+              "CC"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Different Types of Solar Panels and Their Advantages",
+            "views": "373K views",
+            "age": "2 years ago",
+            "features": [
+              "CC",
+              "Summary"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Solar Panels After 1 Year: Are They Worth It?",
+            "views": "1.7M views",
+            "age": "11 months ago",
+            "features": [
+              "4K",
+              "chapters"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Understanding SOLAR PANEL TECHNICAL SPECIFICATIONS and their role in solar system design",
+            "views": "5.3K views",
+            "age": "8 months ago",
+            "children": {}
+          },
+          {
+            "word": "Generate Electricity - How Solar Panels Work!",
+            "views": "1.8M views",
+            "age": "2 years ago",
+            "features": [
+              "4K"
+            ],
+            "children": {}
+          },
+          {
+            "word": "True Cost of Solar Panels | DON'T WASTE YOUR MONEY",
+            "views": "234K views",
+            "age": "2 years ago",
+            "children": {}
+          },
+          {
+            "word": "The BEST Solar Panels of 2025!",
+            "views": "102K views",
+            "age": "10 months ago",
+            "features": [
+              "4K",
+              "chapters"
+            ],
+            "children": {}
+          },
+          {
+            "word": "I Tested a \"Revolutionary\" New Solar Panel",
+            "views": "724K views",
+            "age": "7 months ago",
+            "features": [
+              "4K",
+              "Summary"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Are solar panels worth it in 2024?",
+            "views": "445K views",
+            "age": "2 years ago",
+            "features": [
+              "4K",
+              "CC"
+            ],
+            "children": {}
+          },
+          {
+            "word": "What's The Best Solar Panel In 2026? 6 Key Metrics - Aiko / Longi / JA Solar / Eurener…",
+            "views": "52K views",
+            "age": "3 weeks ago",
+            "features": [
+              "4K",
+              "chapters"
+            ],
+            "children": {}
+          },
+          {
+            "word": "Finding & Connecting the RIGHT Solar Panel - Power Stations 101 Series",
+            "views": "131K views",
+            "age": "3 years ago",
+            "children": {}
+          }
+        ],
+        "shorts": [
+          {
+            "word": "Solar Power Bank PANELS",
+            "views": "11M views",
+            "children": {}
+          },
+          {
+            "word": "Paper-Thin Solar Panels With No Installation Needed",
+            "views": "14M views",
+            "children": {}
+          },
+          {
+            "word": "The Solar Powered Aptera EV",
+            "views": "6.6M views",
+            "children": {}
+          },
+          {
+            "word": "How I Built a 7kWh Solar Shed for Just $180!",
+            "views": "773K views",
+            "children": {}
+          },
+          {
+            "word": "Types of Solar Panels #electrical #solarpower …",
+            "views": "268K views",
+            "children": {}
+          },
+          {
+            "word": "RV solar 1000 Watts. 10 panels #campping #rv …",
+            "views": "21K views",
+            "children": {}
+          },
+          {
+            "word": "Jinko Solar Panels 550w …",
+            "views": "339K views",
+            "children": {}
+          },
+          {
+            "word": "Understanding Off Grid Solar",
+            "views": "319K views",
+            "children": {}
+          },
+          {
+            "word": "10KW Solar System #panel #solar #greenenergy …",
+            "views": "116K views",
+            "children": {}
+          },
+          {
+            "word": "New RYOBI 60-Watt Foldable Solar Panel",
+            "views": "539K views",
+            "children": {}
+          }
+        ],
+        "sponsored_blocks": [
+          {
+            "word": "Solar Panels on Clearance",
+            "sponsor": "A1 SolarStore",
+            "children": {}
+          },
+          {
+            "word": "10 Best VPNs Ranked for 2025",
+            "sponsor": "Cybernews",
+            "children": {}
+          },
+          {
+            "word": "SunGoldPower® Official Shop",
+            "sponsor": "Sungoldpower Official",
+            "children": {}
+          },
+          {
+            "word": "Claude Code adapts to your coding standards and patterns",
+            "sponsor": "Claude",
+            "children": {}
+          }
+        ],
+        "channels_mentioned": [
+          {
+            "word": "The Solar Lab",
+            "children": {}
+          },
+          {
+            "word": "Smart Home Solver",
+            "children": {}
+          },
+          {
+            "word": "TED-Ed",
+            "children": {}
+          },
+          {
+            "word": "History of Simple Things",
+            "children": {}
+          },
+          {
+            "word": "Exploring Alternatives",
+            "children": {}
+          },
+          {
+            "word": "Best Electric",
+            "children": {}
+          },
+          {
+            "word": "Footprint Hero with Alex Beale",
+            "children": {}
+          },
+          {
+            "word": "Marques Brownlee",
+            "children": {}
+          },
+          {
+            "word": "Undecided with Matt Ferrell",
+            "children": {}
+          },
+          {
+            "word": "MapperX",
+            "children": {}
+          },
+          {
+            "word": "Shelby Church",
+            "children": {}
+          },
+          {
+            "word": "solaracademyzone",
+            "children": {}
+          },
+          {
+            "word": "The Engineering Mindset",
+            "children": {}
+          },
+          {
+            "word": "23ABC News | KERO",
+            "children": {}
+          },
+          {
+            "word": "Jack The Solar Guy",
+            "children": {}
+          },
+          {
+            "word": "Spirit Energy",
+            "children": {}
+          },
+          {
+            "word": "Jasonoid - Solar Power, Batteries, and More!",
+            "children": {}
+          }
+        ],
+        "ui_elements": [
+          {
+            "word": "Watch",
+            "children": {}
+          },
+          {
+            "word": "Sign up",
+            "children": {}
+          },
+          {
+            "word": "Create",
+            "children": {}
+          },
+          {
+            "word": "Home",
+            "children": {}
+          },
+          {
+            "word": "Shorts",
+            "children": {}
+          },
+          {
+            "word": "Subscriptions",
+            "children": {}
+          },
+          {
+            "word": "You",
+            "children": {}
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+{
+    "parent": {
+      "word": "manufacturing",
+      "type": "NIST (National Institute of Standards and Technology)"
+    },
+    "children": {
+      "mission_and_role": [
+        {
+          "word": "Support U.S. manufacturing competitiveness",
+          "children": {}
+        },
+        {
+          "word": "Enable innovation through measurement science and standards",
+          "children": {}
+        },
+        {
+          "word": "Ensure product quality, safety, and reliability",
+          "children": {}
+        },
+        {
+          "word": "Strengthen economic and national security",
+          "children": {}
+        }
+      ],
+      "core_focus_areas": [
+        { "word": "Additive manufacturing", "children": {} },
+        { "word": "Smart manufacturing", "children": {} },
+        { "word": "Robotics", "children": {} },
+        { "word": "Supply chain resilience", "children": {} },
+        { "word": "Sustainable manufacturing", "children": {} },
+        { "word": "Manufacturing quality assurance", "children": {} },
+        { "word": "Manufacturing economics", "children": {} },
+        { "word": "Factory operations planning and control", "children": {} },
+        { "word": "Interoperability in manufacturing systems", "children": {} },
+        { "word": "Process measurement and control", "children": {} },
+        { "word": "Monitoring, diagnostics, and prognostics", "children": {} },
+        { "word": "Systems engineering and integration", "children": {} },
+        { "word": "Product data and digital manufacturing", "children": {} },
+        { "word": "Technology commercialization", "children": {} }
+      ],
+      "key_programs_and_initiatives": [
+        {
+          "word": "Hollings Manufacturing Extension Partnership (MEP)",
+          "children": {
+            "purpose": [
+              { "word": "Support small and medium-sized manufacturers", "children": {} },
+              { "word": "Technology transfer and workforce assistance", "children": {} },
+              { "word": "Improve productivity and competitiveness", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Manufacturing USA",
+          "children": {
+            "purpose": [
+              { "word": "Advanced manufacturing innovation institutes", "children": {} },
+              { "word": "Public–private collaboration", "children": {} },
+              { "word": "Accelerate commercialization of new technologies", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Materials Genome Initiative",
+          "children": {
+            "purpose": [
+              { "word": "Data-driven materials discovery", "children": {} },
+              { "word": "Faster deployment of advanced materials", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Additive Manufacturing Benchmark Test Series",
+          "children": {
+            "purpose": [
+              { "word": "Standards and measurement frameworks for 3D printing", "children": {} },
+              { "word": "Build trust in additive manufacturing technologies", "children": {} }
+            ]
+          }
+        }
+      ],
+      "how_nist_supports_manufacturers": [
+        {
+          "word": "Accelerating innovation",
+          "children": {
+            "methods": [
+              { "word": "Measurement science research", "children": {} },
+              { "word": "Material and process characterization", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Speeding commercialization",
+          "children": {
+            "methods": [
+              { "word": "Trust frameworks for emerging technologies", "children": {} },
+              { "word": "Standards for AI and additive manufacturing", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Improving efficiency, quality, and resilience",
+          "children": {
+            "methods": [
+              { "word": "Calibration and reference materials", "children": {} },
+              { "word": "Supply chain quality assurance", "children": {} },
+              { "word": "Cybersecurity frameworks", "children": {} },
+              { "word": "Support for defense and critical infrastructure manufacturing", "children": {} }
+            ]
+          }
+        }
+      ],
+      "research_and_outputs": [
+        { "word": "Manufacturing research projects", "children": {} },
+        { "word": "Standards and guidelines", "children": {} },
+        { "word": "Publications and technical reports", "children": {} },
+        { "word": "Patents", "children": {} },
+        { "word": "Videos and educational media", "children": {} },
+        { "word": "News and blog updates", "children": {} }
+      ],
+      "institutional_context": [
+        {
+          "word": "U.S. Department of Commerce",
+          "children": {}
+        },
+        {
+          "word": "Headquarters: Gaithersburg, Maryland",
+          "children": {}
+        },
+        {
+          "word": "Federal compliance and transparency",
+          "children": {
+            "requirements": [
+              { "word": "FOIA", "children": {} },
+              { "word": "Privacy and accessibility", "children": {} },
+              { "word": "Scientific integrity", "children": {} },
+              { "word": "Information quality standards", "children": {} }
+            ]
+          }
+        }
+      ],
+      "strategic_positioning": [
+        {
+          "word": "Manufacturing infrastructure layer",
+          "children": {}
+        },
+        {
+          "word": "Standards, trust, and measurement as enablers",
+          "children": {}
+        },
+        {
+          "word": "Bridge between research, industry, and policy",
+          "children": {}
+        }
+      ]
+    }
+  }
+  

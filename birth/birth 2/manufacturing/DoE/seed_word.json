@@ -1,0 +1,185 @@
+{
+    "parent": {
+      "word": "manufacturing",
+      "type": "Department of Energy (DOE) Search"
+    },
+    "children": {
+      "popular_searches": [
+        { "word": "Artificial Intelligence", "children": {} },
+        { "word": "LNG", "children": {} },
+        { "word": "Geothermal", "children": {} },
+        { "word": "Nuclear Energy", "children": {} },
+        { "word": "Hydropower", "children": {} }
+      ],
+      "filters": {
+        "content_type": [
+          { "word": "Article (2504)", "children": {} },
+          { "word": "Blog (265)", "children": {} },
+          { "word": "Bulletin (92)", "children": {} },
+          { "word": "Document (1480)", "children": {} },
+          { "word": "Energy Profile (1)", "children": {} },
+          { "word": "Energy Today (2)", "children": {} },
+          { "word": "Event (101)", "children": {} },
+          { "word": "Homepage (18)", "children": {} },
+          { "word": "Media Advisory (6)", "children": {} },
+          { "word": "Multimedia (11)", "children": {} },
+          { "word": "Op-Ed (3)", "children": {} },
+          { "word": "Page (631)", "children": {} },
+          { "word": "Person (15)", "children": {} },
+          { "word": "Pivot Table (14)", "children": {} },
+          { "word": "Press Releases (500)", "children": {} },
+          { "word": "Remarks/Testimony (10)", "children": {} },
+          { "word": "Success Story (54)", "children": {} }
+        ],
+        "language": [
+          { "word": "English (3283)", "children": {} }
+        ],
+        "offices": [
+          { "word": "Offices (filter available)", "children": {} }
+        ],
+        "actions": [
+          { "word": "Apply Filters", "children": {} },
+          { "word": "Reset Filters", "children": {} }
+        ],
+        "related_search_tooling": [
+          {
+            "word": "Compliance Document search",
+            "children": {}
+          }
+        ]
+      },
+      "results_header": [
+        { "word": "Search Results", "children": {} },
+        { "word": "Showing Results 1–10 of 200", "children": {} },
+        { "word": "Sort: Date", "children": {} }
+      ],
+      "search_results": [
+        {
+          "word": "Metering for Federal Solar PV Systems in Remote Locations: Options for Remote Site Network Connections",
+          "date": "January 2, 2026",
+          "office_or_program": "Federal Energy Management Program",
+          "content_type": "Page",
+          "children": {}
+        },
+        {
+          "word": "Manufactured Housing",
+          "date": "January 2, 2026",
+          "office_or_program": "Buildings",
+          "content_type": "Page",
+          "children": {}
+        },
+        {
+          "word": "HALEU Frequently Asked Questions",
+          "date": "December 30, 2025",
+          "office_or_program": "Office of Nuclear Energy",
+          "content_type": "Page",
+          "children": {}
+        },
+        {
+          "word": "Critical Materials Collaborative",
+          "date": "December 29, 2025",
+          "office_or_program": "Critical Minerals & Materials Program",
+          "content_type": "Page",
+          "children": {}
+        },
+        {
+          "word": "GeoFlight",
+          "date": "December 29, 2025",
+          "office_or_program": "Geothermal Technologies Office",
+          "content_type": "Page",
+          "children": {}
+        },
+        {
+          "word": "American-Made Geothermal Lithium Extraction Prize",
+          "date": "December 29, 2025",
+          "office_or_program": "Geothermal Technologies Office",
+          "content_type": "Page",
+          "children": {}
+        },
+        {
+          "word": "Geothermal Collegiate Competition",
+          "date": "December 29, 2025",
+          "office_or_program": "Geothermal Technologies Office",
+          "content_type": "Page",
+          "children": {}
+        },
+        {
+          "word": "Hydraulic Properties",
+          "date": "December 29, 2025",
+          "office_or_program": "Geothermal Technologies Office",
+          "content_type": "Page",
+          "children": {}
+        },
+        {
+          "word": "Geothermal Technologies Office Open Funding Opportunities",
+          "date": "December 29, 2025",
+          "office_or_program": "Geothermal Technologies Office",
+          "content_type": "Page",
+          "children": {}
+        },
+        {
+          "word": "Enhanced Geothermal Systems",
+          "date": "December 29, 2025",
+          "office_or_program": "Geothermal Technologies Office",
+          "content_type": "Page",
+          "children": {}
+        }
+      ],
+      "pagination": [
+        { "word": "Previous", "children": {} },
+        { "word": "1", "children": {} },
+        { "word": "2", "children": {} },
+        { "word": "3", "children": {} },
+        { "word": "4", "children": {} },
+        { "word": "5", "children": {} },
+        { "word": "20", "children": {} },
+        { "word": "Next", "children": {} }
+      ],
+      "suggested_topics": [
+        {
+          "word": "American Manufacturing",
+          "children": {}
+        }
+      ],
+      "upcoming_events": [
+        {
+          "word": "Accelerating Materials Simulation with MAD3: A Machine Learning Breakthrough from Sandia National",
+          "date": "January 20, 2026",
+          "time": "3:00 PM EST",
+          "children": {}
+        },
+        {
+          "word": "Savannah River EM SSAB Meeting (January 2026)",
+          "date": "January 27, 2026",
+          "time": "10:00 AM EST",
+          "children": {}
+        }
+      ],
+      "site_links": [
+        { "word": "Leadership & Offices", "children": {} },
+        { "word": "Mission", "children": {} },
+        { "word": "Newsroom", "children": {} },
+        { "word": "Contact Us", "children": {} },
+        { "word": "Careers", "children": {} },
+        { "word": "Resources", "children": {} },
+        { "word": "Budget & Performance", "children": {} },
+        { "word": "Directives, Delegations, & Requirements", "children": {} },
+        { "word": "Freedom of Information Act (FOIA)", "children": {} },
+        { "word": "Inspector General", "children": {} },
+        { "word": "Privacy Program", "children": {} },
+        { "word": "USA.gov", "children": {} },
+        { "word": "The White House", "children": {} }
+      ],
+      "policy_footer_links": [
+        { "word": "Open Gov", "children": {} },
+        { "word": "Accessibility", "children": {} },
+        { "word": "Privacy", "children": {} },
+        { "word": "Information Quality", "children": {} },
+        { "word": "Web Policies", "children": {} },
+        { "word": "Vulnerability Disclosure Program", "children": {} },
+        { "word": "Whistleblower Protection", "children": {} },
+        { "word": "Equal Employment Opportunity", "children": {} }
+      ]
+    }
+  }
+  

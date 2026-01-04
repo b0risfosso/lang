@@ -1,0 +1,119 @@
+{
+    "parent": {
+      "word": "manufacturing",
+      "type": "GitHub"
+    },
+    "children": {
+      "search_meta": [
+        { "word": "21.2k repository results", "children": {} },
+        { "word": "~211 ms", "children": {} },
+        { "word": "Sort: Best match", "children": {} }
+      ],
+      "filter_category": [
+        { "word": "Code", "children": {} },
+        { "word": "Repositories", "children": {} },
+        { "word": "Issues", "children": {} },
+        { "word": "Pull requests", "children": {} },
+        { "word": "Discussions", "children": {} },
+        { "word": "Users", "children": {} },
+        { "word": "More", "children": {} }
+      ],
+      "languages": [
+        { "word": "Jupyter Notebook", "children": {} },
+        { "word": "Python", "children": {} },
+        { "word": "HTML", "children": {} },
+        { "word": "JavaScript", "children": {} },
+        { "word": "Java", "children": {} },
+        { "word": "TypeScript", "children": {} },
+        { "word": "C++", "children": {} },
+        { "word": "C#", "children": {} },
+        { "word": "R", "children": {} },
+        { "word": "CSS", "children": {} }
+      ],
+      "advanced_filters": [
+        { "word": "Owner", "children": {} },
+        { "word": "Size", "children": {} },
+        { "word": "Number of followers", "children": {} },
+        { "word": "Sponsor", "children": {} }
+      ],
+      "repositories": [
+        {
+          "word": "OCA/manufacture",
+          "description": "Odoo Manufacturing Addons",
+          "language": "Python",
+          "children": {}
+        },
+        {
+          "word": "qcadoo/mes",
+          "description": "qcadoo MES – friendly web manufacturing software",
+          "language": "Java",
+          "children": {}
+        },
+        {
+          "word": "aewallin/opencamlib",
+          "description": "Open-source CAM algorithms library",
+          "language": "C++",
+          "children": {}
+        },
+        {
+          "word": "crbnos/carbon",
+          "description": "Open-source ERP, MES, and QMS for manufacturing",
+          "language": "TypeScript",
+          "children": {}
+        },
+        {
+          "word": "CarlosGS/Cyclone-PCB-Factory",
+          "description": "Parametric CNC mill design for PCB manufacturing (archived)",
+          "language": "G-code",
+          "children": {}
+        },
+        {
+          "word": "CMSL-HKUST/jax-am",
+          "description": "Additive manufacturing simulation with JAX",
+          "language": "Jupyter Notebook",
+          "children": {}
+        },
+        {
+          "word": "jukbot/smart-industry",
+          "description": "Open-source MES for job-shop manufacturers",
+          "language": "HTML",
+          "children": {}
+        },
+        {
+          "word": "digitaltwinconsortium/ManufacturingOntologies",
+          "description": "Reference solution for manufacturing ontologies (digital twins / interoperability)",
+          "language": "C#",
+          "children": {}
+        },
+        {
+          "word": "ESS-LLP/process-manufacturing",
+          "description": "Process manufacturing software",
+          "language": "Python",
+          "children": {}
+        },
+        {
+          "word": "ricefishtech/industry4.0-mes",
+          "description": "Open-source MES (Industry 4.0 oriented)",
+          "language": "Java",
+          "children": {}
+        }
+      ],
+      "ui_actions": [
+        { "word": "Save", "children": {} },
+        { "word": "Star", "children": {} }
+      ],
+      "pagination": [
+        { "word": "Previous", "children": {} },
+        { "word": "Next", "children": {} },
+        { "word": "1", "children": {} },
+        { "word": "2", "children": {} },
+        { "word": "3", "children": {} },
+        { "word": "4", "children": {} },
+        { "word": "5", "children": {} },
+        { "word": "6", "children": {} },
+        { "word": "7", "children": {} },
+        { "word": "… 100", "children": {} }
+      ]
+    }
+  }
+  

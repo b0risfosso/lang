@@ -1,0 +1,82 @@
+1. parts
+Types to feed it:
+Google (general discovery)
+McMaster-Carr (industrial components)
+Grainger (MRO parts)
+ISO (part specifications)
+
+2. subassemblies
+Types to feed it:
+Wikipedia (conceptual structure)
+Siemens (industrial hierarchies)
+PTC (product structure)
+
+3. fasteners
+Types to feed it:
+McMaster-Carr
+ASME
+ISO
+
+4. tools
+Types to feed it:
+Bosch
+Snap-on
+Harbor Freight
+YouTube (procedural learning)
+
+5. machines
+Types to feed it:
+ABB
+KUKA
+Fanuc
+
+6. sequence
+Types to feed it:
+MIT OpenCourseWare
+Coursera
+Siemens
+
+7. workflow
+Types to feed it:
+Atlassian
+ServiceNow
+SAP
+
+8. inspection
+Types to feed it:
+NIST
+ISO
+Keyence
+
+9. labor
+Types to feed it:
+Bureau of Labor Statistics
+LinkedIn
+OSHA
+
+10. instructions
+Types to feed it:
+GitHub
+Google
+IKEA (canonical assembly language)
+
+11. tolerances
+Types to feed it:
+ASME
+ISO
+NIST
+
+12. errors
+Types to feed it:
+GitHub (issue tracking)
+Stack Overflow
+OSHA
+
+13. mechanical interface
+Feed into: standards bodies, CAD platforms, hardware vendors
+
+14. electrical interface
+Feed into: grid operators, inverter manufacturers, testing labs
+
+15. data interface
+Feed into: MES systems, digital twins, monitoring platforms

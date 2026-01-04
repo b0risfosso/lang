@@ -1,0 +1,166 @@
+{
+    "parent": {
+      "word": "manufacturing",
+      "type": "Wikipedia"
+    },
+    "children": {
+      "definition": [
+        {
+          "word": "Creation or production of goods using labor, machines, tools, and chemical or biological processes",
+          "children": {}
+        },
+        {
+          "word": "Core activity of the secondary sector of the economy",
+          "children": {}
+        }
+      ],
+      "history": [
+        {
+          "word": "Prehistory and ancient history",
+          "children": {
+            "milestones": [
+              { "word": "Stone tool manufacturing (Oldowan industry)", "children": {} },
+              { "word": "Copper smelting", "children": {} },
+              { "word": "Bronze and iron metallurgy", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Medieval and early modern period",
+          "children": {
+            "milestones": [
+              { "word": "Papermaking spread from China to Europe", "children": {} },
+              { "word": "Blast furnace development", "children": {} },
+              { "word": "Early textile mechanization", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Industrial Revolutions",
+          "children": {
+            "milestones": [
+              { "word": "Steam power and mechanized factories", "children": {} },
+              { "word": "Mass production and assembly lines", "children": {} },
+              { "word": "Electrification of factories", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Modern manufacturing",
+          "children": {
+            "milestones": [
+              { "word": "Automation and robotics", "children": {} },
+              { "word": "Lean manufacturing (just-in-time)", "children": {} },
+              { "word": "Globalized production systems", "children": {} }
+            ]
+          }
+        }
+      ],
+      "manufacturing_systems": [
+        { "word": "Job production", "children": {} },
+        { "word": "Batch production", "children": {} },
+        { "word": "Flow production", "children": {} },
+        { "word": "Lean manufacturing", "children": {} },
+        { "word": "Agile manufacturing", "children": {} }
+      ],
+      "methods_and_technologies": [
+        {
+          "word": "Process control",
+          "children": {
+            "systems": [
+              { "word": "PLC", "children": {} },
+              { "word": "DCS", "children": {} },
+              { "word": "SCADA", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Quality and efficiency methods",
+          "children": {
+            "frameworks": [
+              { "word": "Six Sigma", "children": {} },
+              { "word": "Total Quality Management (TQM)", "children": {} },
+              { "word": "Overall Equipment Effectiveness (OEE)", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Digital integration",
+          "children": {
+            "standards": [
+              { "word": "ERP", "children": {} },
+              { "word": "ISA-95 / IEC 62264", "children": {} }
+            ]
+          }
+        }
+      ],
+      "strategy_and_economics": [
+        {
+          "word": "Manufacturing strategy",
+          "children": {
+            "tradeoffs": [
+              { "word": "Cost", "children": {} },
+              { "word": "Quality", "children": {} },
+              { "word": "Flexibility", "children": {} },
+              { "word": "Innovation", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Industrial policy",
+          "children": {}
+        },
+        {
+          "word": "Manufacturing economics",
+          "children": {
+            "topics": [
+              { "word": "Productivity", "children": {} },
+              { "word": "Labor impacts", "children": {} },
+              { "word": "Environmental costs", "children": {} },
+              { "word": "Reshoring and offshoring", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Health and safety",
+          "children": {}
+        }
+      ],
+      "global_manufacturing": [
+        {
+          "word": "Major manufacturing nations",
+          "children": {
+            "countries": [
+              { "word": "China", "children": {} },
+              { "word": "United States", "children": {} },
+              { "word": "Germany", "children": {} },
+              { "word": "Japan", "children": {} },
+              { "word": "India", "children": {} }
+            ]
+          }
+        },
+        {
+          "word": "Manufacturing output rankings",
+          "children": {
+            "source": [
+              { "word": "World Bank", "children": {} },
+              { "word": "UNIDO", "children": {} }
+            ]
+          }
+        }
+      ],
+      "related_fields": [
+        { "word": "Manufacturing engineering", "children": {} },
+        { "word": "Industrial engineering", "children": {} },
+        { "word": "Supply chain management", "children": {} },
+        { "word": "Automation and robotics", "children": {} }
+      ],
+      "navigation_and_references": [
+        { "word": "Table of contents", "children": {} },
+        { "word": "References", "children": {} },
+        { "word": "Further reading", "children": {} },
+        { "word": "External links", "children": {} }
+      ]
+    }
+  }
+  
