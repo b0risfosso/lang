@@ -295,6 +295,17 @@
       await refresh();
     });
 
+    newChildInput.addEventListener("keydown", (e) => {
+        const isCmdEnter = e.metaKey && e.key === "Enter";
+        const isCtrlEnter = e.ctrlKey && e.key === "Enter";
+
+        if (isCmdEnter || isCtrlEnter) {
+            e.preventDefault();
+            addChildBtn.click();
+        }
+    });
+
+
     // boot
     (async () => {
         await verifyAdminKey();
