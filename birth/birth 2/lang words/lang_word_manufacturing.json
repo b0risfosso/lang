@@ -2,7 +2,7 @@
   "lang_word": "manufacturing",
   "children": [
     {
-      "parent": {
+      "seed_word": {
         "word": "manufacturing",
         "type": "Department of Energy (DOE) Search"
       },
@@ -360,7 +360,7 @@
       }
     },
     {
-      "parent": {
+      "seed_word": {
         "word": "manufacturing",
         "type": "IEA (International Energy Agency) Search"
       },
@@ -921,7 +921,7 @@
       }
     },
     {
-      "parent": {
+      "seed_word": {
         "word": "manufacturing",
         "type": "NIST (National Institute of Standards and Technology)"
       },
@@ -1203,7 +1203,7 @@
       }
     },
     {
-      "parent": {
+      "seed_word": {
         "word": "manufacturing",
         "type": "GitHub"
       },
@@ -1429,7 +1429,7 @@
       }
     },
     {
-      "parent": {
+      "seed_word": {
         "word": "manufacturing",
         "type": "Google Search (definition / knowledge)"
       },
@@ -1679,7 +1679,7 @@
       }
     },
     {
-      "parent": {
+      "seed_word": {
         "word": "manufacturing",
         "type": "Manufacturing.gov (U.S. Government)"
       },
@@ -2153,7 +2153,7 @@
       }
     },
     {
-      "parent": {
+      "seed_word": {
         "word": "manufacturing",
         "type": "World Economic Forum (WEF) Search"
       },
@@ -2379,7 +2379,7 @@
       }
     },
     {
-      "parent": {
+      "seed_word": {
         "word": "manufacturing",
         "type": "Wikipedia"
       },
