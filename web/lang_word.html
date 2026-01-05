@@ -58,6 +58,7 @@
 
   <script>
     const ADMIN_KEY_STORAGE = "lang_admin_key";
+    let adminVerified = false;
 
     const params = new URLSearchParams(location.search);
     const id = params.get("id");
@@ -76,6 +77,8 @@
     const addChildBtn = document.getElementById("add-child");
     const editList = document.getElementById("edit-list");
 
+    
+
     function getAdminKey() {
       return localStorage.getItem(ADMIN_KEY_STORAGE) || "";
     }
@@ -89,17 +92,19 @@
     }
 
     function isEditMode() {
-      return !!getAdminKey();
+        return adminVerified;
     }
 
+
     function setModeUI() {
-      const edit = isEditMode();
-      modePill.textContent = edit ? "edit" : "view";
-      editUI.style.display = edit ? "" : "none";
-      clearAdminBtn.style.display = edit ? "" : "none";
-      adminBtn.textContent = edit ? "admin key set" : "enter admin key";
-      adminBtn.disabled = edit; // prevent repeated prompts; use clear to change
+        const edit = isEditMode();
+        modePill.textContent = edit ? "edit" : "view";
+        editUI.style.display = edit ? "" : "none";
+        clearAdminBtn.style.display = edit ? "" : "none";
+        adminBtn.textContent = edit ? "admin verified" : "enter admin key";
+        adminBtn.disabled = edit;
     }
+
 
     async function apiFetch(url, opts = {}) {
       const res = await fetch(url, opts);
@@ -131,6 +136,29 @@
       renderChildren(data.child_words || []);
       return data;
     }
+
+    async function verifyAdminKey() {
+        const key = getAdminKey();
+        if (!key) {
+            adminVerified = false;
+            return false;
+        }
+
+        const res = await fetch("/api/admin/ping", {
+            headers: { "Accept": "application/json", "X-Admin-Key": key }
+        });
+
+        if (res.ok) {
+            adminVerified = true;
+            return true;
+        }
+
+        // invalid key
+        clearAdminKey();
+        adminVerified = false;
+        return false;
+    }
+
 
     function renderChildren(children) {
       // view list
@@ -220,13 +248,19 @@
       if (isEditMode()) renderChildren(data.child_words || []);
     }
 
-    adminBtn.addEventListener("click", () => {
-      const key = prompt("Admin key (stored locally):", getAdminKey() || "");
-      if (!key || !key.trim()) return;
-      setAdminKey(key.trim());
-      setModeUI();
-      refresh();
+    adminBtn.addEventListener("click", async () => {
+        const key = prompt("Admin key (stored locally):", getAdminKey() || "");
+        if (!key || !key.trim()) return;
+
+        setAdminKey(key.trim());
+
+        const ok = await verifyAdminKey();
+        setModeUI();
+        await refresh();
+
+        if (!ok) alert("Admin key invalid.");
     });
+
 
     clearAdminBtn.addEventListener("click", () => {
       clearAdminKey();
@@ -262,8 +296,12 @@
     });
 
     // boot
-    setModeUI();
-    loadWord();
+    (async () => {
+        await verifyAdminKey();
+        setModeUI();
+        await loadWord();
+    })();
+
   </script>
 </body>
 </html>

@@ -173,3 +173,8 @@ def delete_child_word(child_id):
 
     return jsonify(ok=True, id=child_id)
 
+
+@app.get("/api/admin/ping")
+def admin_ping():
+    require_admin_key()
+    return jsonify(ok=True)
