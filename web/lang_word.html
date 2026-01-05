@@ -17,14 +17,33 @@
   <main>
     <p><a href="./">← back</a></p>
     <h1 class="word" id="word">…</h1>
-    <p class="meta">lang word</p>
+    <p class="meta" id="meta"></p>
   </main>
 
   <script>
     const params = new URLSearchParams(location.search);
-    const word = params.get("word") || "";
-    document.getElementById("word").textContent = word || "missing word";
-    document.title = word ? word : "lang word";
+    const id = params.get("id");
+
+    async function loadWord() {
+      if (!id) {
+        document.getElementById("word").textContent = "missing id";
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/lang_words/${encodeURIComponent(id)}`);
+        if (!res.ok) throw new Error("not found");
+
+        const data = await res.json();
+        document.getElementById("word").textContent = data.word;
+        document.getElementById("meta").textContent = `id ${data.id}`;
+        document.title = data.word;
+      } catch {
+        document.getElementById("word").textContent = "word not found";
+      }
+    }
+
+    loadWord();
   </script>
 </body>
 </html>

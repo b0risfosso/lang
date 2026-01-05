@@ -65,9 +65,9 @@ def handle_error(e):
 def list_lang_words():
     db = get_db()
     rows = db.execute(
-        "SELECT word FROM lang_words ORDER BY created_at DESC, word ASC"
+        "SELECT id, word FROM lang_words ORDER BY created_at DESC, word ASC"
     ).fetchall()
-    return jsonify(words=[r["word"] for r in rows])
+    return jsonify(words=[{"id": r["id"], "word": r["word"]} for r in rows])
 
 @app.post("/api/lang_words")
 def create_lang_word():
@@ -85,8 +85,22 @@ def create_lang_word():
         db.commit()
     except sqlite3.IntegrityError:
         abort(409, description="Word already exists.")
-    return jsonify(ok=True, word=word), 201
+    new_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    return jsonify(ok=True, id=new_id, word=word), 201
 
-if __name__ == "__main__":
-    # For dev only; in prod run via gunicorn/uwsgi, or behind nginx.
-    app.run(host="127.0.0.1", port=5000, debug=True)
+
+
+@app.get("/api/lang_words/<int:word_id>")
+def get_lang_word(word_id):
+    db = get_db()
+    row = db.execute(
+        "SELECT id, word FROM lang_words WHERE id = ?",
+        (word_id,)
+    ).fetchone()
+
+    if row is None:
+        abort(404, description="Lang word not found.")
+
+    return jsonify({"id": row["id"], "word": row["word"]})
+
+
