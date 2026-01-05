@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>lang word</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; line-height: 1.5; }
+    main { max-width: 42rem; margin: 20vh auto; }
+    a { text-decoration: none; border-bottom: 1px solid currentColor; }
+    .word { font-size: 2rem; margin: 0 0 1rem; }
+    .meta { opacity: .8; }
+  </style>
+</head>
+<body>
+  <main>
+    <p><a href="./">← back</a></p>
+    <h1 class="word" id="word">…</h1>
+    <p class="meta">lang word</p>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const word = params.get("word") || "";
+    document.getElementById("word").textContent = word || "missing word";
+    document.title = word ? word : "lang word";
+  </script>
+</body>
+</html>

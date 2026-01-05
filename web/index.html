@@ -52,10 +52,28 @@
   @media (prefers-reduced-motion: reduce) {
     .thought { transition: none !important; }
   }
+
+  #add-word-btn {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 2; /* above main + words layer */
+    border: 1px solid currentColor;
+    background: color-mix(in oklab, Canvas 85%, transparent);
+    backdrop-filter: blur(6px);
+    border-radius: 999px;
+    padding: .6rem .9rem;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+  }
+  #add-word-btn:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+
   </style>
 </head>
 <body>
   <div id="word-layer" aria-hidden="true"></div>
+  <button id="add-word-btn" type="button" aria-label="Add lang word">＋</button>
 
   <main>
     <p><a href="https://github.com/b0risfosso/lang" target="_blank" rel="noopener noreferrer">lang</a></p>
@@ -78,19 +96,16 @@
 
   <script>
     // ==== CONFIG ====
-    const WORDS = [
-      "solar panels", "manufacturing"
-    ];
-  
-    // If true, tries to avoid your centered <main> area by keeping words outside its rectangle.
     const AVOID_MAIN = true;
+    const API_BASE = ""; // same origin; set if your API is elsewhere
+    const ADMIN_KEY_STORAGE = "lang_admin_key";
   
     // ==== IMPLEMENTATION ====
     const layer = document.getElementById("word-layer");
     const mainEl = document.querySelector("main");
+    const addBtn = document.getElementById("add-word-btn");
   
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  
     const rand = (min, max) => Math.random() * (max - min) + min;
   
     // Track cursor for "react" behavior
@@ -103,14 +118,8 @@
     function getAvoidRect() {
       if (!AVOID_MAIN || !mainEl) return null;
       const r = mainEl.getBoundingClientRect();
-      // Inflate it a bit so words don't hug the content
       const pad = 24;
-      return {
-        left: r.left - pad,
-        top: r.top - pad,
-        right: r.right + pad,
-        bottom: r.bottom + pad
-      };
+      return { left: r.left - pad, top: r.top - pad, right: r.right + pad, bottom: r.bottom + pad };
     }
   
     function pointOutsideRect(x, y, rect) {
@@ -123,49 +132,52 @@
       const vh = window.innerHeight;
       const rect = getAvoidRect();
   
-      // measure element for bounds
       const b = el.getBoundingClientRect();
       const w = b.width || 80;
       const h = b.height || 24;
   
-      // Try a few times to find a target outside main
       for (let i = 0; i < 25; i++) {
         const x = rand(0, Math.max(0, vw - w));
         const y = rand(0, Math.max(0, vh - h));
         if (pointOutsideRect(x + w / 2, y + h / 2, rect)) return { x, y };
       }
-      // fallback anywhere
-      return {
-        x: rand(0, Math.max(0, vw - w)),
-        y: rand(0, Math.max(0, vh - h))
-      };
+      return { x: rand(0, Math.max(0, vw - w)), y: rand(0, Math.max(0, vh - h)) };
+    }
+  
+    function openWordPage(word) {
+      const url = `lang_word.html?word=${encodeURIComponent(word)}`;
+      window.location.href = url;
     }
   
     function createThought(word) {
       const el = document.createElement("div");
       el.className = "thought";
       el.textContent = word;
+      el.style.pointerEvents = "auto"; // allow clicking on the thought
+      el.style.cursor = "pointer";
   
-      // per-word personality
-      const speedPxPerSec = rand(40, 180);      // wander speed
-      const jitter = rand(0.6, 2.2);            // tiny jitter strength
-      const reactRadius = rand(60, 140);        // cursor influence radius
-      const reactStrength = rand(0.6, 1.6);     // cursor repel strength
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openWordPage(word);
+      });
   
-      // state
+      const speedPxPerSec = rand(40, 180);
+      const jitter = rand(0.6, 2.2);
+      const reactRadius = rand(60, 140);
+      const reactStrength = rand(0.6, 1.6);
+  
       let pos = { x: rand(0, window.innerWidth * 0.8), y: rand(0, window.innerHeight * 0.8) };
       let target = pickTarget(el);
       let lastT = performance.now();
   
-      // initial placement
       el.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
   
       function step(now) {
-        const dt = Math.min(0.05, (now - lastT) / 1000); // clamp
+        const dt = Math.min(0.05, (now - lastT) / 1000);
         lastT = now;
   
         if (prefersReducedMotion) {
-          // Just sit near a random spot and occasionally teleport gently
           if (Math.random() < 0.01) {
             target = pickTarget(el);
             pos = { ...target };
@@ -175,38 +187,32 @@
           return;
         }
   
-        // vector toward target
         let vx = target.x - pos.x;
         let vy = target.y - pos.y;
         const dist = Math.hypot(vx, vy) || 1;
   
-        // If close, pick a new target after a short pause
         if (dist < 6) {
           if (Math.random() < 0.08) target = pickTarget(el);
         } else {
-          // move toward target with per-word speed
           const stepDist = Math.min(dist, speedPxPerSec * dt);
           pos.x += (vx / dist) * stepDist;
           pos.y += (vy / dist) * stepDist;
         }
   
-        // subtle jitter (thinking)
         pos.x += (Math.random() - 0.5) * jitter;
         pos.y += (Math.random() - 0.5) * jitter;
   
-        // react to cursor (repel slightly)
         if (mouse.x !== null && mouse.y !== null) {
           const dx = pos.x - mouse.x;
           const dy = pos.y - mouse.y;
           const d = Math.hypot(dx, dy) || 1;
           if (d < reactRadius) {
-            const force = (1 - d / reactRadius) * reactStrength * 120; // px/sec-ish
+            const force = (1 - d / reactRadius) * reactStrength * 120;
             pos.x += (dx / d) * force * dt;
             pos.y += (dy / d) * force * dt;
           }
         }
   
-        // keep within bounds
         const b = el.getBoundingClientRect();
         const w = b.width || 80;
         const h = b.height || 24;
@@ -227,17 +233,91 @@
       return el;
     }
   
-    function mountWords() {
-      layer.innerHTML = "";
-      WORDS.forEach((w) => layer.appendChild(createThought(w)));
+    async function fetchWords() {
+      const res = await fetch(`${API_BASE}/api/lang_words`, { headers: { "Accept": "application/json" } });
+      if (!res.ok) throw new Error(`Failed to load words: ${res.status}`);
+      const data = await res.json();
+      return Array.isArray(data.words) ? data.words : [];
     }
   
-    mountWords();
+    function mountWords(words) {
+      layer.innerHTML = "";
+      words.forEach((w) => layer.appendChild(createThought(w)));
+    }
+  
+    async function refreshWords() {
+      try {
+        const words = await fetchWords();
+        mountWords(words);
+      } catch (err) {
+        console.error(err);
+        mountWords([]); // fail safe
+      }
+    }
+  
+    function getAdminKeyFromStorage() {
+      return localStorage.getItem(ADMIN_KEY_STORAGE) || "";
+    }
+  
+    function requestAdminKey() {
+      const existing = getAdminKeyFromStorage();
+      const key = window.prompt("Admin key required to add words:", existing || "");
+      if (key && key.trim()) {
+        localStorage.setItem(ADMIN_KEY_STORAGE, key.trim());
+        return key.trim();
+      }
+      return "";
+    }
+  
+    async function createWord(word, adminKey) {
+      const res = await fetch(`${API_BASE}/api/lang_words`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-Admin-Key": adminKey
+        },
+        body: JSON.stringify({ word })
+      });
+  
+      if (res.status === 401) throw new Error("Unauthorized: invalid admin key.");
+      if (res.status === 409) throw new Error("That word already exists.");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Create failed: ${res.status}`);
+      }
+      return res.json();
+    }
+  
+    addBtn.addEventListener("click", async () => {
+      const word = (window.prompt("New lang word:") || "").trim();
+      if (!word) return;
+  
+      let adminKey = getAdminKeyFromStorage();
+      if (!adminKey) adminKey = requestAdminKey();
+      if (!adminKey) return;
+  
+      try {
+        await createWord(word, adminKey);
+        await refreshWords();
+      } catch (err) {
+        alert(err.message || String(err));
+        // if key is wrong, allow re-entry next time
+        if ((err.message || "").toLowerCase().includes("admin key")) {
+          localStorage.removeItem(ADMIN_KEY_STORAGE);
+        }
+      }
+    });
+  
+    // Initial mount
+    refreshWords();
+  
     window.addEventListener("resize", () => {
-      // Re-mount so measurements are correct after layout changes
-      mountWords();
+      // Re-mount on resize so measurements are correct
+      refreshWords();
     });
   </script>
+  
   
 </body>
 </html>
