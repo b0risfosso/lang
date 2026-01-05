@@ -21,6 +21,7 @@ def get_db():
         ensure_db_dir()
         g.db = sqlite3.connect(DB_PATH)
         g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON;")
     return g.db
 
 @app.teardown_appcontext
@@ -89,7 +90,6 @@ def create_lang_word():
     return jsonify(ok=True, id=new_id, word=word), 201
 
 
-
 @app.get("/api/lang_words/<int:word_id>")
 def get_lang_word(word_id):
     db = get_db()
@@ -97,10 +97,79 @@ def get_lang_word(word_id):
         "SELECT id, word FROM lang_words WHERE id = ?",
         (word_id,)
     ).fetchone()
-
     if row is None:
         abort(404, description="Lang word not found.")
 
-    return jsonify({"id": row["id"], "word": row["word"]})
+    kids = db.execute(
+        "SELECT id, word FROM child_words WHERE lang_word_id = ? ORDER BY id ASC",
+        (word_id,)
+    ).fetchall()
 
+    return jsonify({
+        "id": row["id"],
+        "word": row["word"],
+        "child_words": [{"id": k["id"], "word": k["word"]} for k in kids]
+    })
+
+
+@app.post("/api/lang_words/<int:word_id>/child_words")
+def create_child_word(word_id):
+    require_admin_key()
+    db = get_db()
+
+    # ensure parent exists
+    parent = db.execute("SELECT 1 FROM lang_words WHERE id = ?", (word_id,)).fetchone()
+    if parent is None:
+        abort(404, description="Lang word not found.")
+
+    data = request.get_json(silent=True) or {}
+    word = (data.get("word") or "").strip()
+    if not word:
+        abort(400, description="Missing 'word'.")
+    if len(word) > 200:
+        abort(400, description="Word too long (max 200 chars).")
+
+    cur = db.execute(
+        "INSERT INTO child_words (lang_word_id, word) VALUES (?, ?)",
+        (word_id, word)
+    )
+    db.commit()
+
+    return jsonify(ok=True, id=cur.lastrowid, word=word), 201
+
+
+@app.put("/api/child_words/<int:child_id>")
+def update_child_word(child_id):
+    require_admin_key()
+    db = get_db()
+
+    data = request.get_json(silent=True) or {}
+    word = (data.get("word") or "").strip()
+    if not word:
+        abort(400, description="Missing 'word'.")
+    if len(word) > 200:
+        abort(400, description="Word too long (max 200 chars).")
+
+    cur = db.execute(
+        "UPDATE child_words SET word = ?, updated_at = datetime('now') WHERE id = ?",
+        (word, child_id)
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        abort(404, description="Child word not found.")
+
+    return jsonify(ok=True, id=child_id, word=word)
+
+
+@app.delete("/api/child_words/<int:child_id>")
+def delete_child_word(child_id):
+    require_admin_key()
+    db = get_db()
+
+    cur = db.execute("DELETE FROM child_words WHERE id = ?", (child_id,))
+    db.commit()
+    if cur.rowcount == 0:
+        abort(404, description="Child word not found.")
+
+    return jsonify(ok=True, id=child_id)
 
