@@ -137,6 +137,10 @@
     let selectedChildIds = new Set();  // child_word_id ints
     let childSentences = [];           // GET /api/lang_sentences/<id>/child_sentences
 
+    // per lang_word: full versions + current selection
+    let wordDetailsByLangId = new Map();     // lang_word_id -> { lang_word_id, word, versions:[{version_id, version, child_words:[]}] }
+    let selectedVersionByLangId = new Map(); // lang_word_id -> version_id
+
     function getAdminKey() {
       return localStorage.getItem(ADMIN_KEY_STORAGE) || "";
     }
@@ -187,6 +191,21 @@
       return document.createTextNode(c.word);
     }
 
+    async function fetchWordDetailsByAnyVersion(versionId) {
+      const r = await fetch(`/api/lang_words/${encodeURIComponent(versionId)}`, {
+        headers: { "Accept": "application/json" }
+      });
+      if (!r.ok) return null;
+      return await r.json().catch(() => null);
+    }
+
+    function pruneSelectedChildIds() {
+      const available = new Set(allChildWords.map(x => x.id));
+      for (const id of Array.from(selectedChildIds)) {
+        if (!available.has(id)) selectedChildIds.delete(id);
+      }
+    }
+
     async function loadSentence() {
       if (!sentenceId) {
         metaEl.textContent = "missing id";
@@ -221,68 +240,135 @@
         idsEl.appendChild(p);
       });
 
-      // render words + children, and build child word selectable list
+      // load full version info for each word, defaulting to latest version from sentenceData
+      wordDetailsByLangId = new Map();
+      selectedVersionByLangId = new Map();
+
+      const words = Array.isArray(sentenceData.words) ? sentenceData.words : [];
+      for (const w of words) {
+        // default selection is whatever GET /api/lang_sentences returned (latest version)
+        selectedVersionByLangId.set(w.lang_word_id, w.version_id);
+
+        // fetch full versions list using any known version_id
+        const details = await fetchWordDetailsByAnyVersion(w.version_id);
+        if (details) wordDetailsByLangId.set(w.lang_word_id, details);
+      }
+
+      renderWordsWithVersionSelectors();
+      renderChildSelector();
+      return sentenceData;
+    }
+
+    function renderWordsWithVersionSelectors() {
       wordsEl.innerHTML = "";
       allChildWords = [];
 
-      const words = Array.isArray(sentenceData.words) ? sentenceData.words : [];
-      if (!words.length) {
+      const ids = Array.isArray(sentenceData?.lang_word_ids) ? sentenceData.lang_word_ids : [];
+      if (!ids.length) {
         wordsEl.innerHTML = `<div class="muted">no words found for this sentence.</div>`;
-      } else {
-        for (const w of words) {
-          const wrap = document.createElement("div");
-          wrap.className = "panel";
-          wrap.style.marginTop = ".75rem";
-
-          const title = document.createElement("div");
-          title.innerHTML = `<strong>${w.word}</strong> <span class="muted">(lang_word ${w.lang_word_id}, v${w.version})</span>`;
-
-          const openBtn = document.createElement("button");
-          openBtn.type = "button";
-          openBtn.textContent = "open";
-          openBtn.style.marginLeft = ".6rem";
-          openBtn.addEventListener("click", () => openWordPage(w.version_id));
-
-          const header = document.createElement("div");
-          header.style.display = "flex";
-          header.style.alignItems = "center";
-          header.style.justifyContent = "space-between";
-          header.style.gap = ".75rem";
-
-          header.appendChild(title);
-          header.appendChild(openBtn);
-          wrap.appendChild(header);
-
-          const kids = Array.isArray(w.child_words) ? w.child_words : [];
-          if (!kids.length) {
-            const p = document.createElement("p");
-            p.className = "muted";
-            p.style.margin = ".5rem 0 0";
-            p.textContent = "no child words.";
-            wrap.appendChild(p);
-          } else {
-            const ul = document.createElement("ul");
-            kids.forEach(c => {
-              const li = document.createElement("li");
-              li.appendChild(childNode(c));
-              ul.appendChild(li);
-
-              allChildWords.push({
-                id: c.id,
-                word: c.word,
-                link: c.link || "",
-                parentWord: w.word,
-                parentLangWordId: w.lang_word_id
-              });
-            });
-            wrap.appendChild(ul);
-          }
-
-          wordsEl.appendChild(wrap);
-        }
+        pruneSelectedChildIds();
+        return;
       }
 
-      return sentenceData;
+      for (const langWordId of ids) {
+        const details = wordDetailsByLangId.get(langWordId);
+
+        // Fallback if details couldn't load
+        if (!details || !Array.isArray(details.versions)) {
+          const p = document.createElement("p");
+          p.className = "muted";
+          p.textContent = `lang_word ${langWordId}: failed to load versions.`;
+          wordsEl.appendChild(p);
+          continue;
+        }
+
+        const wrap = document.createElement("div");
+        wrap.className = "panel";
+        wrap.style.marginTop = ".75rem";
+
+        const header = document.createElement("div");
+        header.style.display = "flex";
+        header.style.alignItems = "center";
+        header.style.justifyContent = "space-between";
+        header.style.gap = ".75rem";
+
+        const left = document.createElement("div");
+
+        // version select
+        const sel = document.createElement("select");
+        sel.style.maxWidth = "16rem";
+
+        const versions = [...details.versions].sort((a, b) => (a.version - b.version));
+        for (const v of versions) {
+          const opt = document.createElement("option");
+          opt.value = String(v.version_id);
+          opt.textContent = `v${v.version} (version_id ${v.version_id})`;
+          sel.appendChild(opt);
+        }
+
+        const selectedVid = selectedVersionByLangId.get(langWordId) || details.current_version_id;
+        sel.value = String(selectedVid);
+
+        const title = document.createElement("div");
+        const selectedVobj = versions.find(x => String(x.version_id) === String(sel.value));
+        const vnum = selectedVobj ? selectedVobj.version : "?";
+        title.innerHTML = `<strong>${details.word}</strong> <span class="muted">(lang_word ${details.lang_word_id}, v${vnum})</span>`;
+
+        // Update title + children when version changes
+        sel.addEventListener("change", async () => {
+          selectedVersionByLangId.set(langWordId, Number(sel.value));
+          renderWordsWithVersionSelectors();   // rebuild children + allChildWords
+          pruneSelectedChildIds();
+          renderChildSelector();
+          await loadChildSentences();
+          renderChildSentences();
+        });
+
+        // right side open button
+        const openBtn = document.createElement("button");
+        openBtn.type = "button";
+        openBtn.textContent = "open";
+        openBtn.addEventListener("click", () => openWordPage(Number(sel.value)));
+
+        left.appendChild(title);
+        left.appendChild(sel);
+
+        header.appendChild(left);
+        header.appendChild(openBtn);
+        wrap.appendChild(header);
+
+        // children list from selected version
+        const chosen = versions.find(x => String(x.version_id) === String(sel.value));
+        const kids = Array.isArray(chosen?.child_words) ? chosen.child_words : [];
+
+        if (!kids.length) {
+          const p = document.createElement("p");
+          p.className = "muted";
+          p.style.margin = ".5rem 0 0";
+          p.textContent = "no child words.";
+          wrap.appendChild(p);
+        } else {
+          const ul = document.createElement("ul");
+          for (const c of kids) {
+            const li = document.createElement("li");
+            li.appendChild(childNode(c));
+            ul.appendChild(li);
+
+            allChildWords.push({
+              id: c.id,
+              word: c.word,
+              link: c.link || "",
+              parentWord: details.word,
+              parentLangWordId: details.lang_word_id
+            });
+          }
+          wrap.appendChild(ul);
+        }
+
+        wordsEl.appendChild(wrap);
+      }
+
+      pruneSelectedChildIds();
     }
 
     function renderChildSelector() {
@@ -456,7 +542,6 @@
       setModeUI();
 
       await loadSentence();
-      renderChildSelector();
 
       await loadChildSentences();
       renderChildSentences();
