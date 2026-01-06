@@ -53,6 +53,41 @@
 
         <div id="edit-list"></div>
       </div>
+
+      <div id="exchange-ui" style="display:none; margin-top: 1rem;">
+        <h2 style="margin-top: 0;">exchange</h2>
+      
+        <div class="row">
+          <input id="new-parent-word" type="text" placeholder="create new lang word" />
+          <button id="create-parent" type="button">create</button>
+        </div>
+      
+        <div class="row">
+          <input id="linked-id" type="text" inputmode="numeric" placeholder="linked word id (e.g. 42)" />
+          <button id="load-linked" type="button">load</button>
+          <button id="open-linked" type="button">open</button>
+        </div>
+      
+        <div class="row muted" id="linked-title" style="margin-top:.25rem;"></div>
+      
+        <div style="display:grid; grid-template-columns: 1fr auto 1fr; gap: .75rem; align-items:start; margin-top: .75rem;">
+          <div>
+            <div class="muted" style="margin-bottom:.25rem;">this word</div>
+            <div id="left-kids"></div>
+          </div>
+      
+          <div style="display:flex; flex-direction:column; gap:.5rem; margin-top:1.5rem;">
+            <button id="to-linked" type="button">→</button>
+            <button id="to-current" type="button">←</button>
+          </div>
+      
+          <div>
+            <div class="muted" style="margin-bottom:.25rem;">linked word</div>
+            <div id="right-kids"></div>
+          </div>
+        </div>
+      </div>
+      
     </section>
   </main>
 
@@ -76,6 +111,30 @@
     const newChildInput = document.getElementById("new-child");
     const addChildBtn = document.getElementById("add-child");
     const editList = document.getElementById("edit-list");
+
+    const exchangeUI = document.getElementById("exchange-ui");
+
+    const newParentInput = document.getElementById("new-parent-word");
+    const createParentBtn = document.getElementById("create-parent");
+
+    const linkedIdInput = document.getElementById("linked-id");
+    const loadLinkedBtn = document.getElementById("load-linked");
+    const openLinkedBtn = document.getElementById("open-linked");
+    const linkedTitle = document.getElementById("linked-title");
+
+    const leftKids = document.getElementById("left-kids");
+    const rightKids = document.getElementById("right-kids");
+    const toLinkedBtn = document.getElementById("to-linked");
+    const toCurrentBtn = document.getElementById("to-current");
+
+    let currentData = null;
+    let linkedData = null;
+    let linkedId = null;
+
+    let selectedLeftChildId = null;
+    let selectedRightChildId = null;
+
+
 
     
 
@@ -103,6 +162,8 @@
         clearAdminBtn.style.display = edit ? "" : "none";
         adminBtn.textContent = edit ? "admin verified" : "enter admin key";
         adminBtn.disabled = edit;
+        exchangeUI.style.display = isEditMode() ? "" : "none";
+
     }
 
 
@@ -134,6 +195,7 @@
       wordEl.textContent = data.word;
       document.title = data.word;
       renderChildren(data.child_words || []);
+      currentData = data;
       return data;
     }
 
@@ -241,8 +303,74 @@
       }
     }
 
+    function renderExchangeLists() {
+        // Only if we have linked loaded
+        leftKids.innerHTML = "";
+        rightKids.innerHTML = "";
+        selectedLeftChildId = null;
+        selectedRightChildId = null;
+
+        const mkRow = (child, side) => {
+            const row = document.createElement("div");
+            row.className = "row";
+
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = child.word;
+            btn.style.width = "100%";
+            btn.style.textAlign = "left";
+
+            btn.addEventListener("click", () => {
+            if (side === "left") {
+                selectedLeftChildId = child.id;
+                selectedRightChildId = null;
+            } else {
+                selectedRightChildId = child.id;
+                selectedLeftChildId = null;
+            }
+            // re-render to reflect selection
+            renderExchangeLists();
+            });
+
+            // simple selection styling
+            const selected = (side === "left" && child.id === selectedLeftChildId) ||
+                            (side === "right" && child.id === selectedRightChildId);
+            if (selected) {
+            btn.style.borderWidth = "2px";
+            }
+
+            row.appendChild(btn);
+            return row;
+        };
+
+        const left = (currentData?.child_words || []);
+        for (const c of left) leftKids.appendChild(mkRow(c, "left"));
+
+        const right = (linkedData?.child_words || []);
+        for (const c of right) rightKids.appendChild(mkRow(c, "right"));
+        }
+
+        async function loadLinkedWord(targetId) {
+        const res = await apiFetch(`/api/lang_words/${encodeURIComponent(targetId)}`);
+        if (!res.ok) {
+            linkedData = null;
+            linkedTitle.textContent = "linked word not found";
+            renderExchangeLists();
+            return false;
+        }
+        linkedData = await res.json();
+        linkedTitle.textContent = `linked: ${linkedData.word} (id ${linkedData.id})`;
+        renderExchangeLists();
+        return true;
+        }
+
+
     async function refresh() {
       const data = await loadWord();
+      if (isEditMode() && linkedData?.id) {
+        await loadLinkedWord(linkedData.id);
+        }
+
       if (!data) return;
       // if admin key exists, keep edit list in sync
       if (isEditMode()) renderChildren(data.child_words || []);
@@ -294,6 +422,108 @@
       newChildInput.value = "";
       await refresh();
     });
+
+    createParentBtn.addEventListener("click", async () => {
+        const key = getAdminKey();
+        if (!key) return;
+
+        const w = newParentInput.value.trim();
+        if (!w) return;
+
+        const res = await apiFetch(`/api/lang_words`, {
+            method: "POST",
+            headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-Admin-Key": key
+            },
+            body: JSON.stringify({ word: w })
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || `create failed (${res.status})`);
+            return;
+        }
+
+        const data = await res.json();
+        newParentInput.value = "";
+
+        // auto-link to the new word and load it for exchange
+        linkedId = data.id;
+        linkedIdInput.value = String(linkedId);
+        await loadLinkedWord(linkedId);
+    });
+
+    newParentInput.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            createParentBtn.click();
+        }
+    });
+
+    loadLinkedBtn.addEventListener("click", async () => {
+        const v = (linkedIdInput.value || "").trim();
+        const n = Number(v);
+        if (!Number.isInteger(n) || n <= 0) return;
+
+        linkedId = n;
+        await loadLinkedWord(linkedId);
+    });
+
+    openLinkedBtn.addEventListener("click", () => {
+        const v = (linkedIdInput.value || "").trim();
+        const n = Number(v);
+        if (!Number.isInteger(n) || n <= 0) return;
+        window.location.href = `lang_word.html?id=${encodeURIComponent(n)}`;
+    });
+
+
+    async function moveChild(childId, targetParentId) {
+        const key = getAdminKey();
+        const res = await apiFetch(`/api/child_words/${childId}/move`, {
+            method: "PUT",
+            headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-Admin-Key": key
+            },
+            body: JSON.stringify({ lang_word_id: targetParentId })
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || `move failed (${res.status})`);
+            return false;
+        }
+        return true;
+        }
+
+    toLinkedBtn.addEventListener("click", async () => {
+        if (!linkedData) return;
+        if (!selectedLeftChildId) return;
+
+        const ok = await moveChild(selectedLeftChildId, linkedData.id);
+        if (!ok) return;
+
+        await refresh();                  // reload current word
+        await loadLinkedWord(linkedData.id); // reload linked word
+    });
+
+    toCurrentBtn.addEventListener("click", async () => {
+        if (!linkedData) return;
+        if (!selectedRightChildId) return;
+
+        const ok = await moveChild(selectedRightChildId, Number(id));
+        if (!ok) return;
+
+        await refresh();
+        await loadLinkedWord(linkedData.id);
+    });
+
+
+
+
 
     newChildInput.addEventListener("keydown", (e) => {
         const isCmdEnter = e.metaKey && e.key === "Enter";
