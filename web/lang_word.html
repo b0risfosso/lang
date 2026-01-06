@@ -38,6 +38,55 @@
 
     .child-edit-row { display:flex; gap:.5rem; align-items:center; margin:.4rem 0; }
     .child-edit-row input { flex: 1; }
+
+    /* Side panel (exchange) */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: color-mix(in oklab, Canvas 70%, transparent);
+      backdrop-filter: blur(2px);
+      display: none;
+      z-index: 50;
+    }
+    #sidepanel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      height: 100%;
+      width: min(520px, 92vw);
+      background: Canvas;
+      border-left: 1px solid color-mix(in oklab, currentColor 40%, transparent);
+      box-shadow: 0 0 30px color-mix(in oklab, currentColor 20%, transparent);
+      transform: translateX(100%);
+      transition: transform 180ms ease;
+      z-index: 51;
+      display: flex;
+      flex-direction: column;
+    }
+    #sidepanel.open { transform: translateX(0); }
+    #sidepanel header {
+      padding: 1rem;
+      border-bottom: 1px solid color-mix(in oklab, currentColor 40%, transparent);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .75rem;
+    }
+    #sidepanel header strong { font-size: 1rem; }
+    #sidepanel .content { padding: 1rem; overflow: auto; }
+
+    .cols {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: .75rem;
+      align-items: start;
+      margin-top: .75rem;
+    }
+    .kidbtn {
+      width: 100%;
+      text-align: left;
+    }
+    .kidbtn.selected { border-width: 2px; }
   </style>
 </head>
 <body>
@@ -52,6 +101,9 @@
       <span class="pill" id="mode-pill">view</span>
       <button id="admin-btn" type="button">enter admin key</button>
       <button id="clear-admin-btn" type="button" style="display:none;">clear key</button>
+
+      <!-- NEW: create parent + exchange -->
+      <button id="exchange-open" type="button" style="display:none;">new parent + exchange</button>
     </div>
 
     <section class="panel">
@@ -78,6 +130,45 @@
     </section>
   </main>
 
+  <!-- Sidepanel + overlay -->
+  <div id="overlay" aria-hidden="true"></div>
+  <aside id="sidepanel" aria-label="exchange panel">
+    <header>
+      <strong>new parent + exchange</strong>
+      <button id="exchange-close" type="button">close</button>
+    </header>
+    <div class="content">
+      <p class="muted" style="margin-top:0;">
+        Creates a new <em>parent lang_word</em> (with version 1) and lets you move child words between the
+        <strong>current version</strong> and the new word’s <strong>version 1</strong>.
+      </p>
+
+      <div class="row">
+        <input id="new-parent-word" type="text" placeholder="new parent lang word" />
+        <button id="create-parent" type="button">create</button>
+      </div>
+
+      <div class="row muted" id="exchange-status"></div>
+
+      <div class="cols">
+        <div>
+          <div class="muted" style="margin-bottom:.25rem;">current (this version)</div>
+          <div id="left-kids"></div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:.5rem; margin-top:1.5rem;">
+          <button id="to-new" type="button">→</button>
+          <button id="to-current" type="button">←</button>
+        </div>
+
+        <div>
+          <div class="muted" style="margin-bottom:.25rem;">new parent (version 1)</div>
+          <div id="right-kids"></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
   <script>
     const ADMIN_KEY_STORAGE = "lang_admin_key";
 
@@ -103,8 +194,27 @@
     const versionsContainer = document.getElementById("versions-container");
     const emptyEl = document.getElementById("empty");
 
+    // Exchange UI elements
+    const exchangeOpenBtn = document.getElementById("exchange-open");
+    const overlay = document.getElementById("overlay");
+    const sidepanel = document.getElementById("sidepanel");
+    const exchangeCloseBtn = document.getElementById("exchange-close");
+    const newParentInput = document.getElementById("new-parent-word");
+    const createParentBtn = document.getElementById("create-parent");
+    const exchangeStatus = document.getElementById("exchange-status");
+    const leftKids = document.getElementById("left-kids");
+    const rightKids = document.getElementById("right-kids");
+    const toNewBtn = document.getElementById("to-new");
+    const toCurrentBtn = document.getElementById("to-current");
+
     let adminVerified = false;
     let currentData = null; // payload from GET /api/lang_words/<version_id>
+
+    // exchange state
+    let newParent = null; // { lang_word_id, version_id, word }
+    let newParentData = null; // payload from GET /api/lang_words/<newParent.version_id>
+    let selectedLeftChildId = null;
+    let selectedRightChildId = null;
 
     function getAdminKey() {
       return localStorage.getItem(ADMIN_KEY_STORAGE) || "";
@@ -141,24 +251,48 @@
       clearAdminBtn.style.display = edit ? "" : "none";
       adminBtn.textContent = edit ? "admin verified" : "enter admin key";
       adminBtn.disabled = edit;
+
+      exchangeOpenBtn.style.display = edit ? "" : "none";
     }
 
     async function apiFetch(url, opts = {}) {
       const res = await fetch(url, opts);
       if (res.status === 401) {
-        // key wrong/expired -> revert
         clearAdminKey();
         adminVerified = false;
         setModeUI();
+        // also close exchange if open
+        closeExchangePanel();
       }
       return res;
     }
 
-    function openVersion(versionId) {
-      window.location.href = `lang_word.html?id=${encodeURIComponent(versionId)}`;
+    function openExchangePanel() {
+      overlay.style.display = "block";
+      sidepanel.classList.add("open");
+    }
+    function closeExchangePanel() {
+      overlay.style.display = "none";
+      sidepanel.classList.remove("open");
+      exchangeStatus.textContent = "";
+      newParent = null;
+      newParentData = null;
+      selectedLeftChildId = null;
+      selectedRightChildId = null;
+      leftKids.innerHTML = "";
+      rightKids.innerHTML = "";
+      newParentInput.value = "";
     }
 
-    async function loadWordAndVersions() {
+    async function loadWordAndVersions(versionId) {
+      const res = await apiFetch(`/api/lang_words/${encodeURIComponent(versionId)}`, {
+        headers: { "Accept": "application/json" }
+      });
+      if (!res.ok) return null;
+      return res.json();
+    }
+
+    async function loadCurrent() {
       if (!versionIdParam) {
         wordEl.textContent = "missing version id";
         verPill.textContent = "version ?";
@@ -166,16 +300,12 @@
         return null;
       }
 
-      const res = await apiFetch(`/api/lang_words/${encodeURIComponent(versionIdParam)}`, {
-        headers: { "Accept": "application/json" }
-      });
-
-      if (!res.ok) {
+      const data = await loadWordAndVersions(versionIdParam);
+      if (!data) {
         wordEl.textContent = "word/version not found";
         return null;
       }
 
-      const data = await res.json();
       currentData = data;
 
       wordEl.textContent = data.word;
@@ -188,12 +318,16 @@
       return data;
     }
 
+    function openVersion(versionId) {
+      window.location.href = `lang_word.html?id=${encodeURIComponent(versionId)}`;
+    }
+
     function renderVersions(data) {
       const versions = Array.isArray(data.versions) ? data.versions : [];
       versionsContainer.innerHTML = "";
       emptyEl.style.display = versions.length ? "none" : "";
 
-      // Populate the "add child to version" select (edit mode)
+      // Populate add-to-version select (edit mode)
       addToVersionSelect.innerHTML = "";
       for (const v of versions) {
         const opt = document.createElement("option");
@@ -207,17 +341,19 @@
         const panel = document.createElement("div");
         panel.className = "panel";
 
-        // header
         const head = document.createElement("div");
         head.className = "version-head";
 
         const left = document.createElement("div");
         left.className = "version-title";
+
         const title = document.createElement("strong");
         title.textContent = `Version ${v.version}`;
+
         const idP = document.createElement("span");
         idP.className = "pill";
         idP.textContent = `id ${v.version_id}`;
+
         left.appendChild(title);
         left.appendChild(idP);
 
@@ -233,14 +369,7 @@
         head.appendChild(right);
         panel.appendChild(head);
 
-        // child words (view list)
         const kids = Array.isArray(v.child_words) ? v.child_words : [];
-        const ul = document.createElement("ul");
-        for (const c of kids) {
-          const li = document.createElement("li");
-          li.textContent = c.word;
-          ul.appendChild(li);
-        }
         if (!kids.length) {
           const p = document.createElement("p");
           p.className = "muted";
@@ -248,10 +377,15 @@
           p.textContent = "no child words.";
           panel.appendChild(p);
         } else {
+          const ul = document.createElement("ul");
+          for (const c of kids) {
+            const li = document.createElement("li");
+            li.textContent = c.word;
+            ul.appendChild(li);
+          }
           panel.appendChild(ul);
         }
 
-        // edit UI per version
         if (isEditMode()) {
           const editWrap = document.createElement("div");
           editWrap.style.marginTop = ".75rem";
@@ -331,10 +465,14 @@
     }
 
     async function refresh() {
-      // keep verified state; just reload data + render
-      await loadWordAndVersions();
-      setModeUI(); // ensures edit sections show/hide correctly
+      await loadCurrent();
+      setModeUI();
       if (currentData) renderVersions(currentData);
+
+      // If exchange panel is open and we have a created parent, refresh both sides
+      if (sidepanel.classList.contains("open") && newParent?.version_id) {
+        await refreshExchangeSides();
+      }
     }
 
     // Create new version (admin)
@@ -358,7 +496,6 @@
 
       const out = await r.json();
       createVersionMsg.textContent = `created version ${out.version} (id ${out.version_id})`;
-      // switch page to new version immediately:
       openVersion(out.version_id);
     });
 
@@ -419,14 +556,197 @@
       clearAdminKey();
       adminVerified = false;
       setModeUI();
+      closeExchangePanel();
       await refresh();
+    });
+
+    // ========= Exchange Panel Logic =========
+
+    exchangeOpenBtn.addEventListener("click", async () => {
+      if (!isEditMode()) return;
+      if (!currentData) await loadCurrent();
+      openExchangePanel();
+      await refreshExchangeSides(); // render current side even before creating new parent
+      newParentInput.focus();
+    });
+
+    overlay.addEventListener("click", () => closeExchangePanel());
+    exchangeCloseBtn.addEventListener("click", () => closeExchangePanel());
+
+    // Create new parent lang_word (admin), then enable exchange
+    createParentBtn.addEventListener("click", async () => {
+      if (!isEditMode()) return;
+      const key = getAdminKey();
+      if (!key) return;
+
+      const w = newParentInput.value.trim();
+      if (!w) return;
+
+      exchangeStatus.textContent = "";
+
+      // POST /api/lang_words -> { ok, lang_word_id, version_id, word }
+      const r = await apiFetch(`/api/lang_words`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-Admin-Key": key
+        },
+        body: JSON.stringify({ word: w })
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        exchangeStatus.textContent = err.error || `create failed (${r.status})`;
+        return;
+      }
+
+      newParent = await r.json();
+      newParentInput.value = "";
+      exchangeStatus.textContent = `created "${newParent.word}" (version id ${newParent.version_id}). select a child and move → / ←`;
+
+      await refreshExchangeSides();
+    });
+
+    // Cmd/Ctrl+Enter in new parent input triggers create
+    newParentInput.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        createParentBtn.click();
+      }
+    });
+
+    function getCurrentVersionChildren() {
+      if (!currentData) return [];
+      const v = (currentData.versions || []).find(x => x.version_id === currentData.current_version_id);
+      return v?.child_words || [];
+    }
+
+    function getNewParentVersionChildren() {
+      if (!newParentData) return [];
+      const v = (newParentData.versions || []).find(x => x.version_id === newParentData.current_version_id);
+      return v?.child_words || [];
+    }
+
+    function renderKidsList(container, kids, side) {
+      container.innerHTML = "";
+      if (!kids.length) {
+        const p = document.createElement("p");
+        p.className = "muted";
+        p.style.margin = "0";
+        p.textContent = "no child words.";
+        container.appendChild(p);
+        return;
+      }
+
+      kids.forEach((c) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "kidbtn";
+        btn.textContent = c.word;
+
+        const selected =
+          (side === "left" && c.id === selectedLeftChildId) ||
+          (side === "right" && c.id === selectedRightChildId);
+        if (selected) btn.classList.add("selected");
+
+        btn.addEventListener("click", () => {
+          if (side === "left") {
+            selectedLeftChildId = c.id;
+            selectedRightChildId = null;
+          } else {
+            selectedRightChildId = c.id;
+            selectedLeftChildId = null;
+          }
+          renderExchangeLists();
+        });
+
+        container.appendChild(btn);
+      });
+    }
+
+    function renderExchangeLists() {
+      const left = getCurrentVersionChildren();
+      renderKidsList(leftKids, left, "left");
+
+      if (!newParentData) {
+        rightKids.innerHTML = "";
+        const p = document.createElement("p");
+        p.className = "muted";
+        p.style.margin = "0";
+        p.textContent = "create a new parent to exchange.";
+        rightKids.appendChild(p);
+      } else {
+        const right = getNewParentVersionChildren();
+        renderKidsList(rightKids, right, "right");
+      }
+    }
+
+    async function refreshExchangeSides() {
+      // Refresh current (already in memory) by reloading current page data
+      await loadCurrent();
+
+      // Refresh new parent, if present
+      if (newParent?.version_id) {
+        const d = await loadWordAndVersions(newParent.version_id);
+        newParentData = d;
+      } else {
+        newParentData = null;
+      }
+
+      // Clear selection if the item moved away etc.
+      selectedLeftChildId = null;
+      selectedRightChildId = null;
+      renderExchangeLists();
+    }
+
+    async function moveChild(childId, targetVersionId) {
+      const key = getAdminKey();
+      const r = await apiFetch(`/api/child_words/${childId}/move`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-Admin-Key": key
+        },
+        body: JSON.stringify({ lang_word_version_id: targetVersionId })
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        alert(err.error || `move failed (${r.status})`);
+        return false;
+      }
+      return true;
+    }
+
+    toNewBtn.addEventListener("click", async () => {
+      if (!newParentData) return;
+      if (!selectedLeftChildId) return;
+
+      const targetVersionId = newParentData.current_version_id; // version 1 id for new parent
+      const ok = await moveChild(selectedLeftChildId, targetVersionId);
+      if (!ok) return;
+
+      await refreshExchangeSides();
+    });
+
+    toCurrentBtn.addEventListener("click", async () => {
+      if (!newParentData) return;
+      if (!selectedRightChildId) return;
+
+      const targetVersionId = currentData.current_version_id; // current page version
+      const ok = await moveChild(selectedRightChildId, targetVersionId);
+      if (!ok) return;
+
+      await refreshExchangeSides();
     });
 
     // boot
     (async () => {
       await verifyAdminKey();
       setModeUI();
-      await loadWordAndVersions();
+      await loadCurrent();
     })();
   </script>
 </body>
