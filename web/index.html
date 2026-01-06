@@ -84,6 +84,7 @@
       top: 1.25rem;
       left: 1.25rem;
       right: 1.25rem;
+      bottom: 1.25rem;            /* ✅ add this */
       max-width: 56rem;
       margin: 0 auto;
       z-index: 3;
@@ -94,7 +95,11 @@
       backdrop-filter: blur(6px);
       padding: 1rem;
       box-shadow: 0 0 30px color-mix(in oklab, currentColor 15%, transparent);
+
+      overflow: auto;             /* ✅ add this */
+      overscroll-behavior: contain; /* optional: nicer scrolling */
     }
+
     #word-list h2 {
       margin: 0 0 .75rem;
       font-size: 1rem;
