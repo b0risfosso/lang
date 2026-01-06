@@ -55,6 +55,7 @@
 
     /* Buttons bottom-right */
     #add-word-btn,
+    #sentences-btn
     #list-toggle-btn {
       position: fixed;
       bottom: 1.25rem;
@@ -69,10 +70,13 @@
       line-height: 1;
     }
     #add-word-btn { right: 1.25rem; }
-    #list-toggle-btn { right: 4.25rem; } /* sits left of + */
+    #sentences-btn { right: 4.25rem; }   /* sits left of + */
+    #list-toggle-btn { right: 7.25rem; } /* sits left of ✎ */
 
     #add-word-btn:focus,
+    #sentences-btn:focus,
     #list-toggle-btn:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+
 
     /* Static list panel */
     #word-list {
@@ -128,6 +132,7 @@
   </section>
 
   <button id="list-toggle-btn" type="button" aria-label="Toggle word list">☰</button>
+  <button id="sentences-btn" type="button" aria-label="Open sentences">ls</button>
   <button id="add-word-btn" type="button" aria-label="Add lang word">＋</button>
 
   <main>
@@ -159,6 +164,7 @@
     const layer = document.getElementById("word-layer");
     const mainEl = document.querySelector("main");
     const addBtn = document.getElementById("add-word-btn");
+    const sentencesBtn = document.getElementById("sentences-btn");
     const listToggleBtn = document.getElementById("list-toggle-btn");
     const listPanel = document.getElementById("word-list");
     const listGrid = document.getElementById("word-list-grid");
@@ -430,6 +436,10 @@
       // Toggle list mode; refresh if we don't have words yet
       setListMode(!listMode);
       if (!cachedWords.length) await refreshWords();
+    });
+
+    sentencesBtn.addEventListener("click", () => {
+      window.open("lang_sentences.html", "_blank", "noopener,noreferrer");
     });
 
     // Initial mount

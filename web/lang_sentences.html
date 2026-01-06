@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>lang sentences</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; line-height: 1.5; }
+    main { max-width: 64rem; margin: 8vh auto; }
+    a { text-decoration: none; border-bottom: 1px solid currentColor; }
+    .top { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; justify-content:space-between; }
+    .pill { border: 1px solid currentColor; border-radius: 999px; padding: .15rem .6rem; font-size: .9rem; }
+    .panel { border: 1px solid color-mix(in oklab, currentColor 40%, transparent); border-radius: 1rem; padding: 1rem; margin-top: 1rem; }
+    .panel h2 { font-size: 1rem; margin: 0 0 .75rem; }
+    button {
+      border: 1px solid currentColor; background: transparent; color: inherit;
+      border-radius: .6rem; padding: .45rem .7rem; cursor: pointer;
+      white-space: nowrap;
+    }
+    input[type="text"]{
+      width: 100%; padding: .5rem .6rem; border-radius: .5rem;
+      border: 1px solid currentColor; background: transparent; color: inherit;
+    }
+    button:focus, input:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+    .muted { opacity: .75; }
+    .wordgrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+      gap: .5rem .6rem;
+    }
+    .worditem {
+      border: 1px solid color-mix(in oklab, currentColor 25%, transparent);
+      border-radius: .75rem;
+      padding: .45rem .55rem;
+      display:flex;
+      gap:.5rem;
+      align-items:center;
+    }
+    .sent {
+      border: 1px solid color-mix(in oklab, currentColor 25%, transparent);
+      border-radius: .9rem;
+      padding: .75rem .85rem;
+      margin:.6rem 0;
+    }
+    .sent .meta { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-top:.45rem; }
+    .sent .meta .ids { opacity:.75; font-size:.9rem; }
+    .row { display:flex; gap:.5rem; align-items:center; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="top">
+      <div>
+        <p style="margin:0 0 .35rem;"><a href="./">← back</a></p>
+        <h1 style="margin:0;">sentences</h1>
+      </div>
+      <div class="row">
+        <span class="pill" id="mode-pill">view</span>
+        <span class="pill" id="filter-pill">filter: none</span>
+        <button id="admin-btn" type="button">enter admin key</button>
+        <button id="clear-admin-btn" type="button" style="display:none;">clear key</button>
+      </div>
+    </div>
+
+    <!-- Create panel: shown only in edit mode -->
+    <section class="panel" id="create-panel" style="display:none;">
+      <h2>create</h2>
+      <p class="muted" style="margin-top:0;">
+        Select one or more words below, then enter a sentence.
+      </p>
+      <div class="row" style="margin-top:.5rem;">
+        <input id="sentence-input" type="text" placeholder="enter sentence text…" />
+        <button id="create-btn" type="button">create</button>
+      </div>
+      <div class="muted" id="create-msg" style="margin-top:.5rem;"></div>
+    </section>
+
+    <section class="panel">
+      <h2>lang words</h2>
+      <div class="wordgrid" id="words"></div>
+      <div class="muted" id="words-meta" style="margin-top:.6rem;"></div>
+    </section>
+
+    <section class="panel">
+      <h2>lang sentences</h2>
+      <div class="muted" id="sent-meta" style="margin-top:0;"></div>
+      <div id="sentences"></div>
+    </section>
+  </main>
+
+  <script>
+    const ADMIN_KEY_STORAGE = "lang_admin_key";
+
+    const adminBtn = document.getElementById("admin-btn");
+    const clearAdminBtn = document.getElementById("clear-admin-btn");
+    const modePill = document.getElementById("mode-pill");
+    const filterPill = document.getElementById("filter-pill");
+
+    const createPanel = document.getElementById("create-panel");
+    const sentenceInput = document.getElementById("sentence-input");
+    const createBtn = document.getElementById("create-btn");
+    const createMsg = document.getElementById("create-msg");
+
+    const wordsEl = document.getElementById("words");
+    const wordsMeta = document.getElementById("words-meta");
+
+    const sentMeta = document.getElementById("sent-meta");
+    const sentencesEl = document.getElementById("sentences");
+
+    let adminVerified = false;
+    let allWords = [];      // [{lang_word_id, word, version_id, version}]
+    let allSentences = [];  // [{id, lang_word_ids, sentence, ...}]
+    let selected = new Set(); // lang_word_id ints
+
+    function getAdminKey() {
+      return localStorage.getItem(ADMIN_KEY_STORAGE) || "";
+    }
+    function setAdminKey(key) {
+      localStorage.setItem(ADMIN_KEY_STORAGE, key);
+    }
+    function clearAdminKey() {
+      localStorage.removeItem(ADMIN_KEY_STORAGE);
+    }
+
+    async function verifyAdminKey() {
+      const key = getAdminKey();
+      if (!key) { adminVerified = false; return false; }
+
+      const res = await fetch("/api/admin/ping", {
+        headers: { "Accept": "application/json", "X-Admin-Key": key }
+      });
+      if (res.ok) { adminVerified = true; return true; }
+
+      clearAdminKey();
+      adminVerified = false;
+      return false;
+    }
+
+    function setAdminUI() {
+      modePill.textContent = adminVerified ? "edit" : "view";
+      createPanel.style.display = adminVerified ? "" : "none";
+
+      adminBtn.textContent = adminVerified ? "admin verified" : "enter admin key";
+      adminBtn.disabled = adminVerified;
+      clearAdminBtn.style.display = adminVerified ? "" : "none";
+    }
+
+    function openSentencePage(id) {
+      const url = `lang_sentence.html?id=${encodeURIComponent(id)}`;
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+
+    function computeFilteredSentences() {
+      if (!selected.size) return allSentences;
+      const sel = Array.from(selected);
+      return allSentences.filter(s => {
+        const ids = Array.isArray(s.lang_word_ids) ? s.lang_word_ids : [];
+        const set = new Set(ids);
+        return sel.every(x => set.has(x));
+      });
+    }
+
+    function renderWords() {
+      wordsEl.innerHTML = "";
+      const sorted = [...allWords].sort((a,b) => String(a.word).localeCompare(String(b.word)));
+      for (const w of sorted) {
+        const wrap = document.createElement("label");
+        wrap.className = "worditem";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = selected.has(w.lang_word_id);
+        cb.addEventListener("change", () => {
+          if (cb.checked) selected.add(w.lang_word_id);
+          else selected.delete(w.lang_word_id);
+          renderSentences();
+        });
+
+        const span = document.createElement("span");
+        span.textContent = `${w.word} (id ${w.lang_word_id})`;
+
+        wrap.appendChild(cb);
+        wrap.appendChild(span);
+        wordsEl.appendChild(wrap);
+      }
+      wordsMeta.textContent = `${sorted.length} words`;
+    }
+
+    function renderSentences() {
+      const filtered = computeFilteredSentences();
+      sentencesEl.innerHTML = "";
+
+      const selTxt = selected.size ? Array.from(selected).join(", ") : "none";
+      filterPill.textContent = `filter: ${selTxt}`;
+      sentMeta.textContent = `${filtered.length} sentence(s) shown`;
+
+      for (const s of filtered) {
+        const div = document.createElement("div");
+        div.className = "sent";
+
+        const a = document.createElement("a");
+        a.href = `lang_sentence.html?id=${encodeURIComponent(s.id)}`;
+        a.textContent = s.sentence;
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          openSentencePage(s.id);
+        });
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+
+        const ids = document.createElement("span");
+        ids.className = "ids";
+        ids.textContent = `words: ${Array.isArray(s.lang_word_ids) ? s.lang_word_ids.join(", ") : ""}`;
+
+        meta.appendChild(ids);
+        div.appendChild(a);
+        div.appendChild(meta);
+
+        sentencesEl.appendChild(div);
+      }
+    }
+
+    function renderAll() {
+      renderWords();
+      renderSentences();
+    }
+
+    async function loadAll() {
+      const [wr, sr] = await Promise.all([
+        fetch("/api/lang_words", { headers: { "Accept": "application/json" }}),
+        fetch("/api/lang_sentences", { headers: { "Accept": "application/json" }})
+      ]);
+
+      const wj = await wr.json().catch(() => ({}));
+      const sj = await sr.json().catch(() => ({}));
+
+      allWords = Array.isArray(wj.words) ? wj.words : [];
+      allSentences = Array.isArray(sj.sentences) ? sj.sentences : [];
+
+      renderAll();
+    }
+
+    if (createBtn) {
+      createBtn.addEventListener("click", async () => {
+        createMsg.textContent = "";
+
+        if (!adminVerified) {
+          createMsg.textContent = "admin key required.";
+          return;
+        }
+
+        const sentence = sentenceInput.value.trim();
+        if (!sentence) return;
+
+        const ids = Array.from(selected);
+        if (!ids.length) {
+          createMsg.textContent = "select at least one word.";
+          return;
+        }
+
+        const key = getAdminKey();
+        const r = await fetch("/api/lang_sentences", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-Admin-Key": key
+          },
+          body: JSON.stringify({ sentence, lang_word_ids: ids })
+        });
+
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          createMsg.textContent = err.error || `create failed (${r.status})`;
+          return;
+        }
+
+        const out = await r.json().catch(() => ({}));
+        sentenceInput.value = "";
+        createMsg.textContent = `created sentence id ${out.id}`;
+        await loadAll();
+        if (out && out.id) openSentencePage(out.id);
+      });
+    }
+
+    adminBtn.addEventListener("click", async () => {
+      const key = prompt("Admin key (stored locally):", getAdminKey() || "");
+      if (!key || !key.trim()) return;
+      setAdminKey(key.trim());
+      await verifyAdminKey();
+      setAdminUI();
+    });
+
+    clearAdminBtn.addEventListener("click", async () => {
+      clearAdminKey();
+      adminVerified = false;
+      setAdminUI();
+    });
+
+    (async () => {
+      await verifyAdminKey();
+      setAdminUI();
+      await loadAll();
+    })();
+  </script>
+</body>
+</html>

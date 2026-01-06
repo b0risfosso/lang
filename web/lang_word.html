@@ -9,6 +9,7 @@
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; line-height: 1.5; }
     main { max-width: 52rem; margin: 10vh auto; }
     a { text-decoration: none; border-bottom: 1px solid currentColor; }
+    a:hover { opacity: .9; }
 
     .word { font-size: 2rem; margin: 0 0 .75rem; }
     .meta { opacity: .85; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom: 1.25rem; }
@@ -36,7 +37,8 @@
     ul { padding-left: 1.25rem; margin: .5rem 0 0; }
     li { margin: .35rem 0; }
 
-    .child-edit-row { display:flex; gap:.5rem; align-items:center; margin:.4rem 0; }
+    .child-edit-row { display:flex; flex-direction: column; gap:.35rem; margin:.55rem 0; padding: .45rem; border-radius: .75rem; border: 1px solid color-mix(in oklab, currentColor 25%, transparent); }
+    .child-edit-row .line { display:flex; gap:.5rem; align-items:center; }
     .child-edit-row input { flex: 1; }
 
     /* Side panel (exchange) */
@@ -84,13 +86,6 @@
     }
     .kidbtn { width: 100%; text-align: left; }
     .kidbtn.selected { border-width: 2px; }
-
-    .split {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: .75rem;
-      margin-top: .75rem;
-    }
   </style>
 </head>
 <body>
@@ -124,6 +119,9 @@
 
         <div class="row">
           <input id="new-child" type="text" placeholder="new child word (⌘/Ctrl + Enter)" />
+        </div>
+        <div class="row">
+          <input id="new-child-link" type="text" placeholder="optional link (opens in new tab)" />
           <button id="add-child" type="button">add</button>
         </div>
       </div>
@@ -206,6 +204,7 @@
 
     const addToVersionSelect = document.getElementById("add-to-version");
     const newChildInput = document.getElementById("new-child");
+    const newChildLinkInput = document.getElementById("new-child-link");
     const addChildBtn = document.getElementById("add-child");
 
     const versionsContainer = document.getElementById("versions-container");
@@ -236,7 +235,6 @@
     let currentData = null; // payload from GET /api/lang_words/<version_id>
 
     // exchange state (right side)
-    let rightSelected = null; // { word, lang_word_id, version_id, version }
     let rightData = null;     // payload from GET /api/lang_words/<rightSelectedVersionId>
     let rightVersionId = null;
 
@@ -304,7 +302,6 @@
       selectedStatus.textContent = "";
       createStatus.textContent = "";
 
-      rightSelected = null;
       rightData = null;
       rightVersionId = null;
 
@@ -351,6 +348,19 @@
 
     function openVersion(versionId) {
       window.location.href = `lang_word.html?id=${encodeURIComponent(versionId)}`;
+    }
+
+    function renderChildWordViewItem(c) {
+      // View mode: if link exists, make it clickable and open in new tab
+      if (c.link && String(c.link).trim()) {
+        const a = document.createElement("a");
+        a.href = c.link;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = c.word;
+        return a;
+      }
+      return document.createTextNode(c.word);
     }
 
     function renderVersions(data) {
@@ -411,7 +421,7 @@
           const ul = document.createElement("ul");
           for (const c of kids) {
             const li = document.createElement("li");
-            li.textContent = c.word;
+            li.appendChild(renderChildWordViewItem(c));
             ul.appendChild(li);
           }
           panel.appendChild(ul);
@@ -430,9 +440,12 @@
             const row = document.createElement("div");
             row.className = "child-edit-row";
 
-            const input = document.createElement("input");
-            input.type = "text";
-            input.value = c.word;
+            const line1 = document.createElement("div");
+            line1.className = "line";
+
+            const inputWord = document.createElement("input");
+            inputWord.type = "text";
+            inputWord.value = c.word;
 
             const save = document.createElement("button");
             save.type = "button";
@@ -442,9 +455,24 @@
             del.type = "button";
             del.textContent = "delete";
 
+            line1.appendChild(inputWord);
+            line1.appendChild(save);
+            line1.appendChild(del);
+
+            const line2 = document.createElement("div");
+            line2.className = "line";
+
+            const inputLink = document.createElement("input");
+            inputLink.type = "text";
+            inputLink.placeholder = "optional link (opens in new tab)";
+            inputLink.value = c.link || "";
+
+            line2.appendChild(inputLink);
+
             save.addEventListener("click", async () => {
-              const next = input.value.trim();
-              if (!next) return;
+              const nextWord = inputWord.value.trim();
+              const nextLink = inputLink.value.trim();
+              if (!nextWord) return;
 
               const key = getAdminKey();
               const r = await apiFetch(`/api/child_words/${c.id}`, {
@@ -454,7 +482,7 @@
                   "Accept": "application/json",
                   "X-Admin-Key": key
                 },
-                body: JSON.stringify({ word: next })
+                body: JSON.stringify({ word: nextWord, link: nextLink })
               });
 
               if (!r.ok) {
@@ -482,9 +510,8 @@
               await refresh();
             });
 
-            row.appendChild(input);
-            row.appendChild(save);
-            row.appendChild(del);
+            row.appendChild(line1);
+            row.appendChild(line2);
             editWrap.appendChild(row);
           }
 
@@ -530,13 +557,14 @@
       openVersion(out.version_id);
     });
 
-    // Add child to selected version
+    // Add child to selected version (now supports optional link)
     addChildBtn.addEventListener("click", async () => {
       if (!isEditMode()) return;
       const key = getAdminKey();
       if (!key) return;
 
       const word = newChildInput.value.trim();
+      const link = newChildLinkInput.value.trim();
       if (!word) return;
 
       const versionId = Number(addToVersionSelect.value);
@@ -549,7 +577,7 @@
           "Accept": "application/json",
           "X-Admin-Key": key
         },
-        body: JSON.stringify({ word })
+        body: JSON.stringify({ word, link })
       });
 
       if (!r.ok) {
@@ -559,6 +587,7 @@
       }
 
       newChildInput.value = "";
+      newChildLinkInput.value = "";
       await refresh();
     });
 
@@ -591,7 +620,7 @@
       await refresh();
     });
 
-    // ========= Exchange Panel Logic =========
+    // ========= Exchange Panel Logic (unchanged aside from reading kids with link present) =========
 
     exchangeOpenBtn.addEventListener("click", async () => {
       if (!isEditMode()) return;
@@ -617,7 +646,6 @@
       const data = await res.json().catch(() => ({}));
       const words = Array.isArray(data.words) ? data.words : [];
 
-      // Populate with latest version_id per word, but user can pick other versions after load
       for (const w of words) {
         const opt = document.createElement("option");
         opt.value = String(w.version_id);
@@ -625,7 +653,6 @@
         existingWordsSelect.appendChild(opt);
       }
 
-      // Preselect something not equal to current version if possible
       const curVid = Number(currentData?.current_version_id);
       const alt = words.find(x => x.version_id !== curVid);
       if (alt) existingWordsSelect.value = String(alt.version_id);
@@ -637,7 +664,6 @@
 
       const d = await loadWordAndVersions(rightVersionId);
       if (!d) {
-        rightSelected = null;
         rightData = null;
         existingVersionsSelect.innerHTML = "";
         selectedStatus.textContent = "selected word/version not found.";
@@ -646,14 +672,8 @@
       }
 
       rightData = d;
-      // Choose the page's current_version_id as the selected version by default (matching the loaded versionId if present)
-      // If versionId isn't exactly current_version_id (it should be), keep the loaded id.
-      const cur = d.current_version_id;
-      rightVersionId = Number(versionId) || cur;
-
       selectedStatus.textContent = `selected: "${d.word}" (lang_word ${d.lang_word_id})`;
 
-      // Populate versions dropdown
       existingVersionsSelect.innerHTML = "";
       for (const v of (d.versions || [])) {
         const opt = document.createElement("option");
@@ -670,13 +690,11 @@
     loadExistingBtn.addEventListener("click", async () => {
       const vid = existingWordsSelect.value;
       await loadRightByVersionId(vid);
-      // sync dropdown to selected version id
       existingVersionsSelect.value = String(rightVersionId);
     });
 
     existingVersionsSelect.addEventListener("change", async () => {
       const vid = existingVersionsSelect.value;
-      // load by version id so rightData + current_version_id stay coherent
       await loadRightByVersionId(vid);
     });
 
@@ -685,7 +703,6 @@
       openVersion(rightVersionId);
     });
 
-    // Create new parent lang_word (admin), then set as right side selection
     createParentBtn.addEventListener("click", async () => {
       if (!isEditMode()) return;
       const key = getAdminKey();
@@ -696,7 +713,6 @@
 
       createStatus.textContent = "";
 
-      // POST /api/lang_words -> { ok, lang_word_id, version_id, word }
       const r = await apiFetch(`/api/lang_words`, {
         method: "POST",
         headers: {
@@ -717,10 +733,8 @@
       newParentInput.value = "";
       createStatus.textContent = `created "${out.word}" (version id ${out.version_id}).`;
 
-      // Make it the right side selection
       await loadRightByVersionId(out.version_id);
 
-      // refresh the existing words dropdown so the new word appears
       await initExistingWordsSelect();
       existingWordsSelect.value = String(out.version_id);
       existingVersionsSelect.value = String(out.version_id);
@@ -798,17 +812,14 @@
     }
 
     async function refreshExchangeSides() {
-      // Refresh current side
       await loadCurrent();
 
-      // Refresh right side if selected
       if (rightVersionId) {
         await loadRightByVersionId(rightVersionId);
       } else {
         renderExchangeLists();
       }
 
-      // clear selection to prevent “stale” clicks after refresh
       selectedLeftChildId = null;
       selectedRightChildId = null;
       renderExchangeLists();
@@ -838,8 +849,7 @@
       if (!rightVersionId) return;
       if (!selectedLeftChildId) return;
 
-      const targetVersionId = rightVersionId;
-      const ok = await moveChild(selectedLeftChildId, targetVersionId);
+      const ok = await moveChild(selectedLeftChildId, rightVersionId);
       if (!ok) return;
 
       await refreshExchangeSides();
@@ -849,8 +859,7 @@
       if (!rightVersionId) return;
       if (!selectedRightChildId) return;
 
-      const targetVersionId = currentData.current_version_id;
-      const ok = await moveChild(selectedRightChildId, targetVersionId);
+      const ok = await moveChild(selectedRightChildId, currentData.current_version_id);
       if (!ok) return;
 
       await refreshExchangeSides();

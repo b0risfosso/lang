@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>lang sentence</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; line-height: 1.5; }
+    main { max-width: 60rem; margin: 10vh auto; }
+    a { text-decoration: none; border-bottom: 1px solid currentColor; }
+    .panel { border: 1px solid color-mix(in oklab, currentColor 40%, transparent); border-radius: 1rem; padding: 1rem; margin-top: 1rem; }
+    .panel h2 { font-size: 1rem; margin: 0 0 .75rem; }
+    .muted { opacity: .75; }
+    .sentence { font-size: 1.25rem; margin: .25rem 0 0; }
+    .pill { border: 1px solid currentColor; border-radius: 999px; padding: .15rem .6rem; font-size: .9rem; display:inline-block; margin-right:.4rem; margin-top:.25rem; }
+    ul { padding-left: 1.25rem; margin: .5rem 0 0; }
+    li { margin: .35rem 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <p><a href="lang_sentences.html">← back to sentences</a></p>
+
+    <section class="panel">
+      <h2>sentence</h2>
+      <div class="muted" id="meta">…</div>
+      <div class="sentence" id="sentence">…</div>
+      <div style="margin-top:.5rem;" id="ids"></div>
+    </section>
+
+    <section class="panel">
+      <h2>words</h2>
+      <div id="words">…</div>
+    </section>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const id = params.get("id");
+
+    const metaEl = document.getElementById("meta");
+    const sentenceEl = document.getElementById("sentence");
+    const idsEl = document.getElementById("ids");
+    const wordsEl = document.getElementById("words");
+
+    function openWordPage(versionId) {
+      const url = `lang_word.html?id=${encodeURIComponent(versionId)}`;
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+
+    function childNode(c) {
+      if (c.link && String(c.link).trim()) {
+        const a = document.createElement("a");
+        a.href = c.link;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = c.word;
+        return a;
+      }
+      return document.createTextNode(c.word);
+    }
+
+    async function load() {
+      if (!id) {
+        metaEl.textContent = "missing id";
+        sentenceEl.textContent = "";
+        wordsEl.textContent = "";
+        return;
+      }
+
+      const r = await fetch(`/api/lang_sentences/${encodeURIComponent(id)}`, { headers: { "Accept": "application/json" }});
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        metaEl.textContent = err.error || `not found (${r.status})`;
+        sentenceEl.textContent = "";
+        wordsEl.textContent = "";
+        return;
+      }
+
+      const data = await r.json().catch(() => ({}));
+      document.title = `sentence ${data.id}`;
+
+      metaEl.textContent = `id ${data.id}`;
+      sentenceEl.textContent = data.sentence || "";
+
+      idsEl.innerHTML = "";
+      const ids = Array.isArray(data.lang_word_ids) ? data.lang_word_ids : [];
+      ids.forEach(x => {
+        const p = document.createElement("span");
+        p.className = "pill";
+        p.textContent = `lang_word ${x}`;
+        idsEl.appendChild(p);
+      });
+
+      wordsEl.innerHTML = "";
+      const words = Array.isArray(data.words) ? data.words : [];
+      if (!words.length) {
+        wordsEl.innerHTML = `<div class="muted">no words found for this sentence.</div>`;
+        return;
+      }
+
+      for (const w of words) {
+        const wrap = document.createElement("div");
+        wrap.className = "panel";
+        wrap.style.marginTop = ".75rem";
+
+        const title = document.createElement("div");
+        title.innerHTML = `<strong>${w.word}</strong> <span class="muted">(lang_word ${w.lang_word_id}, v${w.version})</span>`;
+
+        const openBtn = document.createElement("button");
+        openBtn.type = "button";
+        openBtn.textContent = "open";
+        openBtn.style.marginLeft = ".6rem";
+        openBtn.addEventListener("click", () => openWordPage(w.version_id));
+
+        const header = document.createElement("div");
+        header.style.display = "flex";
+        header.style.alignItems = "center";
+        header.style.justifyContent = "space-between";
+        header.style.gap = ".75rem";
+
+        header.appendChild(title);
+        header.appendChild(openBtn);
+
+        wrap.appendChild(header);
+
+        const kids = Array.isArray(w.child_words) ? w.child_words : [];
+        if (!kids.length) {
+          const p = document.createElement("p");
+          p.className = "muted";
+          p.style.margin = ".5rem 0 0";
+          p.textContent = "no child words.";
+          wrap.appendChild(p);
+        } else {
+          const ul = document.createElement("ul");
+          kids.forEach(c => {
+            const li = document.createElement("li");
+            li.appendChild(childNode(c));
+            ul.appendChild(li);
+          });
+          wrap.appendChild(ul);
+        }
+
+        wordsEl.appendChild(wrap);
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>
