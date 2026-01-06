@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>child sentence</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; line-height: 1.5; }
+    main { max-width: 60rem; margin: 10vh auto; }
+    a { text-decoration: none; border-bottom: 1px solid currentColor; }
+    .panel { border: 1px solid color-mix(in oklab, currentColor 40%, transparent); border-radius: 1rem; padding: 1rem; margin-top: 1rem; }
+    .panel h2 { font-size: 1rem; margin: 0 0 .75rem; }
+    .muted { opacity: .75; }
+    .sentence { font-size: 1.25rem; margin: .25rem 0 0; }
+    .pill { border: 1px solid currentColor; border-radius: 999px; padding: .15rem .6rem; font-size: .9rem; display:inline-block; margin-right:.4rem; margin-top:.25rem; }
+    ul { padding-left: 1.25rem; margin: .5rem 0 0; }
+    li { margin: .35rem 0; }
+    button {
+      border: 1px solid currentColor; background: transparent; color: inherit;
+      border-radius: .6rem; padding: .45rem .7rem; cursor: pointer;
+      white-space: nowrap;
+    }
+    button:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+    .row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; justify-content:space-between; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="row">
+      <p style="margin:0;">
+        <a id="backlink" href="lang_sentence.html">← back</a>
+      </p>
+      <div class="muted" id="meta">…</div>
+    </div>
+
+    <section class="panel">
+      <h2>child sentence</h2>
+      <div class="sentence" id="sentence">…</div>
+      <div style="margin-top:.5rem;" id="ids"></div>
+    </section>
+
+    <section class="panel">
+      <h2>child words</h2>
+      <div id="words">…</div>
+    </section>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const id = params.get("id");
+
+    const backlink = document.getElementById("backlink");
+    const metaEl = document.getElementById("meta");
+    const sentenceEl = document.getElementById("sentence");
+    const idsEl = document.getElementById("ids");
+    const wordsEl = document.getElementById("words");
+
+    function childWordNode(w) {
+      // show word as clickable link if present
+      if (w.link && String(w.link).trim()) {
+        const a = document.createElement("a");
+        a.href = w.link;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = w.word;
+        return a;
+      }
+      return document.createTextNode(w.word);
+    }
+
+    function openParentWord(versionId) {
+      window.open(`lang_word.html?id=${encodeURIComponent(versionId)}`, "_blank", "noopener,noreferrer");
+    }
+
+    async function load() {
+      if (!id) {
+        metaEl.textContent = "missing id";
+        sentenceEl.textContent = "";
+        wordsEl.textContent = "";
+        return;
+      }
+
+      const r = await fetch(`/api/child_sentences/${encodeURIComponent(id)}`, {
+        headers: { "Accept": "application/json" }
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        metaEl.textContent = err.error || `not found (${r.status})`;
+        sentenceEl.textContent = "";
+        wordsEl.textContent = "";
+        return;
+      }
+
+      const data = await r.json().catch(() => ({}));
+      document.title = `child sentence ${data.id}`;
+
+      // backlink to parent lang_sentence.html
+      backlink.href = `lang_sentence.html?id=${encodeURIComponent(data.lang_sentence_id)}`;
+
+      metaEl.textContent = `id ${data.id} · parent sentence ${data.lang_sentence_id}`;
+      sentenceEl.textContent = data.sentence || "";
+
+      idsEl.innerHTML = "";
+      const ids = Array.isArray(data.child_word_ids) ? data.child_word_ids : [];
+      ids.forEach(x => {
+        const p = document.createElement("span");
+        p.className = "pill";
+        p.textContent = `child_word ${x}`;
+        idsEl.appendChild(p);
+      });
+
+      wordsEl.innerHTML = "";
+      const words = Array.isArray(data.child_words) ? data.child_words : [];
+      if (!words.length) {
+        wordsEl.innerHTML = `<div class="muted">no child words found.</div>`;
+        return;
+      }
+
+      const ul = document.createElement("ul");
+      for (const w of words) {
+        const li = document.createElement("li");
+
+        // linked child word text
+        li.appendChild(childWordNode(w));
+
+        // show parent lang word info + open button
+        const meta = document.createElement("span");
+        meta.className = "muted";
+        meta.textContent = ` — ${w.lang_word} (lang_word ${w.lang_word_id}, v${w.version})`;
+        li.appendChild(meta);
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "open";
+        btn.style.marginLeft = ".6rem";
+        btn.addEventListener("click", () => openParentWord(w.version_id));
+        li.appendChild(btn);
+
+        ul.appendChild(li);
+      }
+      wordsEl.appendChild(ul);
+    }
+
+    load();
+  </script>
+</body>
+</html>

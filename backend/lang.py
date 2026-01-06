@@ -657,6 +657,70 @@ def create_child_sentence(sentence_id: int):
     return jsonify(ok=True, id=cur.lastrowid, child_word_ids=ids, sentence=sentence), 201
 
 
+@app.get("/api/child_sentences/<int:child_sentence_id>")
+def get_child_sentence(child_sentence_id: int):
+    db = get_db()
+
+    r = db.execute(
+        """
+        SELECT id, lang_sentence_id, child_word_ids, sentence, created_at, updated_at
+        FROM child_sentences
+        WHERE id = ?
+        """,
+        (child_sentence_id,)
+    ).fetchone()
+    if r is None:
+        abort(404, description="Child sentence not found.")
+
+    # parse child_word_ids
+    try:
+        ids = json.loads(r["child_word_ids"])
+        if not isinstance(ids, list):
+            ids = []
+        ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+    except Exception:
+        ids = []
+
+    # load child word rows (with link) + their parent word/version info (optional but useful)
+    child_words_out = []
+    for cid in ids:
+        crow = db.execute(
+            """
+            SELECT cw.id AS child_word_id, cw.word AS child_word, cw.link,
+                   v.id AS version_id, v.version,
+                   w.id AS lang_word_id, w.word AS lang_word
+            FROM child_words cw
+            JOIN lang_word_versions v ON v.id = cw.lang_word_version_id
+            JOIN lang_words w ON w.id = v.lang_word_id
+            WHERE cw.id = ?
+            """,
+            (cid,)
+        ).fetchone()
+
+        if crow is None:
+            continue
+
+        child_words_out.append({
+            "child_word_id": int(crow["child_word_id"]),
+            "word": crow["child_word"],
+            "link": crow["link"],
+            "lang_word_id": int(crow["lang_word_id"]),
+            "lang_word": crow["lang_word"],
+            "version_id": int(crow["version_id"]),
+            "version": int(crow["version"]),
+        })
+
+    return jsonify({
+        "id": int(r["id"]),
+        "lang_sentence_id": int(r["lang_sentence_id"]),
+        "child_word_ids": ids,
+        "sentence": r["sentence"],
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+        "child_words": child_words_out
+    })
+
+
 
 if __name__ == "__main__":
     # Dev server
