@@ -7,21 +7,37 @@
   <style>
     :root { color-scheme: light dark; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; line-height: 1.5; }
-    main { max-width: 46rem; margin: 12vh auto; }
+    main { max-width: 52rem; margin: 10vh auto; }
     a { text-decoration: none; border-bottom: 1px solid currentColor; }
-    .word { font-size: 2rem; margin: 0 0 1rem; }
-    .meta { opacity: .8; margin: 0 0 1.5rem; display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
-    .pill { border: 1px solid currentColor; border-radius: 999px; padding: .15rem .6rem; font-size: .9rem; opacity: .9; }
-    .row { display: flex; gap: .5rem; align-items: center; margin: .5rem 0; }
-    input[type="text"] { width: 100%; padding: .5rem .6rem; border-radius: .5rem; border: 1px solid currentColor; background: transparent; }
-    button { border: 1px solid currentColor; background: transparent; color: inherit; border-radius: .6rem; padding: .45rem .7rem; cursor: pointer; }
-    button:focus, input:focus { outline: 2px solid currentColor; outline-offset: 2px; }
-    ul { padding-left: 1.25rem; }
-    li { margin: .4rem 0; }
-    .muted { opacity: .75; }
-    .panel { border: 1px solid color-mix(in oklab, currentColor 40%, transparent); border-radius: 1rem; padding: 1rem; margin-top: 1.25rem; }
+
+    .word { font-size: 2rem; margin: 0 0 .75rem; }
+    .meta { opacity: .85; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom: 1.25rem; }
+    .pill { border: 1px solid currentColor; border-radius: 999px; padding: .15rem .6rem; font-size: .9rem; }
+
+    .panel { border: 1px solid color-mix(in oklab, currentColor 40%, transparent); border-radius: 1rem; padding: 1rem; margin-top: 1rem; }
     .panel h2 { font-size: 1rem; margin: 0 0 .75rem; }
-    .danger { opacity: .9; }
+
+    .row { display:flex; gap:.5rem; align-items:center; margin:.5rem 0; }
+    input[type="text"], select {
+      width: 100%; padding: .5rem .6rem; border-radius: .5rem;
+      border: 1px solid currentColor; background: transparent; color: inherit;
+    }
+    button {
+      border: 1px solid currentColor; background: transparent; color: inherit;
+      border-radius: .6rem; padding: .45rem .7rem; cursor: pointer;
+      white-space: nowrap;
+    }
+    button:focus, input:focus, select:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+    .muted { opacity: .75; }
+
+    .version-head { display:flex; gap:.5rem; align-items:center; justify-content:space-between; }
+    .version-title { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+
+    ul { padding-left: 1.25rem; margin: .5rem 0 0; }
+    li { margin: .35rem 0; }
+
+    .child-edit-row { display:flex; gap:.5rem; align-items:center; margin:.4rem 0; }
+    .child-edit-row input { flex: 1; }
   </style>
 </head>
 <body>
@@ -31,391 +47,346 @@
     <h1 class="word" id="word">…</h1>
 
     <div class="meta">
-      <span class="pill" id="id-pill">id …</span>
+      <span class="pill" id="lang-pill">lang_word …</span>
+      <span class="pill" id="ver-pill">version …</span>
       <span class="pill" id="mode-pill">view</span>
       <button id="admin-btn" type="button">enter admin key</button>
-      <button id="clear-admin-btn" type="button" class="danger" style="display:none;">clear key</button>
+      <button id="clear-admin-btn" type="button" style="display:none;">clear key</button>
     </div>
 
     <section class="panel">
-      <h2>child words</h2>
+      <h2>versions</h2>
 
-      <!-- view mode list -->
-      <ul id="child-list"></ul>
-      <p id="empty" class="muted" style="display:none;">no child words yet.</p>
-
-      <!-- edit mode controls -->
-      <div id="edit-ui" style="display:none; margin-top: 1rem;">
+      <div id="edit-top" style="display:none;">
         <div class="row">
-          <input id="new-child" type="text" placeholder="new child word" />
+          <button id="create-version" type="button">create new version</button>
+          <span class="muted" id="create-version-msg"></span>
+        </div>
+
+        <div class="row">
+          <select id="add-to-version"></select>
+        </div>
+
+        <div class="row">
+          <input id="new-child" type="text" placeholder="new child word (⌘/Ctrl + Enter)" />
           <button id="add-child" type="button">add</button>
         </div>
-
-        <div id="edit-list"></div>
       </div>
 
-      <div id="exchange-ui" style="display:none; margin-top: 1rem;">
-        <h2 style="margin-top: 0;">exchange</h2>
-      
-        <div class="row">
-          <input id="new-parent-word" type="text" placeholder="create new lang word" />
-          <button id="create-parent" type="button">create</button>
-        </div>
-      
-        <div class="row">
-          <input id="linked-id" type="text" inputmode="numeric" placeholder="linked word id (e.g. 42)" />
-          <button id="load-linked" type="button">load</button>
-          <button id="open-linked" type="button">open</button>
-        </div>
-      
-        <div class="row muted" id="linked-title" style="margin-top:.25rem;"></div>
-      
-        <div style="display:grid; grid-template-columns: 1fr auto 1fr; gap: .75rem; align-items:start; margin-top: .75rem;">
-          <div>
-            <div class="muted" style="margin-bottom:.25rem;">this word</div>
-            <div id="left-kids"></div>
-          </div>
-      
-          <div style="display:flex; flex-direction:column; gap:.5rem; margin-top:1.5rem;">
-            <button id="to-linked" type="button">→</button>
-            <button id="to-current" type="button">←</button>
-          </div>
-      
-          <div>
-            <div class="muted" style="margin-bottom:.25rem;">linked word</div>
-            <div id="right-kids"></div>
-          </div>
-        </div>
-      </div>
-      
+      <div id="versions-container"></div>
+      <p id="empty" class="muted" style="display:none;">no versions found.</p>
     </section>
   </main>
 
   <script>
     const ADMIN_KEY_STORAGE = "lang_admin_key";
-    let adminVerified = false;
 
     const params = new URLSearchParams(location.search);
-    const id = params.get("id");
+    const versionIdParam = params.get("id"); // this is a VERSION id
 
     const wordEl = document.getElementById("word");
-    const idPill = document.getElementById("id-pill");
+    const langPill = document.getElementById("lang-pill");
+    const verPill = document.getElementById("ver-pill");
     const modePill = document.getElementById("mode-pill");
+
     const adminBtn = document.getElementById("admin-btn");
     const clearAdminBtn = document.getElementById("clear-admin-btn");
 
-    const childList = document.getElementById("child-list");
-    const emptyEl = document.getElementById("empty");
+    const editTop = document.getElementById("edit-top");
+    const createVersionBtn = document.getElementById("create-version");
+    const createVersionMsg = document.getElementById("create-version-msg");
 
-    const editUI = document.getElementById("edit-ui");
+    const addToVersionSelect = document.getElementById("add-to-version");
     const newChildInput = document.getElementById("new-child");
     const addChildBtn = document.getElementById("add-child");
-    const editList = document.getElementById("edit-list");
 
-    const exchangeUI = document.getElementById("exchange-ui");
+    const versionsContainer = document.getElementById("versions-container");
+    const emptyEl = document.getElementById("empty");
 
-    const newParentInput = document.getElementById("new-parent-word");
-    const createParentBtn = document.getElementById("create-parent");
-
-    const linkedIdInput = document.getElementById("linked-id");
-    const loadLinkedBtn = document.getElementById("load-linked");
-    const openLinkedBtn = document.getElementById("open-linked");
-    const linkedTitle = document.getElementById("linked-title");
-
-    const leftKids = document.getElementById("left-kids");
-    const rightKids = document.getElementById("right-kids");
-    const toLinkedBtn = document.getElementById("to-linked");
-    const toCurrentBtn = document.getElementById("to-current");
-
-    let currentData = null;
-    let linkedData = null;
-    let linkedId = null;
-
-    let selectedLeftChildId = null;
-    let selectedRightChildId = null;
-
-
-
-    
+    let adminVerified = false;
+    let currentData = null; // payload from GET /api/lang_words/<version_id>
 
     function getAdminKey() {
       return localStorage.getItem(ADMIN_KEY_STORAGE) || "";
     }
-
     function setAdminKey(key) {
       localStorage.setItem(ADMIN_KEY_STORAGE, key);
     }
-
     function clearAdminKey() {
       localStorage.removeItem(ADMIN_KEY_STORAGE);
     }
-
     function isEditMode() {
-        return adminVerified;
+      return adminVerified;
     }
 
+    async function verifyAdminKey() {
+      const key = getAdminKey();
+      if (!key) { adminVerified = false; return false; }
+
+      const res = await fetch("/api/admin/ping", {
+        headers: { "Accept": "application/json", "X-Admin-Key": key }
+      });
+
+      if (res.ok) { adminVerified = true; return true; }
+
+      clearAdminKey();
+      adminVerified = false;
+      return false;
+    }
 
     function setModeUI() {
-        const edit = isEditMode();
-        modePill.textContent = edit ? "edit" : "view";
-        editUI.style.display = edit ? "" : "none";
-        clearAdminBtn.style.display = edit ? "" : "none";
-        adminBtn.textContent = edit ? "admin verified" : "enter admin key";
-        adminBtn.disabled = edit;
-        exchangeUI.style.display = isEditMode() ? "" : "none";
-
+      const edit = isEditMode();
+      modePill.textContent = edit ? "edit" : "view";
+      editTop.style.display = edit ? "" : "none";
+      clearAdminBtn.style.display = edit ? "" : "none";
+      adminBtn.textContent = edit ? "admin verified" : "enter admin key";
+      adminBtn.disabled = edit;
     }
-
 
     async function apiFetch(url, opts = {}) {
       const res = await fetch(url, opts);
       if (res.status === 401) {
-        // key is wrong or missing on a write call; force view mode
+        // key wrong/expired -> revert
         clearAdminKey();
+        adminVerified = false;
         setModeUI();
       }
       return res;
     }
 
-    async function loadWord() {
-      if (!id) {
-        wordEl.textContent = "missing id";
-        idPill.textContent = "id ?";
+    function openVersion(versionId) {
+      window.location.href = `lang_word.html?id=${encodeURIComponent(versionId)}`;
+    }
+
+    async function loadWordAndVersions() {
+      if (!versionIdParam) {
+        wordEl.textContent = "missing version id";
+        verPill.textContent = "version ?";
+        langPill.textContent = "lang_word ?";
         return null;
       }
 
-      idPill.textContent = `id ${id}`;
+      const res = await apiFetch(`/api/lang_words/${encodeURIComponent(versionIdParam)}`, {
+        headers: { "Accept": "application/json" }
+      });
 
-      const res = await apiFetch(`/api/lang_words/${encodeURIComponent(id)}`);
       if (!res.ok) {
-        wordEl.textContent = "word not found";
+        wordEl.textContent = "word/version not found";
         return null;
       }
+
       const data = await res.json();
+      currentData = data;
+
       wordEl.textContent = data.word;
       document.title = data.word;
-      renderChildren(data.child_words || []);
-      currentData = data;
+
+      langPill.textContent = `lang_word ${data.lang_word_id}`;
+      verPill.textContent = `version ${data.current_version} (id ${data.current_version_id})`;
+
+      renderVersions(data);
       return data;
     }
 
-    async function verifyAdminKey() {
-        const key = getAdminKey();
-        if (!key) {
-            adminVerified = false;
-            return false;
-        }
+    function renderVersions(data) {
+      const versions = Array.isArray(data.versions) ? data.versions : [];
+      versionsContainer.innerHTML = "";
+      emptyEl.style.display = versions.length ? "none" : "";
 
-        const res = await fetch("/api/admin/ping", {
-            headers: { "Accept": "application/json", "X-Admin-Key": key }
-        });
+      // Populate the "add child to version" select (edit mode)
+      addToVersionSelect.innerHTML = "";
+      for (const v of versions) {
+        const opt = document.createElement("option");
+        opt.value = String(v.version_id);
+        opt.textContent = `Version ${v.version} (id ${v.version_id})`;
+        if (v.version_id === data.current_version_id) opt.selected = true;
+        addToVersionSelect.appendChild(opt);
+      }
 
-        if (res.ok) {
-            adminVerified = true;
-            return true;
-        }
+      for (const v of versions) {
+        const panel = document.createElement("div");
+        panel.className = "panel";
 
-        // invalid key
-        clearAdminKey();
-        adminVerified = false;
-        return false;
-    }
+        // header
+        const head = document.createElement("div");
+        head.className = "version-head";
 
+        const left = document.createElement("div");
+        left.className = "version-title";
+        const title = document.createElement("strong");
+        title.textContent = `Version ${v.version}`;
+        const idP = document.createElement("span");
+        idP.className = "pill";
+        idP.textContent = `id ${v.version_id}`;
+        left.appendChild(title);
+        left.appendChild(idP);
 
-    function renderChildren(children) {
-      // view list
-      childList.innerHTML = "";
-      if (!children.length) {
-        emptyEl.style.display = "";
-      } else {
-        emptyEl.style.display = "none";
-        for (const c of children) {
+        const right = document.createElement("div");
+        const openBtn = document.createElement("button");
+        openBtn.type = "button";
+        openBtn.textContent = (v.version_id === data.current_version_id) ? "current" : "open";
+        openBtn.disabled = (v.version_id === data.current_version_id);
+        openBtn.addEventListener("click", () => openVersion(v.version_id));
+        right.appendChild(openBtn);
+
+        head.appendChild(left);
+        head.appendChild(right);
+        panel.appendChild(head);
+
+        // child words (view list)
+        const kids = Array.isArray(v.child_words) ? v.child_words : [];
+        const ul = document.createElement("ul");
+        for (const c of kids) {
           const li = document.createElement("li");
           li.textContent = c.word;
-          childList.appendChild(li);
+          ul.appendChild(li);
         }
-      }
+        if (!kids.length) {
+          const p = document.createElement("p");
+          p.className = "muted";
+          p.style.margin = ".5rem 0 0";
+          p.textContent = "no child words.";
+          panel.appendChild(p);
+        } else {
+          panel.appendChild(ul);
+        }
 
-      // edit list
-      editList.innerHTML = "";
-      if (!isEditMode()) return;
+        // edit UI per version
+        if (isEditMode()) {
+          const editWrap = document.createElement("div");
+          editWrap.style.marginTop = ".75rem";
 
-      for (const c of children) {
-        const row = document.createElement("div");
-        row.className = "row";
+          const label = document.createElement("div");
+          label.className = "muted";
+          label.textContent = "edit child words (this version)";
+          editWrap.appendChild(label);
 
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = c.word;
-
-        const save = document.createElement("button");
-        save.type = "button";
-        save.textContent = "save";
-
-        const del = document.createElement("button");
-        del.type = "button";
-        del.textContent = "delete";
-
-        save.addEventListener("click", async () => {
-          const key = getAdminKey();
-          const next = input.value.trim();
-          if (!next) return;
-
-          const res = await apiFetch(`/api/child_words/${c.id}`, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-              "X-Admin-Key": key
-            },
-            body: JSON.stringify({ word: next })
-          });
-
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            alert(err.error || `save failed (${res.status})`);
-            return;
-          }
-          await refresh();
-        });
-
-        del.addEventListener("click", async () => {
-          if (!confirm("delete this child word?")) return;
-
-          const key = getAdminKey();
-          const res = await apiFetch(`/api/child_words/${c.id}`, {
-            method: "DELETE",
-            headers: { "Accept": "application/json", "X-Admin-Key": key }
-          });
-
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            alert(err.error || `delete failed (${res.status})`);
-            return;
-          }
-          await refresh();
-        });
-
-        row.appendChild(input);
-        row.appendChild(save);
-        row.appendChild(del);
-        editList.appendChild(row);
-      }
-    }
-
-    function renderExchangeLists() {
-        // Only if we have linked loaded
-        leftKids.innerHTML = "";
-        rightKids.innerHTML = "";
-        selectedLeftChildId = null;
-        selectedRightChildId = null;
-
-        const mkRow = (child, side) => {
+          for (const c of kids) {
             const row = document.createElement("div");
-            row.className = "row";
+            row.className = "child-edit-row";
 
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.textContent = child.word;
-            btn.style.width = "100%";
-            btn.style.textAlign = "left";
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = c.word;
 
-            btn.addEventListener("click", () => {
-            if (side === "left") {
-                selectedLeftChildId = child.id;
-                selectedRightChildId = null;
-            } else {
-                selectedRightChildId = child.id;
-                selectedLeftChildId = null;
-            }
-            // re-render to reflect selection
-            renderExchangeLists();
+            const save = document.createElement("button");
+            save.type = "button";
+            save.textContent = "save";
+
+            const del = document.createElement("button");
+            del.type = "button";
+            del.textContent = "delete";
+
+            save.addEventListener("click", async () => {
+              const next = input.value.trim();
+              if (!next) return;
+
+              const key = getAdminKey();
+              const r = await apiFetch(`/api/child_words/${c.id}`, {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Accept": "application/json",
+                  "X-Admin-Key": key
+                },
+                body: JSON.stringify({ word: next })
+              });
+
+              if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                alert(err.error || `save failed (${r.status})`);
+                return;
+              }
+              await refresh();
             });
 
-            // simple selection styling
-            const selected = (side === "left" && child.id === selectedLeftChildId) ||
-                            (side === "right" && child.id === selectedRightChildId);
-            if (selected) {
-            btn.style.borderWidth = "2px";
-            }
+            del.addEventListener("click", async () => {
+              if (!confirm("delete this child word?")) return;
 
-            row.appendChild(btn);
-            return row;
-        };
+              const key = getAdminKey();
+              const r = await apiFetch(`/api/child_words/${c.id}`, {
+                method: "DELETE",
+                headers: { "Accept": "application/json", "X-Admin-Key": key }
+              });
 
-        const left = (currentData?.child_words || []);
-        for (const c of left) leftKids.appendChild(mkRow(c, "left"));
+              if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                alert(err.error || `delete failed (${r.status})`);
+                return;
+              }
+              await refresh();
+            });
 
-        const right = (linkedData?.child_words || []);
-        for (const c of right) rightKids.appendChild(mkRow(c, "right"));
+            row.appendChild(input);
+            row.appendChild(save);
+            row.appendChild(del);
+            editWrap.appendChild(row);
+          }
+
+          panel.appendChild(editWrap);
         }
 
-        async function loadLinkedWord(targetId) {
-        const res = await apiFetch(`/api/lang_words/${encodeURIComponent(targetId)}`);
-        if (!res.ok) {
-            linkedData = null;
-            linkedTitle.textContent = "linked word not found";
-            renderExchangeLists();
-            return false;
-        }
-        linkedData = await res.json();
-        linkedTitle.textContent = `linked: ${linkedData.word} (id ${linkedData.id})`;
-        renderExchangeLists();
-        return true;
-        }
-
-
-    async function refresh() {
-      const data = await loadWord();
-      if (isEditMode() && linkedData?.id) {
-        await loadLinkedWord(linkedData.id);
-        }
-
-      if (!data) return;
-      // if admin key exists, keep edit list in sync
-      if (isEditMode()) renderChildren(data.child_words || []);
+        versionsContainer.appendChild(panel);
+      }
     }
 
-    adminBtn.addEventListener("click", async () => {
-        const key = prompt("Admin key (stored locally):", getAdminKey() || "");
-        if (!key || !key.trim()) return;
+    async function refresh() {
+      // keep verified state; just reload data + render
+      await loadWordAndVersions();
+      setModeUI(); // ensures edit sections show/hide correctly
+      if (currentData) renderVersions(currentData);
+    }
 
-        setAdminKey(key.trim());
-
-        const ok = await verifyAdminKey();
-        setModeUI();
-        await refresh();
-
-        if (!ok) alert("Admin key invalid.");
-    });
-
-
-    clearAdminBtn.addEventListener("click", () => {
-      clearAdminKey();
-      setModeUI();
-      refresh();
-    });
-
-    addChildBtn.addEventListener("click", async () => {
+    // Create new version (admin)
+    createVersionBtn.addEventListener("click", async () => {
+      if (!currentData) return;
       const key = getAdminKey();
       if (!key) return;
 
-      const w = newChildInput.value.trim();
-      if (!w) return;
+      createVersionMsg.textContent = "";
 
-      const res = await apiFetch(`/api/lang_words/${encodeURIComponent(id)}/child_words`, {
+      const r = await apiFetch(`/api/lang_words/${currentData.lang_word_id}/versions`, {
+        method: "POST",
+        headers: { "Accept": "application/json", "X-Admin-Key": key }
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        createVersionMsg.textContent = err.error || `create failed (${r.status})`;
+        return;
+      }
+
+      const out = await r.json();
+      createVersionMsg.textContent = `created version ${out.version} (id ${out.version_id})`;
+      // switch page to new version immediately:
+      openVersion(out.version_id);
+    });
+
+    // Add child to selected version
+    addChildBtn.addEventListener("click", async () => {
+      if (!isEditMode()) return;
+      const key = getAdminKey();
+      if (!key) return;
+
+      const word = newChildInput.value.trim();
+      if (!word) return;
+
+      const versionId = Number(addToVersionSelect.value);
+      if (!Number.isInteger(versionId) || versionId <= 0) return;
+
+      const r = await apiFetch(`/api/lang_word_versions/${encodeURIComponent(versionId)}/child_words`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
           "X-Admin-Key": key
         },
-        body: JSON.stringify({ word: w })
+        body: JSON.stringify({ word })
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        alert(err.error || `add failed (${res.status})`);
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        alert(err.error || `add failed (${r.status})`);
         return;
       }
 
@@ -423,126 +394,40 @@
       await refresh();
     });
 
-    createParentBtn.addEventListener("click", async () => {
-        const key = getAdminKey();
-        if (!key) return;
-
-        const w = newParentInput.value.trim();
-        if (!w) return;
-
-        const res = await apiFetch(`/api/lang_words`, {
-            method: "POST",
-            headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "X-Admin-Key": key
-            },
-            body: JSON.stringify({ word: w })
-        });
-
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            alert(err.error || `create failed (${res.status})`);
-            return;
-        }
-
-        const data = await res.json();
-        newParentInput.value = "";
-
-        // auto-link to the new word and load it for exchange
-        linkedId = data.id;
-        linkedIdInput.value = String(linkedId);
-        await loadLinkedWord(linkedId);
-    });
-
-    newParentInput.addEventListener("keydown", (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-            e.preventDefault();
-            createParentBtn.click();
-        }
-    });
-
-    loadLinkedBtn.addEventListener("click", async () => {
-        const v = (linkedIdInput.value || "").trim();
-        const n = Number(v);
-        if (!Number.isInteger(n) || n <= 0) return;
-
-        linkedId = n;
-        await loadLinkedWord(linkedId);
-    });
-
-    openLinkedBtn.addEventListener("click", () => {
-        const v = (linkedIdInput.value || "").trim();
-        const n = Number(v);
-        if (!Number.isInteger(n) || n <= 0) return;
-        window.location.href = `lang_word.html?id=${encodeURIComponent(n)}`;
-    });
-
-
-    async function moveChild(childId, targetParentId) {
-        const key = getAdminKey();
-        const res = await apiFetch(`/api/child_words/${childId}/move`, {
-            method: "PUT",
-            headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "X-Admin-Key": key
-            },
-            body: JSON.stringify({ lang_word_id: targetParentId })
-        });
-
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            alert(err.error || `move failed (${res.status})`);
-            return false;
-        }
-        return true;
-        }
-
-    toLinkedBtn.addEventListener("click", async () => {
-        if (!linkedData) return;
-        if (!selectedLeftChildId) return;
-
-        const ok = await moveChild(selectedLeftChildId, linkedData.id);
-        if (!ok) return;
-
-        await refresh();                  // reload current word
-        await loadLinkedWord(linkedData.id); // reload linked word
-    });
-
-    toCurrentBtn.addEventListener("click", async () => {
-        if (!linkedData) return;
-        if (!selectedRightChildId) return;
-
-        const ok = await moveChild(selectedRightChildId, Number(id));
-        if (!ok) return;
-
-        await refresh();
-        await loadLinkedWord(linkedData.id);
-    });
-
-
-
-
-
+    // Cmd/Ctrl+Enter in add-child input triggers add
     newChildInput.addEventListener("keydown", (e) => {
-        const isCmdEnter = e.metaKey && e.key === "Enter";
-        const isCtrlEnter = e.ctrlKey && e.key === "Enter";
-
-        if (isCmdEnter || isCtrlEnter) {
-            e.preventDefault();
-            addChildBtn.click();
-        }
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        addChildBtn.click();
+      }
     });
 
+    // Admin buttons
+    adminBtn.addEventListener("click", async () => {
+      const key = prompt("Admin key (stored locally):", getAdminKey() || "");
+      if (!key || !key.trim()) return;
+
+      setAdminKey(key.trim());
+      const ok = await verifyAdminKey();
+      setModeUI();
+      await refresh();
+
+      if (!ok) alert("Admin key invalid.");
+    });
+
+    clearAdminBtn.addEventListener("click", async () => {
+      clearAdminKey();
+      adminVerified = false;
+      setModeUI();
+      await refresh();
+    });
 
     // boot
     (async () => {
-        await verifyAdminKey();
-        setModeUI();
-        await loadWord();
+      await verifyAdminKey();
+      setModeUI();
+      await loadWordAndVersions();
     })();
-
   </script>
 </body>
 </html>
