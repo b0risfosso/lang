@@ -53,7 +53,7 @@
       top: 0;
       right: 0;
       height: 100%;
-      width: min(520px, 92vw);
+      width: min(560px, 94vw);
       background: Canvas;
       border-left: 1px solid color-mix(in oklab, currentColor 40%, transparent);
       box-shadow: 0 0 30px color-mix(in oklab, currentColor 20%, transparent);
@@ -82,11 +82,15 @@
       align-items: start;
       margin-top: .75rem;
     }
-    .kidbtn {
-      width: 100%;
-      text-align: left;
-    }
+    .kidbtn { width: 100%; text-align: left; }
     .kidbtn.selected { border-width: 2px; }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: .75rem;
+      margin-top: .75rem;
+    }
   </style>
 </head>
 <body>
@@ -102,8 +106,7 @@
       <button id="admin-btn" type="button">enter admin key</button>
       <button id="clear-admin-btn" type="button" style="display:none;">clear key</button>
 
-      <!-- NEW: create parent + exchange -->
-      <button id="exchange-open" type="button" style="display:none;">new parent + exchange</button>
+      <button id="exchange-open" type="button" style="display:none;">exchange</button>
     </div>
 
     <section class="panel">
@@ -134,21 +137,35 @@
   <div id="overlay" aria-hidden="true"></div>
   <aside id="sidepanel" aria-label="exchange panel">
     <header>
-      <strong>new parent + exchange</strong>
+      <strong>exchange child words</strong>
       <button id="exchange-close" type="button">close</button>
     </header>
     <div class="content">
       <p class="muted" style="margin-top:0;">
-        Creates a new <em>parent lang_word</em> (with version 1) and lets you move child words between the
-        <strong>current version</strong> and the new word’s <strong>version 1</strong>.
+        Move child words between the <strong>current version</strong> (left) and a <strong>selected</strong> word/version (right).
       </p>
 
-      <div class="row">
-        <input id="new-parent-word" type="text" placeholder="new parent lang word" />
-        <button id="create-parent" type="button">create</button>
+      <div class="panel" style="margin-top:0;">
+        <h2>select existing</h2>
+        <div class="row">
+          <select id="existing-words"></select>
+          <button id="load-existing" type="button">load</button>
+          <button id="open-selected" type="button">open</button>
+        </div>
+        <div class="row">
+          <select id="existing-versions"></select>
+        </div>
+        <div class="row muted" id="selected-status"></div>
       </div>
 
-      <div class="row muted" id="exchange-status"></div>
+      <div class="panel">
+        <h2>or create new parent</h2>
+        <div class="row">
+          <input id="new-parent-word" type="text" placeholder="new parent lang word" />
+          <button id="create-parent" type="button">create</button>
+        </div>
+        <div class="row muted" id="create-status"></div>
+      </div>
 
       <div class="cols">
         <div>
@@ -157,12 +174,12 @@
         </div>
 
         <div style="display:flex; flex-direction:column; gap:.5rem; margin-top:1.5rem;">
-          <button id="to-new" type="button">→</button>
-          <button id="to-current" type="button">←</button>
+          <button id="to-right" type="button">→</button>
+          <button id="to-left" type="button">←</button>
         </div>
 
         <div>
-          <div class="muted" style="margin-bottom:.25rem;">new parent (version 1)</div>
+          <div class="muted" style="margin-bottom:.25rem;">selected (right)</div>
           <div id="right-kids"></div>
         </div>
       </div>
@@ -199,20 +216,30 @@
     const overlay = document.getElementById("overlay");
     const sidepanel = document.getElementById("sidepanel");
     const exchangeCloseBtn = document.getElementById("exchange-close");
+
+    const existingWordsSelect = document.getElementById("existing-words");
+    const loadExistingBtn = document.getElementById("load-existing");
+    const openSelectedBtn = document.getElementById("open-selected");
+    const existingVersionsSelect = document.getElementById("existing-versions");
+    const selectedStatus = document.getElementById("selected-status");
+
     const newParentInput = document.getElementById("new-parent-word");
     const createParentBtn = document.getElementById("create-parent");
-    const exchangeStatus = document.getElementById("exchange-status");
+    const createStatus = document.getElementById("create-status");
+
     const leftKids = document.getElementById("left-kids");
     const rightKids = document.getElementById("right-kids");
-    const toNewBtn = document.getElementById("to-new");
-    const toCurrentBtn = document.getElementById("to-current");
+    const toRightBtn = document.getElementById("to-right");
+    const toLeftBtn = document.getElementById("to-left");
 
     let adminVerified = false;
     let currentData = null; // payload from GET /api/lang_words/<version_id>
 
-    // exchange state
-    let newParent = null; // { lang_word_id, version_id, word }
-    let newParentData = null; // payload from GET /api/lang_words/<newParent.version_id>
+    // exchange state (right side)
+    let rightSelected = null; // { word, lang_word_id, version_id, version }
+    let rightData = null;     // payload from GET /api/lang_words/<rightSelectedVersionId>
+    let rightVersionId = null;
+
     let selectedLeftChildId = null;
     let selectedRightChildId = null;
 
@@ -261,7 +288,6 @@
         clearAdminKey();
         adminVerified = false;
         setModeUI();
-        // also close exchange if open
         closeExchangePanel();
       }
       return res;
@@ -274,14 +300,19 @@
     function closeExchangePanel() {
       overlay.style.display = "none";
       sidepanel.classList.remove("open");
-      exchangeStatus.textContent = "";
-      newParent = null;
-      newParentData = null;
+
+      selectedStatus.textContent = "";
+      createStatus.textContent = "";
+
+      rightSelected = null;
+      rightData = null;
+      rightVersionId = null;
+
       selectedLeftChildId = null;
       selectedRightChildId = null;
+
       leftKids.innerHTML = "";
       rightKids.innerHTML = "";
-      newParentInput.value = "";
     }
 
     async function loadWordAndVersions(versionId) {
@@ -469,8 +500,8 @@
       setModeUI();
       if (currentData) renderVersions(currentData);
 
-      // If exchange panel is open and we have a created parent, refresh both sides
-      if (sidepanel.classList.contains("open") && newParent?.version_id) {
+      // If exchange open, refresh sides
+      if (sidepanel.classList.contains("open")) {
         await refreshExchangeSides();
       }
     }
@@ -566,14 +597,95 @@
       if (!isEditMode()) return;
       if (!currentData) await loadCurrent();
       openExchangePanel();
-      await refreshExchangeSides(); // render current side even before creating new parent
-      newParentInput.focus();
+      await initExistingWordsSelect();
+      await refreshExchangeSides();
     });
 
     overlay.addEventListener("click", () => closeExchangePanel());
     exchangeCloseBtn.addEventListener("click", () => closeExchangePanel());
 
-    // Create new parent lang_word (admin), then enable exchange
+    async function initExistingWordsSelect() {
+      existingWordsSelect.innerHTML = "";
+      existingVersionsSelect.innerHTML = "";
+      selectedStatus.textContent = "";
+
+      const res = await apiFetch(`/api/lang_words`, { headers: { "Accept": "application/json" } });
+      if (!res.ok) {
+        selectedStatus.textContent = "failed to load words.";
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      const words = Array.isArray(data.words) ? data.words : [];
+
+      // Populate with latest version_id per word, but user can pick other versions after load
+      for (const w of words) {
+        const opt = document.createElement("option");
+        opt.value = String(w.version_id);
+        opt.textContent = `${w.word} (latest v${w.version}, id ${w.version_id})`;
+        existingWordsSelect.appendChild(opt);
+      }
+
+      // Preselect something not equal to current version if possible
+      const curVid = Number(currentData?.current_version_id);
+      const alt = words.find(x => x.version_id !== curVid);
+      if (alt) existingWordsSelect.value = String(alt.version_id);
+    }
+
+    async function loadRightByVersionId(versionId) {
+      rightVersionId = Number(versionId);
+      if (!Number.isInteger(rightVersionId) || rightVersionId <= 0) return false;
+
+      const d = await loadWordAndVersions(rightVersionId);
+      if (!d) {
+        rightSelected = null;
+        rightData = null;
+        existingVersionsSelect.innerHTML = "";
+        selectedStatus.textContent = "selected word/version not found.";
+        renderExchangeLists();
+        return false;
+      }
+
+      rightData = d;
+      // Choose the page's current_version_id as the selected version by default (matching the loaded versionId if present)
+      // If versionId isn't exactly current_version_id (it should be), keep the loaded id.
+      const cur = d.current_version_id;
+      rightVersionId = Number(versionId) || cur;
+
+      selectedStatus.textContent = `selected: "${d.word}" (lang_word ${d.lang_word_id})`;
+
+      // Populate versions dropdown
+      existingVersionsSelect.innerHTML = "";
+      for (const v of (d.versions || [])) {
+        const opt = document.createElement("option");
+        opt.value = String(v.version_id);
+        opt.textContent = `Version ${v.version} (id ${v.version_id})`;
+        if (v.version_id === rightVersionId) opt.selected = true;
+        existingVersionsSelect.appendChild(opt);
+      }
+
+      renderExchangeLists();
+      return true;
+    }
+
+    loadExistingBtn.addEventListener("click", async () => {
+      const vid = existingWordsSelect.value;
+      await loadRightByVersionId(vid);
+      // sync dropdown to selected version id
+      existingVersionsSelect.value = String(rightVersionId);
+    });
+
+    existingVersionsSelect.addEventListener("change", async () => {
+      const vid = existingVersionsSelect.value;
+      // load by version id so rightData + current_version_id stay coherent
+      await loadRightByVersionId(vid);
+    });
+
+    openSelectedBtn.addEventListener("click", () => {
+      if (!rightVersionId) return;
+      openVersion(rightVersionId);
+    });
+
+    // Create new parent lang_word (admin), then set as right side selection
     createParentBtn.addEventListener("click", async () => {
       if (!isEditMode()) return;
       const key = getAdminKey();
@@ -582,7 +694,7 @@
       const w = newParentInput.value.trim();
       if (!w) return;
 
-      exchangeStatus.textContent = "";
+      createStatus.textContent = "";
 
       // POST /api/lang_words -> { ok, lang_word_id, version_id, word }
       const r = await apiFetch(`/api/lang_words`, {
@@ -597,18 +709,23 @@
 
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
-        exchangeStatus.textContent = err.error || `create failed (${r.status})`;
+        createStatus.textContent = err.error || `create failed (${r.status})`;
         return;
       }
 
-      newParent = await r.json();
+      const out = await r.json();
       newParentInput.value = "";
-      exchangeStatus.textContent = `created "${newParent.word}" (version id ${newParent.version_id}). select a child and move → / ←`;
+      createStatus.textContent = `created "${out.word}" (version id ${out.version_id}).`;
 
-      await refreshExchangeSides();
+      // Make it the right side selection
+      await loadRightByVersionId(out.version_id);
+
+      // refresh the existing words dropdown so the new word appears
+      await initExistingWordsSelect();
+      existingWordsSelect.value = String(out.version_id);
+      existingVersionsSelect.value = String(out.version_id);
     });
 
-    // Cmd/Ctrl+Enter in new parent input triggers create
     newParentInput.addEventListener("keydown", (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
@@ -622,9 +739,9 @@
       return v?.child_words || [];
     }
 
-    function getNewParentVersionChildren() {
-      if (!newParentData) return [];
-      const v = (newParentData.versions || []).find(x => x.version_id === newParentData.current_version_id);
+    function getRightVersionChildren() {
+      if (!rightData || !rightVersionId) return [];
+      const v = (rightData.versions || []).find(x => x.version_id === rightVersionId);
       return v?.child_words || [];
     }
 
@@ -666,35 +783,32 @@
     }
 
     function renderExchangeLists() {
-      const left = getCurrentVersionChildren();
-      renderKidsList(leftKids, left, "left");
+      renderKidsList(leftKids, getCurrentVersionChildren(), "left");
 
-      if (!newParentData) {
+      if (!rightVersionId) {
         rightKids.innerHTML = "";
         const p = document.createElement("p");
         p.className = "muted";
         p.style.margin = "0";
-        p.textContent = "create a new parent to exchange.";
+        p.textContent = "select or create a word to exchange with.";
         rightKids.appendChild(p);
       } else {
-        const right = getNewParentVersionChildren();
-        renderKidsList(rightKids, right, "right");
+        renderKidsList(rightKids, getRightVersionChildren(), "right");
       }
     }
 
     async function refreshExchangeSides() {
-      // Refresh current (already in memory) by reloading current page data
+      // Refresh current side
       await loadCurrent();
 
-      // Refresh new parent, if present
-      if (newParent?.version_id) {
-        const d = await loadWordAndVersions(newParent.version_id);
-        newParentData = d;
+      // Refresh right side if selected
+      if (rightVersionId) {
+        await loadRightByVersionId(rightVersionId);
       } else {
-        newParentData = null;
+        renderExchangeLists();
       }
 
-      // Clear selection if the item moved away etc.
+      // clear selection to prevent “stale” clicks after refresh
       selectedLeftChildId = null;
       selectedRightChildId = null;
       renderExchangeLists();
@@ -720,22 +834,22 @@
       return true;
     }
 
-    toNewBtn.addEventListener("click", async () => {
-      if (!newParentData) return;
+    toRightBtn.addEventListener("click", async () => {
+      if (!rightVersionId) return;
       if (!selectedLeftChildId) return;
 
-      const targetVersionId = newParentData.current_version_id; // version 1 id for new parent
+      const targetVersionId = rightVersionId;
       const ok = await moveChild(selectedLeftChildId, targetVersionId);
       if (!ok) return;
 
       await refreshExchangeSides();
     });
 
-    toCurrentBtn.addEventListener("click", async () => {
-      if (!newParentData) return;
+    toLeftBtn.addEventListener("click", async () => {
+      if (!rightVersionId) return;
       if (!selectedRightChildId) return;
 
-      const targetVersionId = currentData.current_version_id; // current page version
+      const targetVersionId = currentData.current_version_id;
       const ok = await moveChild(selectedRightChildId, targetVersionId);
       if (!ok) return;
 
