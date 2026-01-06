@@ -16,11 +16,51 @@
     .pill { border: 1px solid currentColor; border-radius: 999px; padding: .15rem .6rem; font-size: .9rem; display:inline-block; margin-right:.4rem; margin-top:.25rem; }
     ul { padding-left: 1.25rem; margin: .5rem 0 0; }
     li { margin: .35rem 0; }
+    button {
+      border: 1px solid currentColor; background: transparent; color: inherit;
+      border-radius: .6rem; padding: .45rem .7rem; cursor: pointer;
+      white-space: nowrap;
+    }
+    input[type="text"]{
+      width: 100%; padding: .5rem .6rem; border-radius: .5rem;
+      border: 1px solid currentColor; background: transparent; color: inherit;
+    }
+    button:focus, input:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+    .topbar { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; justify-content:space-between; }
+    .row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    .childgrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+      gap: .5rem .6rem;
+      margin-top: .5rem;
+    }
+    .childitem {
+      border: 1px solid color-mix(in oklab, currentColor 25%, transparent);
+      border-radius: .75rem;
+      padding: .45rem .55rem;
+      display:flex;
+      gap:.5rem;
+      align-items:center;
+    }
+    .sentitem {
+      border: 1px solid color-mix(in oklab, currentColor 25%, transparent);
+      border-radius: .9rem;
+      padding: .75rem .85rem;
+      margin:.6rem 0;
+    }
+    .sentitem .meta { opacity:.75; font-size:.9rem; margin-top:.35rem; }
   </style>
 </head>
 <body>
   <main>
-    <p><a href="lang_sentences.html">← back to sentences</a></p>
+    <div class="topbar">
+      <p style="margin:0;"><a href="lang_sentences.html">← back to sentences</a></p>
+      <div class="row">
+        <span class="pill" id="mode-pill">view</span>
+        <button id="admin-btn" type="button">enter admin key</button>
+        <button id="clear-admin-btn" type="button" style="display:none;">clear key</button>
+      </div>
+    </div>
 
     <section class="panel">
       <h2>sentence</h2>
@@ -33,16 +73,102 @@
       <h2>words</h2>
       <div id="words">…</div>
     </section>
+
+    <section class="panel">
+      <h2>child word selection</h2>
+      <div class="muted" id="child-meta" style="margin-top:0;">select one or more child words to filter child sentences.</div>
+      <div class="childgrid" id="child-words"></div>
+      <div class="row" style="margin-top:.6rem;">
+        <span class="pill" id="child-filter-pill">filter: none</span>
+        <button id="clear-child-filter" type="button">clear selection</button>
+      </div>
+    </section>
+
+    <!-- Create child sentence panel (edit mode only) -->
+    <section class="panel" id="create-child-panel" style="display:none;">
+      <h2>create child sentence</h2>
+      <p class="muted" style="margin-top:0;">Uses selected child words above.</p>
+      <div class="row" style="margin-top:.5rem;">
+        <input id="child-sentence-input" type="text" placeholder="enter child sentence text…" />
+        <button id="create-child-sentence" type="button">create</button>
+      </div>
+      <div class="muted" id="create-child-msg" style="margin-top:.5rem;"></div>
+    </section>
+
+    <section class="panel">
+      <h2>child sentences</h2>
+      <div class="muted" id="child-sent-meta" style="margin-top:0;">…</div>
+      <div id="child-sentences"></div>
+    </section>
   </main>
 
   <script>
+    const ADMIN_KEY_STORAGE = "lang_admin_key";
+
     const params = new URLSearchParams(location.search);
-    const id = params.get("id");
+    const sentenceId = params.get("id");
+
+    const adminBtn = document.getElementById("admin-btn");
+    const clearAdminBtn = document.getElementById("clear-admin-btn");
+    const modePill = document.getElementById("mode-pill");
 
     const metaEl = document.getElementById("meta");
     const sentenceEl = document.getElementById("sentence");
     const idsEl = document.getElementById("ids");
     const wordsEl = document.getElementById("words");
+
+    const childMeta = document.getElementById("child-meta");
+    const childWordsEl = document.getElementById("child-words");
+    const childFilterPill = document.getElementById("child-filter-pill");
+    const clearChildFilterBtn = document.getElementById("clear-child-filter");
+
+    const createChildPanel = document.getElementById("create-child-panel");
+    const childSentenceInput = document.getElementById("child-sentence-input");
+    const createChildSentenceBtn = document.getElementById("create-child-sentence");
+    const createChildMsg = document.getElementById("create-child-msg");
+
+    const childSentMeta = document.getElementById("child-sent-meta");
+    const childSentencesEl = document.getElementById("child-sentences");
+
+    let adminVerified = false;
+
+    let sentenceData = null;           // GET /api/lang_sentences/<id>
+    let allChildWords = [];            // [{id, word, link, parentWord, parentLangWordId}]
+    let selectedChildIds = new Set();  // child_word_id ints
+    let childSentences = [];           // GET /api/lang_sentences/<id>/child_sentences
+
+    function getAdminKey() {
+      return localStorage.getItem(ADMIN_KEY_STORAGE) || "";
+    }
+    function setAdminKey(key) {
+      localStorage.setItem(ADMIN_KEY_STORAGE, key);
+    }
+    function clearAdminKey() {
+      localStorage.removeItem(ADMIN_KEY_STORAGE);
+    }
+
+    async function verifyAdminKey() {
+      const key = getAdminKey();
+      if (!key) { adminVerified = false; return false; }
+
+      const res = await fetch("/api/admin/ping", {
+        headers: { "Accept": "application/json", "X-Admin-Key": key }
+      });
+      if (res.ok) { adminVerified = true; return true; }
+
+      clearAdminKey();
+      adminVerified = false;
+      return false;
+    }
+
+    function setModeUI() {
+      modePill.textContent = adminVerified ? "edit" : "view";
+      createChildPanel.style.display = adminVerified ? "" : "none";
+
+      adminBtn.textContent = adminVerified ? "admin verified" : "enter admin key";
+      adminBtn.disabled = adminVerified;
+      clearAdminBtn.style.display = adminVerified ? "" : "none";
+    }
 
     function openWordPage(versionId) {
       const url = `lang_word.html?id=${encodeURIComponent(versionId)}`;
@@ -61,31 +187,33 @@
       return document.createTextNode(c.word);
     }
 
-    async function load() {
-      if (!id) {
+    async function loadSentence() {
+      if (!sentenceId) {
         metaEl.textContent = "missing id";
         sentenceEl.textContent = "";
         wordsEl.textContent = "";
-        return;
+        return null;
       }
 
-      const r = await fetch(`/api/lang_sentences/${encodeURIComponent(id)}`, { headers: { "Accept": "application/json" }});
+      const r = await fetch(`/api/lang_sentences/${encodeURIComponent(sentenceId)}`, {
+        headers: { "Accept": "application/json" }
+      });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         metaEl.textContent = err.error || `not found (${r.status})`;
         sentenceEl.textContent = "";
         wordsEl.textContent = "";
-        return;
+        return null;
       }
 
-      const data = await r.json().catch(() => ({}));
-      document.title = `sentence ${data.id}`;
+      sentenceData = await r.json().catch(() => ({}));
+      document.title = `sentence ${sentenceData.id}`;
 
-      metaEl.textContent = `id ${data.id}`;
-      sentenceEl.textContent = data.sentence || "";
+      metaEl.textContent = `id ${sentenceData.id}`;
+      sentenceEl.textContent = sentenceData.sentence || "";
 
       idsEl.innerHTML = "";
-      const ids = Array.isArray(data.lang_word_ids) ? data.lang_word_ids : [];
+      const ids = Array.isArray(sentenceData.lang_word_ids) ? sentenceData.lang_word_ids : [];
       ids.forEach(x => {
         const p = document.createElement("span");
         p.className = "pill";
@@ -93,60 +221,240 @@
         idsEl.appendChild(p);
       });
 
+      // render words + children, and build child word selectable list
       wordsEl.innerHTML = "";
-      const words = Array.isArray(data.words) ? data.words : [];
+      allChildWords = [];
+
+      const words = Array.isArray(sentenceData.words) ? sentenceData.words : [];
       if (!words.length) {
         wordsEl.innerHTML = `<div class="muted">no words found for this sentence.</div>`;
+      } else {
+        for (const w of words) {
+          const wrap = document.createElement("div");
+          wrap.className = "panel";
+          wrap.style.marginTop = ".75rem";
+
+          const title = document.createElement("div");
+          title.innerHTML = `<strong>${w.word}</strong> <span class="muted">(lang_word ${w.lang_word_id}, v${w.version})</span>`;
+
+          const openBtn = document.createElement("button");
+          openBtn.type = "button";
+          openBtn.textContent = "open";
+          openBtn.style.marginLeft = ".6rem";
+          openBtn.addEventListener("click", () => openWordPage(w.version_id));
+
+          const header = document.createElement("div");
+          header.style.display = "flex";
+          header.style.alignItems = "center";
+          header.style.justifyContent = "space-between";
+          header.style.gap = ".75rem";
+
+          header.appendChild(title);
+          header.appendChild(openBtn);
+          wrap.appendChild(header);
+
+          const kids = Array.isArray(w.child_words) ? w.child_words : [];
+          if (!kids.length) {
+            const p = document.createElement("p");
+            p.className = "muted";
+            p.style.margin = ".5rem 0 0";
+            p.textContent = "no child words.";
+            wrap.appendChild(p);
+          } else {
+            const ul = document.createElement("ul");
+            kids.forEach(c => {
+              const li = document.createElement("li");
+              li.appendChild(childNode(c));
+              ul.appendChild(li);
+
+              allChildWords.push({
+                id: c.id,
+                word: c.word,
+                link: c.link || "",
+                parentWord: w.word,
+                parentLangWordId: w.lang_word_id
+              });
+            });
+            wrap.appendChild(ul);
+          }
+
+          wordsEl.appendChild(wrap);
+        }
+      }
+
+      return sentenceData;
+    }
+
+    function renderChildSelector() {
+      childWordsEl.innerHTML = "";
+
+      if (!allChildWords.length) {
+        childMeta.textContent = "no child words available for selection.";
         return;
       }
 
-      for (const w of words) {
-        const wrap = document.createElement("div");
-        wrap.className = "panel";
-        wrap.style.marginTop = ".75rem";
+      childMeta.textContent = `${allChildWords.length} child words available.`;
+      const sorted = [...allChildWords].sort((a,b) => {
+        const pa = String(a.parentWord).localeCompare(String(b.parentWord));
+        if (pa !== 0) return pa;
+        return String(a.word).localeCompare(String(b.word));
+      });
 
-        const title = document.createElement("div");
-        title.innerHTML = `<strong>${w.word}</strong> <span class="muted">(lang_word ${w.lang_word_id}, v${w.version})</span>`;
+      for (const c of sorted) {
+        const label = document.createElement("label");
+        label.className = "childitem";
 
-        const openBtn = document.createElement("button");
-        openBtn.type = "button";
-        openBtn.textContent = "open";
-        openBtn.style.marginLeft = ".6rem";
-        openBtn.addEventListener("click", () => openWordPage(w.version_id));
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = selectedChildIds.has(c.id);
+        cb.addEventListener("change", async () => {
+          if (cb.checked) selectedChildIds.add(c.id);
+          else selectedChildIds.delete(c.id);
+          await loadChildSentences();
+          renderChildSentences();
+          updateChildFilterPill();
+        });
 
-        const header = document.createElement("div");
-        header.style.display = "flex";
-        header.style.alignItems = "center";
-        header.style.justifyContent = "space-between";
-        header.style.gap = ".75rem";
+        const span = document.createElement("span");
+        span.textContent = `${c.parentWord}: ${c.word} (id ${c.id})`;
 
-        header.appendChild(title);
-        header.appendChild(openBtn);
+        label.appendChild(cb);
+        label.appendChild(span);
+        childWordsEl.appendChild(label);
+      }
 
-        wrap.appendChild(header);
+      updateChildFilterPill();
+    }
 
-        const kids = Array.isArray(w.child_words) ? w.child_words : [];
-        if (!kids.length) {
-          const p = document.createElement("p");
-          p.className = "muted";
-          p.style.margin = ".5rem 0 0";
-          p.textContent = "no child words.";
-          wrap.appendChild(p);
-        } else {
-          const ul = document.createElement("ul");
-          kids.forEach(c => {
-            const li = document.createElement("li");
-            li.appendChild(childNode(c));
-            ul.appendChild(li);
-          });
-          wrap.appendChild(ul);
-        }
+    function updateChildFilterPill() {
+      const txt = selectedChildIds.size ? Array.from(selectedChildIds).join(", ") : "none";
+      childFilterPill.textContent = `filter: ${txt}`;
+    }
 
-        wordsEl.appendChild(wrap);
+    async function loadChildSentences() {
+      if (!sentenceId) return;
+
+      const ids = Array.from(selectedChildIds);
+      const qs = ids.length ? `?child_word_ids=${encodeURIComponent(ids.join(","))}` : "";
+      const r = await fetch(`/api/lang_sentences/${encodeURIComponent(sentenceId)}/child_sentences${qs}`, {
+        headers: { "Accept": "application/json" }
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        childSentMeta.textContent = err.error || `failed (${r.status})`;
+        childSentences = [];
+        return;
+      }
+
+      const data = await r.json().catch(() => ({}));
+      childSentences = Array.isArray(data.child_sentences) ? data.child_sentences : [];
+    }
+
+    function renderChildSentences() {
+      childSentencesEl.innerHTML = "";
+      childSentMeta.textContent = `${childSentences.length} child sentence(s) shown`;
+
+      if (!childSentences.length) {
+        const p = document.createElement("p");
+        p.className = "muted";
+        p.style.margin = "0";
+        p.textContent = "no child sentences.";
+        childSentencesEl.appendChild(p);
+        return;
+      }
+
+      for (const s of childSentences) {
+        const div = document.createElement("div");
+        div.className = "sentitem";
+
+        const text = document.createElement("div");
+        text.textContent = s.sentence;
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = `child words: ${Array.isArray(s.child_word_ids) ? s.child_word_ids.join(", ") : ""}`;
+
+        div.appendChild(text);
+        div.appendChild(meta);
+        childSentencesEl.appendChild(div);
       }
     }
 
-    load();
+    // edit-mode create
+    createChildSentenceBtn.addEventListener("click", async () => {
+      createChildMsg.textContent = "";
+
+      if (!adminVerified) {
+        createChildMsg.textContent = "admin key required.";
+        return;
+      }
+
+      const text = childSentenceInput.value.trim();
+      if (!text) return;
+
+      const ids = Array.from(selectedChildIds);
+      if (!ids.length) {
+        createChildMsg.textContent = "select at least one child word.";
+        return;
+      }
+
+      const key = getAdminKey();
+      const r = await fetch(`/api/lang_sentences/${encodeURIComponent(sentenceId)}/child_sentences`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-Admin-Key": key
+        },
+        body: JSON.stringify({ sentence: text, child_word_ids: ids })
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        createChildMsg.textContent = err.error || `create failed (${r.status})`;
+        return;
+      }
+
+      const out = await r.json().catch(() => ({}));
+      childSentenceInput.value = "";
+      createChildMsg.textContent = `created child sentence id ${out.id}`;
+      await loadChildSentences();
+      renderChildSentences();
+    });
+
+    clearChildFilterBtn.addEventListener("click", async () => {
+      selectedChildIds.clear();
+      renderChildSelector();
+      await loadChildSentences();
+      renderChildSentences();
+    });
+
+    // admin controls
+    adminBtn.addEventListener("click", async () => {
+      const key = prompt("Admin key (stored locally):", getAdminKey() || "");
+      if (!key || !key.trim()) return;
+      setAdminKey(key.trim());
+      await verifyAdminKey();
+      setModeUI();
+    });
+
+    clearAdminBtn.addEventListener("click", async () => {
+      clearAdminKey();
+      adminVerified = false;
+      setModeUI();
+    });
+
+    (async () => {
+      await verifyAdminKey();
+      setModeUI();
+
+      await loadSentence();
+      renderChildSelector();
+
+      await loadChildSentences();
+      renderChildSentences();
+    })();
   </script>
 </body>
 </html>

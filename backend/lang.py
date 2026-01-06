@@ -115,6 +115,32 @@ def init_db():
           ON lang_sentences(updated_at);
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS child_sentences (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          lang_sentence_id INTEGER NOT NULL,
+          child_word_ids TEXT NOT NULL,  -- JSON array of ints
+          sentence TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (lang_sentence_id) REFERENCES lang_sentences(id) ON DELETE CASCADE
+        );
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_child_sentences_lang_sentence_id
+          ON child_sentences(lang_sentence_id);
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_child_sentences_updated
+          ON child_sentences(updated_at);
+        """
+    )
+
 
     # Lightweight migration if an older DB created child_words without 'link'
     # (Your production DB currently does not have it.)
@@ -546,6 +572,90 @@ def get_lang_sentence(sentence_id: int):
         "updated_at": r["updated_at"],
         "words": words_out
     })
+
+@app.get("/api/lang_sentences/<int:sentence_id>/child_sentences")
+def list_child_sentences(sentence_id: int):
+    db = get_db()
+
+    # ensure parent sentence exists
+    parent = db.execute("SELECT 1 FROM lang_sentences WHERE id = ?", (sentence_id,)).fetchone()
+    if parent is None:
+        abort(404, description="Sentence not found.")
+
+    filter_ids = _parse_ids(request.args.get("child_word_ids"))
+
+    rows = db.execute(
+        """
+        SELECT id, child_word_ids, sentence, created_at, updated_at
+        FROM child_sentences
+        WHERE lang_sentence_id = ?
+        ORDER BY updated_at DESC, id DESC
+        """,
+        (sentence_id,)
+    ).fetchall()
+
+    out = []
+    for r in rows:
+        try:
+            ids = json.loads(r["child_word_ids"])
+            if not isinstance(ids, list):
+                ids = []
+            ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+        except Exception:
+            ids = []
+
+        if filter_ids:
+            s = set(ids)
+            if any(fid not in s for fid in filter_ids):
+                continue
+
+        out.append({
+            "id": r["id"],
+            "child_word_ids": ids,
+            "sentence": r["sentence"],
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"]
+        })
+
+    return jsonify(child_sentences=out)
+
+
+@app.post("/api/lang_sentences/<int:sentence_id>/child_sentences")
+def create_child_sentence(sentence_id: int):
+    require_admin_key()
+    db = get_db()
+
+    parent = db.execute("SELECT 1 FROM lang_sentences WHERE id = ?", (sentence_id,)).fetchone()
+    if parent is None:
+        abort(404, description="Sentence not found.")
+
+    data = request.get_json(silent=True) or {}
+    sentence = (data.get("sentence") or "").strip()
+    ids = _parse_ids(data.get("child_word_ids"))
+
+    if not sentence:
+        abort(400, description="Missing 'sentence'.")
+    if len(sentence) > 4000:
+        abort(400, description="Sentence too long (max 4000 chars).")
+    if not ids:
+        abort(400, description="Select at least one child_word_id.")
+
+    # ensure child_word ids exist
+    qmarks = ",".join("?" for _ in ids)
+    found = db.execute(f"SELECT id FROM child_words WHERE id IN ({qmarks})", ids).fetchall()
+    found_ids = {int(r["id"]) for r in found}
+    missing = [i for i in ids if i not in found_ids]
+    if missing:
+        abort(400, description=f"Unknown child_word_id(s): {', '.join(map(str, missing))}")
+
+    cur = db.execute(
+        "INSERT INTO child_sentences (lang_sentence_id, child_word_ids, sentence) VALUES (?, ?, ?)",
+        (sentence_id, json.dumps(ids), sentence)
+    )
+    db.commit()
+
+    return jsonify(ok=True, id=cur.lastrowid, child_word_ids=ids, sentence=sentence), 201
+
 
 
 if __name__ == "__main__":
