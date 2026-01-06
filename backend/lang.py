@@ -292,6 +292,48 @@ def get_lang_word_by_version(version_id: int):
         "versions": out_versions
     })
 
+@app.delete("/api/lang_words/<int:lang_word_id>")
+def delete_lang_word(lang_word_id: int):
+    require_admin_key()
+    db = get_db()
+
+    row = db.execute("SELECT id, word FROM lang_words WHERE id = ?", (lang_word_id,)).fetchone()
+    if row is None:
+        abort(404, description="Lang word not found.")
+
+    # ON DELETE CASCADE removes lang_word_versions and child_words
+    db.execute("DELETE FROM lang_words WHERE id = ?", (lang_word_id,))
+    db.commit()
+    return jsonify(ok=True, lang_word_id=lang_word_id, word=row["word"])
+
+
+@app.delete("/api/lang_word_versions/<int:version_id>")
+def delete_lang_word_version(version_id: int):
+    require_admin_key()
+    db = get_db()
+
+    v = db.execute(
+        "SELECT id, lang_word_id, version FROM lang_word_versions WHERE id = ?",
+        (version_id,),
+    ).fetchone()
+    if v is None:
+        abort(404, description="Version not found.")
+
+    cnt = db.execute(
+        "SELECT COUNT(*) AS c FROM lang_word_versions WHERE lang_word_id = ?",
+        (v["lang_word_id"],),
+    ).fetchone()
+
+    # Prevent orphaning the parent word with zero versions
+    if int(cnt["c"]) <= 1:
+        abort(400, description="Cannot delete the only version. Delete the lang word instead.")
+
+    # ON DELETE CASCADE removes child_words for this version
+    db.execute("DELETE FROM lang_word_versions WHERE id = ?", (version_id,))
+    db.commit()
+    return jsonify(ok=True, version_id=version_id, lang_word_id=v["lang_word_id"], version=v["version"])
+
+
 
 @app.post("/api/lang_word_versions/<int:version_id>/child_words")
 def create_child_word(version_id: int):

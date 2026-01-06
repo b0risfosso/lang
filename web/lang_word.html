@@ -86,6 +86,10 @@
     }
     .kidbtn { width: 100%; text-align: left; }
     .kidbtn.selected { border-width: 2px; }
+    .danger {
+      border-color: color-mix(in oklab, red 45%, transparent) !important;
+    }
+
   </style>
 </head>
 <body>
@@ -102,6 +106,8 @@
       <button id="clear-admin-btn" type="button" style="display:none;">clear key</button>
 
       <button id="exchange-open" type="button" style="display:none;">exchange</button>
+      <button id="delete-word" type="button" style="display:none;">delete word</button>
+
     </div>
 
     <section class="panel">
@@ -212,6 +218,7 @@
 
     // Exchange UI elements
     const exchangeOpenBtn = document.getElementById("exchange-open");
+    const deleteWordBtn = document.getElementById("delete-word");
     const overlay = document.getElementById("overlay");
     const sidepanel = document.getElementById("sidepanel");
     const exchangeCloseBtn = document.getElementById("exchange-close");
@@ -278,6 +285,9 @@
       adminBtn.disabled = edit;
 
       exchangeOpenBtn.style.display = edit ? "" : "none";
+      deleteWordBtn.style.display = edit ? "" : "none";
+      deleteWordBtn.classList.toggle("danger", edit);
+
     }
 
     async function apiFetch(url, opts = {}) {
@@ -405,6 +415,54 @@
         openBtn.disabled = (v.version_id === data.current_version_id);
         openBtn.addEventListener("click", () => openVersion(v.version_id));
         right.appendChild(openBtn);
+
+        if (isEditMode()) {
+          const delVerBtn = document.createElement("button");
+          delVerBtn.type = "button";
+          delVerBtn.textContent = "delete version";
+          delVerBtn.className = "danger";
+
+          delVerBtn.addEventListener("click", async () => {
+            const msg =
+              `DELETE Version ${v.version} (id ${v.version_id})?\n\n` +
+              `This deletes all child words in this version.`;
+            if (!confirm(msg)) return;
+
+            const key = getAdminKey();
+
+            // Choose a fallback version to open if we delete the currently-open version
+            const fallback = versions
+              .filter(x => x.version_id !== v.version_id)
+              .sort((a, b) => (b.version - a.version))[0];
+
+            const r = await apiFetch(`/api/lang_word_versions/${encodeURIComponent(v.version_id)}`, {
+              method: "DELETE",
+              headers: { "Accept": "application/json", "X-Admin-Key": key }
+            });
+
+            if (!r.ok) {
+              const err = await r.json().catch(() => ({}));
+              alert(err.error || `delete failed (${r.status})`);
+              return;
+            }
+
+            // If we deleted the currently open version, navigate to another version
+            if (currentData && v.version_id === currentData.current_version_id) {
+              if (fallback && fallback.version_id) {
+                openVersion(fallback.version_id);
+              } else {
+                // Shouldn't happen unless backend allows deleting last version
+                window.location.href = "./";
+              }
+              return;
+            }
+
+            await refresh();
+          });
+
+          right.appendChild(delVerBtn);
+        }
+
 
         head.appendChild(left);
         head.appendChild(right);
@@ -746,6 +804,31 @@
         createParentBtn.click();
       }
     });
+
+    deleteWordBtn.addEventListener("click", async () => {
+      if (!isEditMode() || !currentData) return;
+
+      const msg =
+        `DELETE lang_word "${currentData.word}" (id ${currentData.lang_word_id})?\n\n` +
+        `This will delete ALL versions and ALL child words.`;
+      if (!confirm(msg)) return;
+
+      const key = getAdminKey();
+      const r = await apiFetch(`/api/lang_words/${encodeURIComponent(currentData.lang_word_id)}`, {
+        method: "DELETE",
+        headers: { "Accept": "application/json", "X-Admin-Key": key }
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        alert(err.error || `delete failed (${r.status})`);
+        return;
+      }
+
+      // back to home
+      window.location.href = "./";
+    });
+
 
     function getCurrentVersionChildren() {
       if (!currentData) return [];
