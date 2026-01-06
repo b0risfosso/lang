@@ -22,53 +22,52 @@
     }
 
     #word-layer {
-    position: fixed;
-    inset: 0;
-    pointer-events: none; /* words don't block clicks */
-    z-index: 0; /* set to 9999 if you want them ABOVE everything */
-    overflow: hidden;
-  }
+      position: fixed;
+      inset: 0;
+      pointer-events: none; /* words don't block clicks */
+      z-index: 0; /* set to 9999 if you want them ABOVE everything */
+      overflow: hidden;
+    }
 
-  .thought {
-    position: absolute;
-    left: 0;
-    top: 0;
-    transform: translate3d(0,0,0);
-    padding: .25rem .5rem;
-    border-radius: .75rem;
-    border: 1px solid color-mix(in oklab, currentColor 70%, transparent);
-    background: color-mix(in oklab, Canvas 85%, transparent);
-    backdrop-filter: blur(4px);
-    font-size: .95rem;
-    white-space: nowrap;
-    opacity: .85;
-    will-change: transform;
-    user-select: none;
-  }
+    .thought {
+      position: absolute;
+      left: 0;
+      top: 0;
+      transform: translate3d(0,0,0);
+      padding: .25rem .5rem;
+      border-radius: .75rem;
+      border: 1px solid color-mix(in oklab, currentColor 70%, transparent);
+      background: color-mix(in oklab, Canvas 85%, transparent);
+      backdrop-filter: blur(4px);
+      font-size: .95rem;
+      white-space: nowrap;
+      opacity: .85;
+      will-change: transform;
+      user-select: none;
+    }
 
-  /* Keep your main above if words are behind */
-  main { position: relative; z-index: 1; }
+    /* Keep your main above if words are behind */
+    main { position: relative; z-index: 1; }
 
-  @media (prefers-reduced-motion: reduce) {
-    .thought { transition: none !important; }
-  }
+    @media (prefers-reduced-motion: reduce) {
+      .thought { transition: none !important; }
+    }
 
-  #add-word-btn {
-    position: fixed;
-    right: 1.25rem;
-    bottom: 1.25rem;
-    z-index: 2; /* above main + words layer */
-    border: 1px solid currentColor;
-    background: color-mix(in oklab, Canvas 85%, transparent);
-    backdrop-filter: blur(6px);
-    border-radius: 999px;
-    padding: .6rem .9rem;
-    cursor: pointer;
-    font-size: 1rem;
-    line-height: 1;
-  }
-  #add-word-btn:focus { outline: 2px solid currentColor; outline-offset: 2px; }
-
+    #add-word-btn {
+      position: fixed;
+      right: 1.25rem;
+      bottom: 1.25rem;
+      z-index: 2; /* above main + words layer */
+      border: 1px solid currentColor;
+      background: color-mix(in oklab, Canvas 85%, transparent);
+      backdrop-filter: blur(6px);
+      border-radius: 999px;
+      padding: .6rem .9rem;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+    }
+    #add-word-btn:focus { outline: 2px solid currentColor; outline-offset: 2px; }
   </style>
 </head>
 <body>
@@ -99,43 +98,43 @@
     const AVOID_MAIN = true;
     const API_BASE = ""; // same origin; set if your API is elsewhere
     const ADMIN_KEY_STORAGE = "lang_admin_key";
-  
+
     // ==== IMPLEMENTATION ====
     const layer = document.getElementById("word-layer");
     const mainEl = document.querySelector("main");
     const addBtn = document.getElementById("add-word-btn");
-  
+
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const rand = (min, max) => Math.random() * (max - min) + min;
-  
+
     // Track cursor for "react" behavior
     const mouse = { x: null, y: null };
     window.addEventListener("pointermove", (e) => {
       mouse.x = e.clientX;
       mouse.y = e.clientY;
     }, { passive: true });
-  
+
     function getAvoidRect() {
       if (!AVOID_MAIN || !mainEl) return null;
       const r = mainEl.getBoundingClientRect();
       const pad = 24;
       return { left: r.left - pad, top: r.top - pad, right: r.right + pad, bottom: r.bottom + pad };
     }
-  
+
     function pointOutsideRect(x, y, rect) {
       if (!rect) return true;
       return (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom);
     }
-  
+
     function pickTarget(el) {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const rect = getAvoidRect();
-  
+
       const b = el.getBoundingClientRect();
       const w = b.width || 80;
       const h = b.height || 24;
-  
+
       for (let i = 0; i < 25; i++) {
         const x = rand(0, Math.max(0, vw - w));
         const y = rand(0, Math.max(0, vh - h));
@@ -143,14 +142,16 @@
       }
       return { x: rand(0, Math.max(0, vw - w)), y: rand(0, Math.max(0, vh - h)) };
     }
-  
-    function openWordPage(id) {
-      window.location.href = `lang_word.html?id=${encodeURIComponent(id)}`;
+
+    // IMPORTANT: id here is a *version_id* now
+    function openWordPage(versionId) {
+      window.location.href = `lang_word.html?id=${encodeURIComponent(versionId)}`;
     }
 
-  
     function createThought(item) {
-      const { id, word } = item;
+      // GET /api/lang_words returns the latest version per canonical word:
+      // { lang_word_id, word, version_id, version }
+      const { word, version_id } = item;
 
       const el = document.createElement("div");
       el.className = "thought";
@@ -161,24 +162,24 @@
       el.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        openWordPage(id);
+        openWordPage(version_id);
       });
-  
+
       const speedPxPerSec = rand(40, 180);
       const jitter = rand(0.6, 2.2);
       const reactRadius = rand(60, 140);
       const reactStrength = rand(0.6, 1.6);
-  
+
       let pos = { x: rand(0, window.innerWidth * 0.8), y: rand(0, window.innerHeight * 0.8) };
       let target = pickTarget(el);
       let lastT = performance.now();
-  
+
       el.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
-  
+
       function step(now) {
         const dt = Math.min(0.05, (now - lastT) / 1000);
         lastT = now;
-  
+
         if (prefersReducedMotion) {
           if (Math.random() < 0.01) {
             target = pickTarget(el);
@@ -188,11 +189,11 @@
           requestAnimationFrame(step);
           return;
         }
-  
+
         let vx = target.x - pos.x;
         let vy = target.y - pos.y;
         const dist = Math.hypot(vx, vy) || 1;
-  
+
         if (dist < 6) {
           if (Math.random() < 0.08) target = pickTarget(el);
         } else {
@@ -200,10 +201,10 @@
           pos.x += (vx / dist) * stepDist;
           pos.y += (vy / dist) * stepDist;
         }
-  
+
         pos.x += (Math.random() - 0.5) * jitter;
         pos.y += (Math.random() - 0.5) * jitter;
-  
+
         if (mouse.x !== null && mouse.y !== null) {
           const dx = pos.x - mouse.x;
           const dy = pos.y - mouse.y;
@@ -214,39 +215,39 @@
             pos.y += (dy / d) * force * dt;
           }
         }
-  
+
         const b = el.getBoundingClientRect();
         const w = b.width || 80;
         const h = b.height || 24;
-  
+
         const maxX = Math.max(0, window.innerWidth - w);
         const maxY = Math.max(0, window.innerHeight - h);
-  
+
         if (pos.x < 0) pos.x = 0;
         if (pos.y < 0) pos.y = 0;
         if (pos.x > maxX) pos.x = maxX;
         if (pos.y > maxY) pos.y = maxY;
-  
+
         el.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
         requestAnimationFrame(step);
       }
-  
+
       requestAnimationFrame(step);
       return el;
     }
-  
+
     async function fetchWords() {
       const res = await fetch(`${API_BASE}/api/lang_words`, { headers: { "Accept": "application/json" } });
       if (!res.ok) throw new Error(`Failed to load words: ${res.status}`);
       const data = await res.json();
       return Array.isArray(data.words) ? data.words : [];
     }
-  
+
     function mountWords(words) {
       layer.innerHTML = "";
       words.forEach((obj) => layer.appendChild(createThought(obj)));
     }
-  
+
     async function refreshWords() {
       try {
         const words = await fetchWords();
@@ -256,11 +257,11 @@
         mountWords([]); // fail safe
       }
     }
-  
+
     function getAdminKeyFromStorage() {
       return localStorage.getItem(ADMIN_KEY_STORAGE) || "";
     }
-  
+
     function requestAdminKey() {
       const existing = getAdminKeyFromStorage();
       const key = window.prompt("Admin key required to add words:", existing || "");
@@ -270,8 +271,10 @@
       }
       return "";
     }
-  
+
     async function createWord(word, adminKey) {
+      // POST /api/lang_words returns:
+      // { ok: true, lang_word_id, version_id, word }
       const res = await fetch(`${API_BASE}/api/lang_words`, {
         method: "POST",
         headers: {
@@ -281,7 +284,7 @@
         },
         body: JSON.stringify({ word })
       });
-  
+
       if (res.status === 401) throw new Error("Unauthorized: invalid admin key.");
       if (res.status === 409) throw new Error("That word already exists.");
       if (!res.ok) {
@@ -290,36 +293,38 @@
       }
       return res.json();
     }
-  
+
     addBtn.addEventListener("click", async () => {
       const word = (window.prompt("New lang word:") || "").trim();
       if (!word) return;
-  
+
       let adminKey = getAdminKeyFromStorage();
       if (!adminKey) adminKey = requestAdminKey();
       if (!adminKey) return;
-  
+
       try {
-        await createWord(word, adminKey);
+        const out = await createWord(word, adminKey);
         await refreshWords();
+
+        // Optional: jump straight to the new word's initial version page
+        if (out && out.version_id) {
+          openWordPage(out.version_id);
+        }
       } catch (err) {
         alert(err.message || String(err));
-        // if key is wrong, allow re-entry next time
         if ((err.message || "").toLowerCase().includes("admin key")) {
           localStorage.removeItem(ADMIN_KEY_STORAGE);
         }
       }
     });
-  
+
     // Initial mount
     refreshWords();
-  
+
     window.addEventListener("resize", () => {
       // Re-mount on resize so measurements are correct
       refreshWords();
     });
   </script>
-  
-  
 </body>
 </html>
