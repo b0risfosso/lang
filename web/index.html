@@ -53,9 +53,10 @@
       .thought { transition: none !important; }
     }
 
-    #add-word-btn {
+    /* Buttons bottom-right */
+    #add-word-btn,
+    #list-toggle-btn {
       position: fixed;
-      right: 1.25rem;
       bottom: 1.25rem;
       z-index: 2; /* above main + words layer */
       border: 1px solid currentColor;
@@ -67,11 +68,66 @@
       font-size: 1rem;
       line-height: 1;
     }
-    #add-word-btn:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+    #add-word-btn { right: 1.25rem; }
+    #list-toggle-btn { right: 4.25rem; } /* sits left of + */
+
+    #add-word-btn:focus,
+    #list-toggle-btn:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+
+    /* Static list panel */
+    #word-list {
+      position: fixed;
+      top: 1.25rem;
+      left: 1.25rem;
+      right: 1.25rem;
+      max-width: 56rem;
+      margin: 0 auto;
+      z-index: 3;
+      display: none;
+      border: 1px solid color-mix(in oklab, currentColor 40%, transparent);
+      border-radius: 1rem;
+      background: color-mix(in oklab, Canvas 92%, transparent);
+      backdrop-filter: blur(6px);
+      padding: 1rem;
+      box-shadow: 0 0 30px color-mix(in oklab, currentColor 15%, transparent);
+    }
+    #word-list h2 {
+      margin: 0 0 .75rem;
+      font-size: 1rem;
+      font-weight: 600;
+      text-align: left;
+    }
+    #word-list .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+      gap: .5rem .75rem;
+      text-align: left;
+    }
+    #word-list a {
+      display: inline-block;
+      text-decoration: none;
+      padding: .45rem .6rem;
+      border-radius: .6rem;
+      border: 1px solid color-mix(in oklab, currentColor 35%, transparent);
+    }
+    #word-list a:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+    #word-list .muted { opacity: .75; font-size: .9rem; margin-top: .5rem; text-align: left; }
+
+    /* When list is visible, stop animation words from showing/clicking */
+    body.list-mode #word-layer { display: none; }
   </style>
 </head>
 <body>
   <div id="word-layer" aria-hidden="true"></div>
+
+  <!-- Static list container -->
+  <section id="word-list" aria-label="Lang word list">
+    <h2>words</h2>
+    <div class="grid" id="word-list-grid"></div>
+    <div class="muted" id="word-list-meta"></div>
+  </section>
+
+  <button id="list-toggle-btn" type="button" aria-label="Toggle word list">☰</button>
   <button id="add-word-btn" type="button" aria-label="Add lang word">＋</button>
 
   <main>
@@ -103,9 +159,16 @@
     const layer = document.getElementById("word-layer");
     const mainEl = document.querySelector("main");
     const addBtn = document.getElementById("add-word-btn");
+    const listToggleBtn = document.getElementById("list-toggle-btn");
+    const listPanel = document.getElementById("word-list");
+    const listGrid = document.getElementById("word-list-grid");
+    const listMeta = document.getElementById("word-list-meta");
 
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const rand = (min, max) => Math.random() * (max - min) + min;
+
+    let cachedWords = [];
+    let listMode = false;
 
     // Track cursor for "react" behavior
     const mouse = { x: null, y: null };
@@ -143,14 +206,14 @@
       return { x: rand(0, Math.max(0, vw - w)), y: rand(0, Math.max(0, vh - h)) };
     }
 
-    // IMPORTANT: id here is a *version_id* now
+    // IMPORTANT: open in a NEW TAB
     function openWordPage(versionId) {
-      window.location.href = `lang_word.html?id=${encodeURIComponent(versionId)}`;
+      const url = `lang_word.html?id=${encodeURIComponent(versionId)}`;
+      window.open(url, "_blank", "noopener,noreferrer");
     }
 
     function createThought(item) {
-      // GET /api/lang_words returns the latest version per canonical word:
-      // { lang_word_id, word, version_id, version }
+      // GET /api/lang_words returns: { word, lang_word_id, version_id, version }
       const { word, version_id } = item;
 
       const el = document.createElement("div");
@@ -248,13 +311,59 @@
       words.forEach((obj) => layer.appendChild(createThought(obj)));
     }
 
+    function mountList(words) {
+      listGrid.innerHTML = "";
+      const sorted = [...words].sort((a, b) => String(a.word).localeCompare(String(b.word)));
+
+      sorted.forEach((item) => {
+        const a = document.createElement("a");
+        a.href = `lang_word.html?id=${encodeURIComponent(item.version_id)}`;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = item.word;
+        a.addEventListener("click", (e) => {
+          // ensure consistent "new tab" behavior even if browser ignores target
+          e.preventDefault();
+          openWordPage(item.version_id);
+        });
+        listGrid.appendChild(a);
+      });
+
+      listMeta.textContent = `${sorted.length} words`;
+    }
+
     async function refreshWords() {
       try {
         const words = await fetchWords();
-        mountWords(words);
+        cachedWords = words;
+
+        if (listMode) {
+          mountList(words);
+        } else {
+          mountWords(words);
+        }
       } catch (err) {
         console.error(err);
-        mountWords([]); // fail safe
+        cachedWords = [];
+        if (listMode) {
+          mountList([]);
+        } else {
+          mountWords([]);
+        }
+      }
+    }
+
+    function setListMode(on) {
+      listMode = !!on;
+      document.body.classList.toggle("list-mode", listMode);
+      listPanel.style.display = listMode ? "block" : "none";
+      listToggleBtn.textContent = listMode ? "✕" : "☰";
+
+      // mount appropriate view from cache immediately
+      if (listMode) {
+        mountList(cachedWords);
+      } else {
+        mountWords(cachedWords);
       }
     }
 
@@ -273,8 +382,7 @@
     }
 
     async function createWord(word, adminKey) {
-      // POST /api/lang_words returns:
-      // { ok: true, lang_word_id, version_id, word }
+      // POST /api/lang_words returns: { ok, lang_word_id, version_id, word }
       const res = await fetch(`${API_BASE}/api/lang_words`, {
         method: "POST",
         headers: {
@@ -306,7 +414,7 @@
         const out = await createWord(word, adminKey);
         await refreshWords();
 
-        // Optional: jump straight to the new word's initial version page
+        // Optional: open newly created word in new tab
         if (out && out.version_id) {
           openWordPage(out.version_id);
         }
@@ -318,12 +426,18 @@
       }
     });
 
+    listToggleBtn.addEventListener("click", async () => {
+      // Toggle list mode; refresh if we don't have words yet
+      setListMode(!listMode);
+      if (!cachedWords.length) await refreshWords();
+    });
+
     // Initial mount
     refreshWords();
 
     window.addEventListener("resize", () => {
-      // Re-mount on resize so measurements are correct
-      refreshWords();
+      // Keep words consistent on resize (only remount moving layer)
+      if (!listMode) refreshWords();
     });
   </script>
 </body>
