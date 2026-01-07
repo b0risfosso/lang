@@ -97,6 +97,31 @@ def init_db():
         """
     )
 
+    # Langs (collections of lang_words)
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS langs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          lang_word_ids TEXT NOT NULL,  -- JSON array of ints
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_langs_name
+          ON langs(name);
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_langs_updated
+          ON langs(updated_at);
+        """
+    )
+
     # Sentences table
     db.execute(
         """
@@ -166,6 +191,208 @@ def handle_error(e):
     if isinstance(e, HTTPException):
         return jsonify(error=e.description), e.code
     return jsonify(error="Internal server error"), 500
+
+
+# =========================
+# Langs (new)
+# =========================
+
+def _lang_row_or_404(db, lang_id: int):
+    r = db.execute(
+        """
+        SELECT id, name, lang_word_ids, created_at, updated_at
+        FROM langs
+        WHERE id = ?
+        """,
+        (lang_id,),
+    ).fetchone()
+    if r is None:
+        abort(404, description="Lang not found.")
+    return r
+
+
+def _resolve_latest_words_for_ids(db, ids):
+    """
+    For a list of lang_word_id ints, return [{lang_word_id, word, version_id, version}]
+    in the same order, skipping ids that no longer exist or have no versions.
+    """
+    out = []
+    for wid in ids:
+        wrow = db.execute("SELECT id, word FROM lang_words WHERE id = ?", (wid,)).fetchone()
+        if wrow is None:
+            continue
+        vrow = db.execute(
+            """
+            SELECT id AS version_id, version
+            FROM lang_word_versions
+            WHERE lang_word_id = ?
+            ORDER BY version DESC
+            LIMIT 1
+            """,
+            (wid,),
+        ).fetchone()
+        if vrow is None:
+            continue
+        out.append({
+            "lang_word_id": int(wrow["id"]),
+            "word": wrow["word"],
+            "version_id": int(vrow["version_id"]),
+            "version": int(vrow["version"]),
+        })
+    return out
+
+
+@app.get("/api/langs")
+def list_langs():
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT id, name, lang_word_ids, created_at, updated_at
+        FROM langs
+        ORDER BY name ASC, id ASC
+        """
+    ).fetchall()
+
+    out = []
+    for r in rows:
+        try:
+            ids = json.loads(r["lang_word_ids"])
+            if not isinstance(ids, list):
+                ids = []
+            ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+        except Exception:
+            ids = []
+        out.append({
+            "id": int(r["id"]),
+            "name": r["name"],
+            "lang_word_ids": ids,
+            "count": len(ids),
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"],
+        })
+
+    return jsonify(langs=out)
+
+
+@app.post("/api/langs")
+def create_lang():
+    require_admin_key()
+    db = get_db()
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    ids = _parse_ids(data.get("lang_word_ids"))  # optional; can be []
+
+    if not name:
+        abort(400, description="Missing 'name'.")
+    if len(name) > 200:
+        abort(400, description="Name too long (max 200 chars).")
+
+    # Validate word ids exist
+    if ids:
+        qmarks = ",".join("?" for _ in ids)
+        found = db.execute(f"SELECT id FROM lang_words WHERE id IN ({qmarks})", ids).fetchall()
+        found_ids = {int(r["id"]) for r in found}
+        missing = [i for i in ids if i not in found_ids]
+        if missing:
+            abort(400, description=f"Unknown lang_word_id(s): {', '.join(map(str, missing))}")
+
+    try:
+        cur = db.execute(
+            "INSERT INTO langs (name, lang_word_ids) VALUES (?, ?)",
+            (name, json.dumps(ids)),
+        )
+        db.commit()
+    except sqlite3.IntegrityError:
+        abort(409, description="Lang name already exists.")
+
+    return jsonify(ok=True, id=cur.lastrowid, name=name, lang_word_ids=ids), 201
+
+
+@app.get("/api/langs/<int:lang_id>")
+def get_lang(lang_id: int):
+    db = get_db()
+    r = _lang_row_or_404(db, lang_id)
+
+    try:
+        ids = json.loads(r["lang_word_ids"])
+        if not isinstance(ids, list):
+            ids = []
+        ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+    except Exception:
+        ids = []
+
+    words = _resolve_latest_words_for_ids(db, ids)
+
+    return jsonify({
+        "id": int(r["id"]),
+        "name": r["name"],
+        "lang_word_ids": ids,
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+        "words": words,  # [{lang_word_id, word, version_id, version}]
+    })
+
+
+@app.put("/api/langs/<int:lang_id>")
+def update_lang(lang_id: int):
+    require_admin_key()
+    db = get_db()
+    _lang_row_or_404(db, lang_id)
+
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", None)
+    ids_val = data.get("lang_word_ids", None)
+
+    updates = []
+    params = []
+
+    if name is not None:
+        name = str(name).strip()
+        if not name:
+            abort(400, description="Missing 'name'.")
+        if len(name) > 200:
+            abort(400, description="Name too long (max 200 chars).")
+        updates.append("name = ?")
+        params.append(name)
+
+    if ids_val is not None:
+        ids = _parse_ids(ids_val)
+
+        if ids:
+            qmarks = ",".join("?" for _ in ids)
+            found = db.execute(f"SELECT id FROM lang_words WHERE id IN ({qmarks})", ids).fetchall()
+            found_ids = {int(rr["id"]) for rr in found}
+            missing = [i for i in ids if i not in found_ids]
+            if missing:
+                abort(400, description=f"Unknown lang_word_id(s): {', '.join(map(str, missing))}")
+
+        updates.append("lang_word_ids = ?")
+        params.append(json.dumps(ids))
+
+    if not updates:
+        abort(400, description="Nothing to update.")
+
+    updates.append("updated_at = datetime('now')")
+    sql = f"UPDATE langs SET {', '.join(updates)} WHERE id = ?"
+    params.append(lang_id)
+
+    try:
+        db.execute(sql, params)
+        db.commit()
+    except sqlite3.IntegrityError:
+        abort(409, description="Lang name already exists.")
+
+    r2 = _lang_row_or_404(db, lang_id)
+    try:
+        out_ids = json.loads(r2["lang_word_ids"])
+        if not isinstance(out_ids, list):
+            out_ids = []
+        out_ids = [int(x) for x in out_ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+    except Exception:
+        out_ids = []
+
+    return jsonify(ok=True, id=int(r2["id"]), name=r2["name"], lang_word_ids=out_ids)
 
 
 # =========================

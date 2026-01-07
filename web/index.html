@@ -218,25 +218,25 @@
     }
 
     // IMPORTANT: open in a NEW TAB
-    function openWordPage(versionId) {
-      const url = `lang_word.html?id=${encodeURIComponent(versionId)}`;
+    function openLangPage(langId) {
+      const url = `lang.html?id=${encodeURIComponent(langId)}`;
       window.open(url, "_blank", "noopener,noreferrer");
     }
 
     function createThought(item) {
-      // GET /api/lang_words returns: { word, lang_word_id, version_id, version }
-      const { word, version_id } = item;
+      // GET /api/langs returns: { id, name, lang_word_ids, count }
+      const { id, name } = item;
 
       const el = document.createElement("div");
       el.className = "thought";
-      el.textContent = word;
+      el.textContent = name;
       el.style.pointerEvents = "auto";
       el.style.cursor = "pointer";
 
       el.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        openWordPage(version_id);
+        openLangPage(id);
       });
 
       const speedPxPerSec = rand(40, 180);
@@ -310,11 +310,11 @@
       return el;
     }
 
-    async function fetchWords() {
-      const res = await fetch(`${API_BASE}/api/lang_words`, { headers: { "Accept": "application/json" } });
-      if (!res.ok) throw new Error(`Failed to load words: ${res.status}`);
+    async function fetchLangs() {
+      const res = await fetch(`${API_BASE}/api/langs`, { headers: { "Accept": "application/json" } });
+      if (!res.ok) throw new Error(`Failed to load langs: ${res.status}`);
       const data = await res.json();
-      return Array.isArray(data.words) ? data.words : [];
+      return Array.isArray(data.langs) ? data.langs : [];
     }
 
     function mountWords(words) {
@@ -324,35 +324,30 @@
 
     function mountList(words) {
       listGrid.innerHTML = "";
-      const sorted = [...words].sort((a, b) => String(a.word).localeCompare(String(b.word)));
+      const sorted = [...words].sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
       sorted.forEach((item) => {
         const a = document.createElement("a");
-        a.href = `lang_word.html?id=${encodeURIComponent(item.version_id)}`;
+        a.href = `lang.html?id=${encodeURIComponent(item.id)}`;
         a.target = "_blank";
         a.rel = "noopener noreferrer";
-        a.textContent = item.word;
+        a.textContent = item.name;
         a.addEventListener("click", (e) => {
           // ensure consistent "new tab" behavior even if browser ignores target
           e.preventDefault();
-          openWordPage(item.version_id);
+          openLangPage(item.id);
         });
         listGrid.appendChild(a);
       });
 
-      listMeta.textContent = `${sorted.length} words`;
+      listMeta.textContent = `${sorted.length} langs`;
     }
 
     async function refreshWords() {
       try {
-        const words = await fetchWords();
-        cachedWords = words;
-
-        if (listMode) {
-          mountList(words);
-        } else {
-          mountWords(words);
-        }
+        cachedWords = await fetchLangs();
+        if (listMode) mountList(cachedWords);
+        else mountWords(cachedWords);
       } catch (err) {
         console.error(err);
         cachedWords = [];
@@ -392,43 +387,33 @@
       return "";
     }
 
-    async function createWord(word, adminKey) {
-      // POST /api/lang_words returns: { ok, lang_word_id, version_id, word }
-      const res = await fetch(`${API_BASE}/api/lang_words`, {
+    async function createLang(name, adminKey) {
+      const res = await fetch("/api/langs", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
           "X-Admin-Key": adminKey
         },
-        body: JSON.stringify({ word })
+        body: JSON.stringify({ name, lang_word_ids: [] })
       });
-
-      if (res.status === 401) throw new Error("Unauthorized: invalid admin key.");
-      if (res.status === 409) throw new Error("That word already exists.");
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Create failed: ${res.status}`);
-      }
-      return res.json();
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(out.error || `Failed (${res.status})`);
+      return out;
     }
 
     addBtn.addEventListener("click", async () => {
-      const word = (window.prompt("New lang word:") || "").trim();
-      if (!word) return;
+      const name = (window.prompt("New lang:") || "").trim();
+      if (!name) return;
 
       let adminKey = getAdminKeyFromStorage();
       if (!adminKey) adminKey = requestAdminKey();
       if (!adminKey) return;
 
       try {
-        const out = await createWord(word, adminKey);
+        const out = await createLang(name, adminKey);
+        if (out && out.id) openLangPage(out.id);
         await refreshWords();
-
-        // Optional: open newly created word in new tab
-        if (out && out.version_id) {
-          openWordPage(out.version_id);
-        }
       } catch (err) {
         alert(err.message || String(err));
         if ((err.message || "").toLowerCase().includes("admin key")) {
