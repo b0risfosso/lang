@@ -19,10 +19,11 @@
     .panel h2 { font-size: 1rem; margin: 0 0 .75rem; }
 
     .row { display:flex; gap:.5rem; align-items:center; margin:.5rem 0; }
-    input[type="text"], select {
+    input[type="text"], select, textarea {
       width: 100%; padding: .5rem .6rem; border-radius: .5rem;
       border: 1px solid currentColor; background: transparent; color: inherit;
     }
+    textarea { resize: vertical; }
     button {
       border: 1px solid currentColor; background: transparent; color: inherit;
       border-radius: .6rem; padding: .45rem .7rem; cursor: pointer;
@@ -130,6 +131,14 @@
           <input id="new-child-link" type="text" placeholder="optional link (opens in new tab)" />
           <button id="add-child" type="button">add</button>
         </div>
+
+        <div class="row">
+          <textarea id="bulk-children" rows="7" placeholder="bulk child words (one per line)"></textarea>
+        </div>
+        <div class="row">
+          <button id="add-children-bulk" type="button">bulk add</button>
+          <span class="muted" id="bulk-add-msg"></span>
+        </div>
       </div>
 
       <div id="versions-container"></div>
@@ -212,6 +221,10 @@
     const newChildInput = document.getElementById("new-child");
     const newChildLinkInput = document.getElementById("new-child-link");
     const addChildBtn = document.getElementById("add-child");
+
+    const bulkChildrenTextarea = document.getElementById("bulk-children");
+    const bulkAddBtn = document.getElementById("add-children-bulk");
+    const bulkAddMsg = document.getElementById("bulk-add-msg");
 
     const versionsContainer = document.getElementById("versions-container");
     const emptyEl = document.getElementById("empty");
@@ -649,11 +662,91 @@
       await refresh();
     });
 
+    // Bulk add children
+    bulkAddBtn.addEventListener("click", async () => {
+      bulkAddMsg.textContent = "";
+      if (!isEditMode()) return;
+
+      const key = getAdminKey();
+      if (!key) return;
+
+      const versionId = Number(addToVersionSelect.value);
+      if (!Number.isInteger(versionId) || versionId <= 0) return;
+
+      // Parse lines => words
+      const raw = bulkChildrenTextarea.value || "";
+      const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+
+      // optional: de-dupe while preserving order
+      const seen = new Set();
+      const words = [];
+      for (const w of lines) {
+        if (!seen.has(w)) {
+          seen.add(w);
+          words.push(w);
+        }
+      }
+
+      if (!words.length) return;
+
+      // Bulk adds always insert without links
+      const link = "";
+
+      bulkAddBtn.disabled = true;
+      let okCount = 0;
+      const failures = [];
+
+      try {
+        for (let i = 0; i < words.length; i++) {
+          const word = words[i];
+
+          bulkAddMsg.textContent = `adding ${i + 1}/${words.length}…`;
+
+          const r = await apiFetch(`/api/lang_word_versions/${encodeURIComponent(versionId)}/child_words`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "X-Admin-Key": key
+            },
+            body: JSON.stringify({ word, link })
+          });
+
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            failures.push({ word, error: err.error || `HTTP ${r.status}` });
+            continue;
+          }
+          okCount++;
+        }
+
+        if (failures.length) {
+          bulkAddMsg.textContent = `added ${okCount}/${words.length}. ${failures.length} failed (see console).`;
+          console.warn("Bulk add failures:", failures);
+        } else {
+          bulkAddMsg.textContent = `added ${okCount} word(s).`;
+          bulkChildrenTextarea.value = "";
+        }
+
+        await refresh();
+      } finally {
+        bulkAddBtn.disabled = false;
+      }
+    });
+
     // Cmd/Ctrl+Enter in add-child input triggers add
     newChildInput.addEventListener("keydown", (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
         addChildBtn.click();
+      }
+    });
+
+    // Cmd/Ctrl+Enter in bulk textarea triggers bulk add
+    bulkChildrenTextarea.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        bulkAddBtn.click();
       }
     });
 
