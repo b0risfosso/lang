@@ -10,9 +10,6 @@
     main { max-width: 42rem; margin: 10vh auto; text-align: center; position: relative; z-index: 1; }
     h1 { font-size: 1.25rem; margin: 0 0 1rem; }
     p { margin: 0 0 1.25rem; }
-    .media-row { display: flex; gap: 1rem; align-items: stretch; justify-content: center; }
-    .media-row img, .media-row video { width: 100%; max-width: 14rem; height: auto; object-fit: cover; border-radius: .25rem; }
-    @media (max-width: 720px) { .media-row { flex-direction: column; } .media-row img, .media-row video { max-width: 100%; } }
 
     #word-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
     .thought {
@@ -100,16 +97,6 @@
     <p style="margin:0 0 .5rem;"><a href="./">← back</a></p>
     <h1 id="lang-title">…</h1>
     <p class="muted" id="lang-meta">…</p>
-
-    <div class="media-row">
-      <img src="Michelangelo_-_Creation_of_Adam_(cropped)-2.jpg" alt="Michelangelo, The Creation of Adam (cropped)" loading="lazy" />
-      <video controls autoplay loop muted playsinline preload="metadata">
-        <source src="YTDown.com_YouTube_I-think-I-can-I-think-I-can-the-Little-E_Media_Yx9xO98kcBU_001_360p.mp4" type="video/mp4" />
-      </video>
-      <video controls autoplay loop muted playsinline preload="metadata">
-        <source src="YTDown.com_YouTube_Interstellar-Gargantua-Detach-Scene-1080_Media__GdEsdEfZvc_001_720p.mp4" type="video/mp4" />
-      </video>
-    </div>
   </main>
 
   <div id="overlay" aria-hidden="true"></div>
