@@ -24,7 +24,7 @@
       will-change: transform; user-select: none;
     }
 
-    #list-toggle-btn, #sentences-btn, #manage-btn, #admin-btn {
+    #list-toggle-btn, #sentences-btn, #manage-btn, #admin-btn, #add-word-btn {
       position: fixed; bottom: 1.25rem; z-index: 2;
       border: 1px solid currentColor;
       background: color-mix(in oklab, Canvas 85%, transparent);
@@ -35,6 +35,7 @@
     #list-toggle-btn { right: 4.25rem; }
     #manage-btn { right: 7.25rem; display:none; }
     #admin-btn { right: 10.25rem; }
+    #add-word-btn { left: 1.25rem; }
 
     #word-list {
       position: fixed; top: 1.25rem; left: 1.25rem; right: 1.25rem; bottom: 1.25rem;
@@ -93,6 +94,7 @@
   <button id="manage-btn" type="button" aria-label="Manage words">✎</button>
   <button id="list-toggle-btn" type="button" aria-label="Toggle word list">☰</button>
   <button id="sentences-btn" type="button" aria-label="Open sentences">ls</button>
+  <button id="add-word-btn" type="button" aria-label="Create word in this lang" style="display:none;">+</button>
 
   <main>
     <p style="margin:0 0 .5rem;"><a href="./">← back</a></p>
@@ -151,6 +153,7 @@
     const manageBtn = document.getElementById("manage-btn");
     const listToggleBtn = document.getElementById("list-toggle-btn");
     const sentencesBtn = document.getElementById("sentences-btn");
+    const addWordBtn = document.getElementById("add-word-btn");
 
     const langTitle = document.getElementById("lang-title");
     const langMeta = document.getElementById("lang-meta");
@@ -200,6 +203,7 @@
     function setAdminUI() {
       adminBtn.textContent = adminVerified ? "ok" : "key";
       manageBtn.style.display = adminVerified ? "inline-block" : "none";
+      addWordBtn.style.display = adminVerified ? "inline-block" : "none";
     }
 
     function openWordPage(versionId) {
@@ -384,6 +388,25 @@
       }
     }
 
+    async function createLangWord(word) {
+      const key = getAdminKey();
+      const r = await fetch(`/api/lang_words`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-Admin-Key": key
+        },
+        body: JSON.stringify({ word })
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error || `create failed (${r.status})`);
+      }
+      return r.json(); // expected to include lang_word_id and version_id
+    }
+
     async function saveLangPatch(patch) {
       const key = getAdminKey();
       const r = await fetch(`/api/langs/${encodeURIComponent(langId)}`, {
@@ -414,6 +437,39 @@
       allWords = await fetchAllWords();
       renderAllWordsChecklist();
       openPanel();
+    });
+
+    addWordBtn.addEventListener("click", async () => {
+      if (!adminVerified) return;
+
+      const w = prompt("New lang word:", "");
+      if (!w || !w.trim()) return;
+
+      try {
+        // 1) Create the lang_word (and initial version)
+        const out = await createLangWord(w.trim());
+
+        // We need the lang_word_id to add membership
+        const newId = Number(out.lang_word_id);
+        if (!Number.isInteger(newId) || newId <= 0) {
+          throw new Error("API did not return lang_word_id.");
+        }
+
+        // 2) Add it to this lang's membership list
+        const current = Array.isArray(langData?.lang_word_ids) ? langData.lang_word_ids : [];
+        const next = Array.from(new Set([...current, newId])); // avoid duplicates
+
+        await saveLangPatch({ lang_word_ids: next });
+
+        // 3) Refresh the lang display
+        await refreshWords();
+
+        // Optional: open the new word page immediately
+        if (out.version_id) openWordPage(out.version_id);
+
+      } catch (e) {
+        alert(e.message || String(e));
+      }
     });
 
     overlay.addEventListener("click", closePanel);
