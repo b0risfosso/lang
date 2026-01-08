@@ -16,7 +16,8 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 DB_DIR = "/var/www/site/data"
-DB_PATH = os.path.join(DB_DIR, "lang.db")
+LANG_DB_PATH = os.path.join(DB_DIR, "lang.db")
+DB_PATH = LANG_DB_PATH  # alias for backward compatibility
 
 USAGE_DB_PATH = os.path.join(DB_DIR, "llm_usage.db")
 USAGE_APP_NAME = "lang"  # schema comment says 'jid'|'crayon', but not enforced; use a stable tag
@@ -621,6 +622,51 @@ _worker_lock = threading.Lock()
 def _now_dt_sql():
     return "datetime('now')"
 
+def _ensure_llm_schema(db):
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS llm_tasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          lang_id INTEGER NOT NULL,
+          task_type TEXT NOT NULL,
+          identifier TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'queued',
+          error TEXT,
+          result_writing_id INTEGER,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_llm_tasks_status ON llm_tasks(status);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_id ON llm_tasks(lang_id);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_status ON llm_tasks(lang_id, status);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_llm_tasks_created_at ON llm_tasks(created_at);")
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS temporary_writings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          lang_id INTEGER NOT NULL,
+          identifier TEXT NOT NULL,
+          prompt_type TEXT NOT NULL,
+          text TEXT NOT NULL,
+          model TEXT,
+          modifier TEXT,
+          task_id INTEGER,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id ON temporary_writings(lang_id);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id_created ON temporary_writings(lang_id, created_at);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_writings_prompt_type ON temporary_writings(prompt_type);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_writings_created_at ON temporary_writings(created_at);")
+
+    db.commit()
+
 _WORKER_LOCK_FD = None
 
 def _start_background_services():
@@ -682,14 +728,24 @@ def _llm_worker_loop():
     while True:
         try:
             _process_one_task()
+            time.sleep(1.0)
+        except sqlite3.OperationalError as e:
+            if "no such table" in str(e):
+                traceback.print_exc()
+                time.sleep(5.0)
+                continue
+            raise
         except Exception:
             # Never crash the worker loop
             traceback.print_exc()
-        time.sleep(1.0)
+            time.sleep(2.0)
 
 def _process_one_task():
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
+
+    # Ensure schema exists (idempotent)
+    _ensure_llm_schema(db)
 
     # Claim one queued task
     task = db.execute(
