@@ -22,6 +22,14 @@ DB_PATH = LANG_DB_PATH  # alias for backward compatibility
 USAGE_DB_PATH = os.path.join(DB_DIR, "llm_usage.db")
 USAGE_APP_NAME = "lang"  # schema comment says 'jid'|'crayon', but not enforced; use a stable tag
 
+def connect_lang_db():
+    conn = sqlite3.connect(LANG_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    # good practice for concurrency
+    conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
+    return conn
+
 # Set this env var in your service config:
 #   export LANG_ADMIN_KEY="your-secret"
 ADMIN_KEY_ENV = "LANG_ADMIN_KEY"
@@ -34,9 +42,10 @@ def ensure_db_dir():
 def get_db():
     if "db" not in g:
         ensure_db_dir()
-        g.db = sqlite3.connect(DB_PATH)
+        g.db = sqlite3.connect(LANG_DB_PATH)
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON;")
+        g.db.execute("PRAGMA journal_mode = WAL;")
     return g.db
 
 @app.teardown_appcontext
@@ -54,223 +63,225 @@ def init_db():
     Idempotent: create missing tables/indexes and run lightweight migrations.
     Your existing DB already has most tables; this keeps dev + prod consistent.
     """
-    db = get_db()
+    db = connect_lang_db()
+    try:
+        # Core tables
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lang_words (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              word TEXT NOT NULL UNIQUE,
+              created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lang_word_versions (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_word_id INTEGER NOT NULL,
+              version INTEGER NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              UNIQUE(lang_word_id, version),
+              FOREIGN KEY (lang_word_id) REFERENCES lang_words(id) ON DELETE CASCADE
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_versions_lang_word_id
+              ON lang_word_versions(lang_word_id);
+            """
+        )
 
-    # Core tables
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS lang_words (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          word TEXT NOT NULL UNIQUE,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        """
-    )
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS lang_word_versions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          lang_word_id INTEGER NOT NULL,
-          version INTEGER NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          UNIQUE(lang_word_id, version),
-          FOREIGN KEY (lang_word_id) REFERENCES lang_words(id) ON DELETE CASCADE
-        );
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_versions_lang_word_id
-          ON lang_word_versions(lang_word_id);
-        """
-    )
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS child_words (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_word_version_id INTEGER NOT NULL,
+              word TEXT NOT NULL,
+              link TEXT,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (lang_word_version_id) REFERENCES lang_word_versions(id) ON DELETE CASCADE
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_child_words_version_id
+              ON child_words(lang_word_version_id);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_child_words_link
+              ON child_words(link);
+            """
+        )
 
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS child_words (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          lang_word_version_id INTEGER NOT NULL,
-          word TEXT NOT NULL,
-          link TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (lang_word_version_id) REFERENCES lang_word_versions(id) ON DELETE CASCADE
-        );
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_child_words_version_id
-          ON child_words(lang_word_version_id);
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_child_words_link
-          ON child_words(link);
-        """
-    )
+        # Langs (collections of lang_words)
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS langs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL UNIQUE,
+              lang_word_ids TEXT NOT NULL,  -- JSON array of ints
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_langs_name
+              ON langs(name);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_langs_updated
+              ON langs(updated_at);
+            """
+        )
 
-    # Langs (collections of lang_words)
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS langs (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL UNIQUE,
-          lang_word_ids TEXT NOT NULL,  -- JSON array of ints
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_langs_name
-          ON langs(name);
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_langs_updated
-          ON langs(updated_at);
-        """
-    )
+        # Sentences table
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lang_sentences (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_word_ids TEXT NOT NULL,  -- JSON array of ints
+              sentence TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_lang_sentences_updated
+              ON lang_sentences(updated_at);
+            """
+        )
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS child_sentences (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_sentence_id INTEGER NOT NULL,
+              child_word_ids TEXT NOT NULL,  -- JSON array of ints
+              sentence TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (lang_sentence_id) REFERENCES lang_sentences(id) ON DELETE CASCADE
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_child_sentences_lang_sentence_id
+              ON child_sentences(lang_sentence_id);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_child_sentences_updated
+              ON child_sentences(updated_at);
+            """
+        )
 
-    # Sentences table
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS lang_sentences (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          lang_word_ids TEXT NOT NULL,  -- JSON array of ints
-          sentence TEXT NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_lang_sentences_updated
-          ON lang_sentences(updated_at);
-        """
-    )
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS child_sentences (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          lang_sentence_id INTEGER NOT NULL,
-          child_word_ids TEXT NOT NULL,  -- JSON array of ints
-          sentence TEXT NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (lang_sentence_id) REFERENCES lang_sentences(id) ON DELETE CASCADE
-        );
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_child_sentences_lang_sentence_id
-          ON child_sentences(lang_sentence_id);
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_child_sentences_updated
-          ON child_sentences(updated_at);
-        """
-    )
+        # Temporary writings (LLM outputs)
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS temporary_writings (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_id INTEGER NOT NULL,
+              identifier TEXT NOT NULL,        -- JSON (e.g., {"lang_id": 1})
+              prompt_type TEXT NOT NULL,       -- e.g. "create_lang_words"
+              text TEXT NOT NULL,              -- JSON output from LLM
+              model TEXT,
+              modifier TEXT,
+              task_id INTEGER,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id
+              ON temporary_writings(lang_id);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id_created
+              ON temporary_writings(lang_id, created_at);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_temp_writings_prompt_type
+              ON temporary_writings(prompt_type);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_temp_writings_created_at
+              ON temporary_writings(created_at);
+            """
+        )
 
-    # Temporary writings (LLM outputs)
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS temporary_writings (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          lang_id INTEGER NOT NULL,
-          identifier TEXT NOT NULL,        -- JSON (e.g., {"lang_id": 1})
-          prompt_type TEXT NOT NULL,       -- e.g. "create_lang_words"
-          text TEXT NOT NULL,              -- JSON output from LLM
-          model TEXT,
-          modifier TEXT,
-          task_id INTEGER,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id
-          ON temporary_writings(lang_id);
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id_created
-          ON temporary_writings(lang_id, created_at);
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_temp_writings_prompt_type
-          ON temporary_writings(prompt_type);
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_temp_writings_created_at
-          ON temporary_writings(created_at);
-        """
-    )
-
-    # LLM task queue
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS llm_tasks (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          lang_id INTEGER NOT NULL,
-          task_type TEXT NOT NULL,         -- "create_lang_words"
-          identifier TEXT NOT NULL,        -- JSON {"lang_id": ...}
-          payload TEXT NOT NULL,           -- JSON {modifier, ...}
-          status TEXT NOT NULL DEFAULT 'queued',  -- queued|running|done|error
-          error TEXT,
-          result_writing_id INTEGER,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_id
-          ON llm_tasks(lang_id);
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_status
-          ON llm_tasks(lang_id, status);
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_llm_tasks_status
-          ON llm_tasks(status);
-        """
-    )
-    db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_llm_tasks_created_at
-          ON llm_tasks(created_at);
-        """
-    )
+        # LLM task queue
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS llm_tasks (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_id INTEGER NOT NULL,
+              task_type TEXT NOT NULL,         -- "create_lang_words"
+              identifier TEXT NOT NULL,        -- JSON {"lang_id": ...}
+              payload TEXT NOT NULL,           -- JSON {modifier, ...}
+              status TEXT NOT NULL DEFAULT 'queued',  -- queued|running|done|error
+              error TEXT,
+              result_writing_id INTEGER,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_id
+              ON llm_tasks(lang_id);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_status
+              ON llm_tasks(lang_id, status);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_llm_tasks_status
+              ON llm_tasks(status);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_llm_tasks_created_at
+              ON llm_tasks(created_at);
+            """
+        )
 
 
-    # Lightweight migration if an older DB created child_words without 'link'
-    # (Your production DB currently does not have it.)
-    if not _table_has_column(db, "child_words", "link"):
-        db.execute("ALTER TABLE child_words ADD COLUMN link TEXT;")
+        # Lightweight migration if an older DB created child_words without 'link'
+        # (Your production DB currently does not have it.)
+        if not _table_has_column(db, "child_words", "link"):
+            db.execute("ALTER TABLE child_words ADD COLUMN link TEXT;")
 
-    db.commit()
+        db.commit()
+    finally:
+        db.close()
 
 def init_usage_db():
     """
@@ -741,8 +752,7 @@ def _llm_worker_loop():
             time.sleep(2.0)
 
 def _process_one_task():
-    db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
+    db = connect_lang_db()
 
     # Ensure schema exists (idempotent)
     _ensure_llm_schema(db)
