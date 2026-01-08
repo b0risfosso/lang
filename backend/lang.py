@@ -529,7 +529,6 @@ class OrbitTheme(BaseModel):
     name: str
     description: str
     orbiting_phrases: List[str]
-    orbiting_ideas: Optional[List[str]] = None
 
 class LangWordPlan(BaseModel):
     primary_phrase: str
@@ -570,7 +569,6 @@ word / phrase
 word / phrase
 word / phrase
 word / phrase
-(Optionally include 1–2 “orbiting ideas” if they clarify deeper structure or consequences.)
 Guidelines
 Do not simply restate the primary phrase.
 Keep themes conceptually distinct and non-redundant.
