@@ -9,6 +9,8 @@ import time
 import traceback
 from typing import Optional, List
 from datetime import datetime, timezone
+import atexit
+import fcntl
 
 from openai import OpenAI
 from pydantic import BaseModel
@@ -366,12 +368,6 @@ def init_usage_db():
 def _init_once():
     init_db()
 
-@app.before_first_request
-def _boot():
-    init_db()
-    init_usage_db()
-    _start_llm_worker_once()
-
 def require_admin_key():
     expected = os.environ.get(ADMIN_KEY_ENV)
     if not expected:
@@ -624,6 +620,52 @@ _worker_lock = threading.Lock()
 
 def _now_dt_sql():
     return "datetime('now')"
+
+_WORKER_LOCK_FD = None
+
+def _start_background_services():
+    """
+    Start services that should run when the process starts.
+    Under gunicorn, multiple workers will import this module—so we guard with a file lock.
+    """
+    global _WORKER_LOCK_FD
+
+    # Always ensure DB tables exist
+    try:
+        init_db()
+        init_usage_db()
+    except Exception:
+        # Don't prevent boot if init_db fails; but you may prefer to raise
+        traceback.print_exc()
+
+    # Acquire a host-level lock so only ONE process runs the LLM queue thread
+    lock_path = "/tmp/lang_llm_worker.lock"
+    try:
+        fd = open(lock_path, "w")
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # non-blocking
+        _WORKER_LOCK_FD = fd  # keep open so lock is held
+    except BlockingIOError:
+        # Another worker already started the background thread
+        return
+    except Exception:
+        traceback.print_exc()
+        return
+
+    # Start your DB-backed queue worker thread
+    _start_llm_worker_once()
+
+    # Release lock on exit
+    def _cleanup():
+        global _WORKER_LOCK_FD
+        try:
+            if _WORKER_LOCK_FD is not None:
+                fcntl.flock(_WORKER_LOCK_FD, fcntl.LOCK_UN)
+                _WORKER_LOCK_FD.close()
+        except Exception:
+            pass
+        _WORKER_LOCK_FD = None
+
+    atexit.register(_cleanup)
 
 def _start_llm_worker_once():
     global _worker_started
@@ -1759,6 +1801,8 @@ def list_temporary_writings():
     return jsonify(writings=out)
 
 
+
+_start_background_services()
 
 if __name__ == "__main__":
     # Dev server
