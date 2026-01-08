@@ -6,22 +6,50 @@
   <title>write</title>
   <style>
     :root { color-scheme: light dark; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; line-height: 1.5; }
-    main { max-width: 64rem; margin: 8vh auto; }
-    a { text-decoration: none; border-bottom: 1px solid currentColor; }
-    .top { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; justify-content:space-between; }
-    .panel { border: 1px solid color-mix(in oklab, currentColor 40%, transparent); border-radius: 1rem; padding: 1rem; margin-top: 1rem; }
-    .muted { opacity: .75; }
-    .row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
-    .pill { border: 1px solid currentColor; border-radius: 999px; padding: .15rem .6rem; font-size: .9rem; }
-    button {
-      border: 1px solid currentColor; background: transparent; color: inherit;
-      border-radius: .6rem; padding: .35rem .6rem; cursor: pointer; white-space: nowrap;
-    }
-    button:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; line-height: 1.5; }
+    header { padding: 1rem 1.25rem; border-bottom: 1px solid color-mix(in oklab, currentColor 30%, transparent); }
+    header .row { display:flex; gap:.75rem; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+    header a { text-decoration:none; border-bottom:1px solid currentColor; }
+    .muted { opacity:.75; }
 
-    details { border-radius: .9rem; }
-    summary { cursor: pointer; list-style: none; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      height: calc(100vh - 64px);
+    }
+    .pane {
+      padding: 1rem 1.25rem;
+      overflow: auto;
+    }
+    .pane + .pane {
+      border-left: 1px solid color-mix(in oklab, currentColor 30%, transparent);
+    }
+
+    .panel {
+      border: 1px solid color-mix(in oklab, currentColor 40%, transparent);
+      border-radius: 1rem;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      background: color-mix(in oklab, Canvas 92%, transparent);
+    }
+
+    button {
+      border: 1px solid currentColor;
+      background: transparent;
+      color: inherit;
+      border-radius: .6rem;
+      padding: .35rem .6rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    button:focus, input:focus, textarea:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+
+    .row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    .pill { border:1px solid currentColor; border-radius:999px; padding:.15rem .6rem; font-size:.9rem; }
+
+    details { border-radius:.9rem; }
+    summary { cursor:pointer; list-style:none; }
     summary::-webkit-details-marker { display:none; }
 
     .item {
@@ -32,34 +60,106 @@
     }
     .indent { padding-left: 1.25rem; margin-top: .5rem; }
 
-    ul { padding-left: 1.25rem; margin: .5rem 0 0; }
-    li { margin: .35rem 0; }
+    input[type="text"], textarea {
+      width: 100%;
+      padding: .5rem .6rem;
+      border-radius: .6rem;
+      border: 1px solid color-mix(in oklab, currentColor 55%, transparent);
+      background: transparent;
+      color: inherit;
+      box-sizing: border-box;
+    }
+    textarea { min-height: 96px; resize: vertical; }
+
+    pre {
+      margin: .5rem 0 0;
+      padding: .75rem;
+      border-radius: .75rem;
+      border: 1px solid color-mix(in oklab, currentColor 25%, transparent);
+      overflow:auto;
+    }
+
+    .select-btn {
+      border-style: dashed;
+    }
+    .selected {
+      border-color: currentColor !important;
+      box-shadow: 0 0 0 2px color-mix(in oklab, currentColor 25%, transparent);
+    }
+
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; height: auto; }
+      .pane + .pane { border-left: none; border-top: 1px solid color-mix(in oklab, currentColor 30%, transparent); }
+    }
   </style>
 </head>
 <body>
-  <main>
-    <div class="top">
-      <div>
-        <p style="margin:0 0 .35rem;"><a href="./">← back</a></p>
-        <h1 style="margin:0;">write</h1>
+  <header>
+    <div class="row">
+      <div class="row">
+        <a href="./">← back</a>
+        <strong>write</strong>
       </div>
       <div class="row">
-        <span class="pill" id="meta">locked</span>
-        <button id="refresh" type="button" disabled>refresh</button>
+        <span class="pill" id="auth-pill">auth…</span>
+        <button id="refresh-read" type="button" disabled>refresh read</button>
+        <button id="refresh-write" type="button" disabled>refresh write</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: READ -->
+    <div class="pane">
+      <div class="panel">
+        <div class="row" style="justify-content:space-between;">
+          <strong>langs</strong>
+          <span class="muted" id="read-meta">…</span>
+        </div>
+        <div class="muted" id="read-status" style="margin-top:.5rem;">loading…</div>
+        <div id="read-root"></div>
       </div>
     </div>
 
-    <section class="panel">
-      <h2 style="margin:0 0 .75rem; font-size:1rem;">langs</h2>
-      <div class="muted" id="status" style="margin-top:0;">auth…</div>
-      <div id="root"></div>
-    </section>
-  </main>
+    <!-- RIGHT: WRITE -->
+    <div class="pane">
+      <div class="panel">
+        <div class="row" style="justify-content:space-between;">
+          <strong>write</strong>
+          <span class="muted" id="write-status">select a lang</span>
+        </div>
+
+        <div style="margin-top:.75rem;">
+          <div class="muted">selected lang</div>
+          <div class="row" style="margin-top:.25rem;">
+            <span class="pill" id="selected-lang-pill">none</span>
+          </div>
+        </div>
+
+        <div style="margin-top:1rem;">
+          <div class="muted">optional modifier</div>
+          <textarea id="modifier" placeholder="e.g., focusing on failure modes"></textarea>
+        </div>
+
+        <div class="row" style="margin-top:1rem;">
+          <button id="run-llm" type="button" disabled>generate themes</button>
+          <span class="muted" id="task-meta"></span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="row" style="justify-content:space-between;">
+          <strong>temporary writings</strong>
+          <span class="muted" id="writings-meta">…</span>
+        </div>
+        <div id="writings-root" class="muted" style="margin-top:.5rem;">select a lang</div>
+      </div>
+    </div>
+  </div>
 
   <script>
     // ===== Admin protection =====
     const ADMIN_KEY_STORAGE = "lang_admin_key";
-
     function getAdminKey() { return localStorage.getItem(ADMIN_KEY_STORAGE) || ""; }
     function setAdminKey(key) { localStorage.setItem(ADMIN_KEY_STORAGE, key); }
     function clearAdminKey() { localStorage.removeItem(ADMIN_KEY_STORAGE); }
@@ -72,25 +172,59 @@
     }
 
     function hardClose() {
-      // Some browsers only allow close() if opened by script; still try.
       try { window.close(); } catch (_) {}
-      // Fallback: blank the page
       document.documentElement.innerHTML = "";
     }
 
     // ===== UI =====
-    const metaEl = document.getElementById("meta");
-    const statusEl = document.getElementById("status");
-    const rootEl = document.getElementById("root");
-    const refreshBtn = document.getElementById("refresh");
+    const authPill = document.getElementById("auth-pill");
+    const refreshReadBtn = document.getElementById("refresh-read");
+    const refreshWriteBtn = document.getElementById("refresh-write");
 
-    function openLang(id) {
-      window.open(`lang.html?id=${encodeURIComponent(id)}`, "_blank", "noopener,noreferrer");
-    }
-    function openWord(versionId) {
-      window.open(`lang_word.html?id=${encodeURIComponent(versionId)}`, "_blank", "noopener,noreferrer");
+    const readMeta = document.getElementById("read-meta");
+    const readStatus = document.getElementById("read-status");
+    const readRoot = document.getElementById("read-root");
+
+    const writeStatus = document.getElementById("write-status");
+    const selectedLangPill = document.getElementById("selected-lang-pill");
+    const modifierEl = document.getElementById("modifier");
+    const runBtn = document.getElementById("run-llm");
+    const taskMeta = document.getElementById("task-meta");
+
+    const writingsMeta = document.getElementById("writings-meta");
+    const writingsRoot = document.getElementById("writings-root");
+
+    let adminKey = "";
+    let readData = null;
+    let selectedLangId = null;
+    let selectedLangName = null;
+
+    // ===== API helpers =====
+    async function apiGet(url) {
+      const r = await fetch(url, {
+        headers: { "Accept": "application/json", "X-Admin-Key": adminKey }
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+      return data;
     }
 
+    async function apiPost(url, body) {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+          "X-Admin-Key": adminKey
+        },
+        body: JSON.stringify(body || {})
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+      return data;
+    }
+
+    // ===== READ: render tree from /api/write (same structure as earlier) =====
     function childWordNode(c) {
       if (c.link && String(c.link).trim()) {
         const a = document.createElement("a");
@@ -103,26 +237,40 @@
       return document.createTextNode(c.word);
     }
 
-    function render(data) {
-      rootEl.innerHTML = "";
+    function setSelectedLang(langId, langName) {
+      selectedLangId = langId;
+      selectedLangName = langName;
+      selectedLangPill.textContent = `${langName} (id ${langId})`;
+      writeStatus.textContent = "ready";
+      runBtn.disabled = false;
+      refreshWriteBtn.disabled = false;
+      loadWritings();
+    }
+
+    function renderRead(data) {
+      readRoot.innerHTML = "";
+      readStatus.textContent = "";
 
       const langs = Array.isArray(data.langs) ? data.langs : [];
-      metaEl.textContent = `${langs.length} lang(s)`;
+      readMeta.textContent = `${langs.length} lang(s)`;
 
       if (!langs.length) {
-        statusEl.textContent = "no langs.";
+        readStatus.textContent = "no langs.";
         return;
       }
-      statusEl.textContent = "";
 
       for (const L of langs) {
         const langWrap = document.createElement("details");
         langWrap.className = "item";
+        if (selectedLangId === L.id) langWrap.classList.add("selected");
 
         const langSummary = document.createElement("summary");
         const summaryRow = document.createElement("div");
         summaryRow.className = "row";
+        summaryRow.style.justifyContent = "space-between";
 
+        const left = document.createElement("div");
+        left.className = "row";
         const title = document.createElement("strong");
         title.textContent = L.name;
 
@@ -130,18 +278,23 @@
         counts.className = "muted";
         counts.textContent = `— ${L.lang_word_count} word(s) · ${L.child_word_count} child word(s)`;
 
-        const openBtn = document.createElement("button");
-        openBtn.type = "button";
-        openBtn.textContent = "open";
-        openBtn.addEventListener("click", (e) => {
+        left.appendChild(title);
+        left.appendChild(counts);
+
+        const selectBtn = document.createElement("button");
+        selectBtn.type = "button";
+        selectBtn.className = "select-btn";
+        selectBtn.textContent = "select";
+        selectBtn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          openLang(L.id);
+          setSelectedLang(L.id, L.name);
+          // re-render selection highlight
+          renderRead(readData);
         });
 
-        summaryRow.appendChild(title);
-        summaryRow.appendChild(counts);
-        summaryRow.appendChild(openBtn);
+        summaryRow.appendChild(left);
+        summaryRow.appendChild(selectBtn);
         langSummary.appendChild(summaryRow);
         langWrap.appendChild(langSummary);
 
@@ -172,21 +325,8 @@
           wcounts.className = "muted";
           wcounts.textContent = `— ${W.version_count} version(s) · ${W.child_word_count} child word(s)`;
 
-          const latestVersion = (Array.isArray(W.versions) && W.versions.length) ? W.versions[0] : null;
-
-          const wopen = document.createElement("button");
-          wopen.type = "button";
-          wopen.textContent = "open";
-          wopen.disabled = !latestVersion;
-          wopen.addEventListener("click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (latestVersion) openWord(latestVersion.version_id);
-          });
-
           wrow.appendChild(wtitle);
           wrow.appendChild(wcounts);
-          wrow.appendChild(wopen);
           wordSummary.appendChild(wrow);
           wordWrap.appendChild(wordSummary);
 
@@ -194,13 +334,6 @@
           wordBody.className = "indent";
 
           const versions = Array.isArray(W.versions) ? W.versions : [];
-          if (!versions.length) {
-            const p = document.createElement("div");
-            p.className = "muted";
-            p.textContent = "no versions.";
-            wordBody.appendChild(p);
-          }
-
           for (const V of versions) {
             const verWrap = document.createElement("details");
             verWrap.className = "item";
@@ -217,18 +350,8 @@
             vcounts.className = "muted";
             vcounts.textContent = `— ${V.child_word_count} child word(s)`;
 
-            const vopen = document.createElement("button");
-            vopen.type = "button";
-            vopen.textContent = "open";
-            vopen.addEventListener("click", (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              openWord(V.version_id);
-            });
-
             vrow.appendChild(vtitle);
             vrow.appendChild(vcounts);
-            vrow.appendChild(vopen);
             verSummary.appendChild(vrow);
             verWrap.appendChild(verSummary);
 
@@ -260,68 +383,157 @@
         }
 
         langWrap.appendChild(langBody);
-        rootEl.appendChild(langWrap);
+        readRoot.appendChild(langWrap);
       }
     }
 
-    async function load(adminKey) {
-      statusEl.textContent = "loading…";
-      rootEl.innerHTML = "";
-      metaEl.textContent = "ok";
+    async function loadRead() {
+      readStatus.textContent = "loading…";
+      readRoot.innerHTML = "";
+      readMeta.textContent = "…";
+      const data = await apiGet("/api/write"); // returns full tree
+      readData = data;
+      renderRead(data);
+    }
 
-      const r = await fetch("/api/write", {
-        headers: { "Accept": "application/json", "X-Admin-Key": adminKey }
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        statusEl.textContent = err.error || `failed (${r.status})`;
+    // ===== WRITE: enqueue + poll + render writings =====
+    function prettyJson(obj) {
+      try { return JSON.stringify(obj, null, 2); }
+      catch (_) { return String(obj); }
+    }
+
+    function renderWritings(writings) {
+      writingsRoot.innerHTML = "";
+
+      if (!writings.length) {
+        writingsRoot.className = "muted";
+        writingsRoot.textContent = "no temporary writings yet.";
         return;
       }
-      const data = await r.json().catch(() => ({}));
-      render(data);
+
+      writingsMeta.textContent = `${writings.length} item(s)`;
+
+      for (const w of writings) {
+        const wrap = document.createElement("details");
+        wrap.className = "item";
+
+        const sum = document.createElement("summary");
+        const row = document.createElement("div");
+        row.className = "row";
+        row.style.justifyContent = "space-between";
+
+        const left = document.createElement("div");
+        left.className = "row";
+        const title = document.createElement("strong");
+        title.textContent = w.prompt_type || "writing";
+
+        const meta = document.createElement("span");
+        meta.className = "muted";
+        meta.textContent = `— id ${w.id} · ${w.created_at}` + (w.modifier ? ` · modifier: ${w.modifier}` : "");
+
+        left.appendChild(title);
+        left.appendChild(meta);
+
+        row.appendChild(left);
+        sum.appendChild(row);
+        wrap.appendChild(sum);
+
+        const pre = document.createElement("pre");
+        pre.textContent = prettyJson(w.text);
+        wrap.appendChild(pre);
+
+        writingsRoot.appendChild(wrap);
+      }
     }
 
-    // ===== Boot: enforce admin key and close on failure =====
-    (async () => {
-      let key = getAdminKey();
+    async function loadWritings() {
+      if (!selectedLangId) return;
+      writingsMeta.textContent = "…";
+      writingsRoot.className = "muted";
+      writingsRoot.textContent = "loading…";
 
-      // if no stored key, prompt immediately
-      if (!key) {
-        key = prompt("Admin key:", "") || "";
-        key = key.trim();
-        if (!key) {
-          alert("No key provided. Closing.");
-          hardClose();
-          return;
+      const data = await apiGet(`/api/temporary_writings?lang_id=${encodeURIComponent(selectedLangId)}`);
+      const writings = Array.isArray(data.writings) ? data.writings : [];
+      renderWritings(writings);
+    }
+
+    async function pollTask(taskId) {
+      const start = Date.now();
+      while (Date.now() - start < 120000) { // 2 minutes
+        const t = await apiGet(`/api/write/tasks/${encodeURIComponent(taskId)}`);
+        taskMeta.textContent = `task ${taskId}: ${t.status}`;
+        if (t.status === "done") return { done: true };
+        if (t.status === "error") return { done: false, error: t.error || "error" };
+        await new Promise(r => setTimeout(r, 1500));
+      }
+      return { done: false, error: "timeout" };
+    }
+
+    async function enqueue() {
+      if (!selectedLangId) return;
+
+      runBtn.disabled = true;
+      taskMeta.textContent = "enqueueing…";
+
+      try {
+        const modifier = (modifierEl.value || "").trim();
+
+        const out = await apiPost("/api/write/create_lang_words", {
+          lang_id: selectedLangId,
+          modifier
+        });
+
+        const taskId = out.task_id;
+        if (out.deduped) {
+          taskMeta.textContent = `task ${taskId}: ${out.status} (already exists)`;
+        } else {
+          taskMeta.textContent = `task ${taskId}: queued`;
         }
+
+        const result = await pollTask(taskId);
+        if (!result.done) {
+          taskMeta.textContent = `task ${taskId}: ${result.error || "error"}`;
+        } else {
+          taskMeta.textContent = `task ${taskId}: done`;
+          await loadWritings();
+        }
+      } catch (e) {
+        taskMeta.textContent = e.message || String(e);
+      } finally {
+        runBtn.disabled = false;
+      }
+    }
+
+    // ===== Boot (admin-only) =====
+    (async () => {
+      let key = (getAdminKey() || "").trim();
+      if (!key) {
+        key = (prompt("Admin key:", "") || "").trim();
+        if (!key) { alert("No key provided. Closing."); hardClose(); return; }
         setAdminKey(key);
       }
 
-      // verify stored/prompted key; if bad, prompt once more
       let ok = await verifyAdminKey(key);
       if (!ok) {
         clearAdminKey();
         const retry = (prompt("Invalid key. Try again:", "") || "").trim();
-        if (!retry) {
-          alert("Invalid key. Closing.");
-          hardClose();
-          return;
-        }
+        if (!retry) { alert("Invalid key. Closing."); hardClose(); return; }
         setAdminKey(retry);
         ok = await verifyAdminKey(retry);
-        if (!ok) {
-          clearAdminKey();
-          alert("Invalid key. Closing.");
-          hardClose();
-          return;
-        }
+        if (!ok) { clearAdminKey(); alert("Invalid key. Closing."); hardClose(); return; }
         key = retry;
       }
 
-      // authorized
-      refreshBtn.disabled = false;
-      refreshBtn.addEventListener("click", () => load(key));
-      await load(key);
+      adminKey = key;
+      authPill.textContent = "ok";
+      refreshReadBtn.disabled = false;
+
+      refreshReadBtn.addEventListener("click", loadRead);
+      refreshWriteBtn.addEventListener("click", loadWritings);
+      runBtn.addEventListener("click", enqueue);
+
+      await loadRead();
+      // writings panel stays idle until a lang is selected
     })();
   </script>
 </body>

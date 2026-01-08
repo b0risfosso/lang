@@ -4,9 +4,20 @@ import sqlite3
 import json
 from flask import Flask, g, jsonify, request, abort
 from werkzeug.exceptions import HTTPException
+import threading
+import time
+import traceback
+from typing import Optional, List
+from datetime import datetime, timezone
+
+from openai import OpenAI
+from pydantic import BaseModel
 
 DB_DIR = "/var/www/site/data"
 DB_PATH = os.path.join(DB_DIR, "lang.db")
+
+USAGE_DB_PATH = os.path.join(DB_DIR, "llm_usage.db")
+USAGE_APP_NAME = "lang"  # schema comment says 'jid'|'crayon', but not enforced; use a stable tag
 
 # Set this env var in your service config:
 #   export LANG_ADMIN_KEY="your-secret"
@@ -166,6 +177,90 @@ def init_db():
         """
     )
 
+    # Temporary writings (LLM outputs)
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS temporary_writings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          lang_id INTEGER NOT NULL,
+          identifier TEXT NOT NULL,        -- JSON (e.g., {"lang_id": 1})
+          prompt_type TEXT NOT NULL,       -- e.g. "create_lang_words"
+          text TEXT NOT NULL,              -- JSON output from LLM
+          model TEXT,
+          modifier TEXT,
+          task_id INTEGER,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id
+          ON temporary_writings(lang_id);
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id_created
+          ON temporary_writings(lang_id, created_at);
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_temp_writings_prompt_type
+          ON temporary_writings(prompt_type);
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_temp_writings_created_at
+          ON temporary_writings(created_at);
+        """
+    )
+
+    # LLM task queue
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS llm_tasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          lang_id INTEGER NOT NULL,
+          task_type TEXT NOT NULL,         -- "create_lang_words"
+          identifier TEXT NOT NULL,        -- JSON {"lang_id": ...}
+          payload TEXT NOT NULL,           -- JSON {modifier, ...}
+          status TEXT NOT NULL DEFAULT 'queued',  -- queued|running|done|error
+          error TEXT,
+          result_writing_id INTEGER,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_id
+          ON llm_tasks(lang_id);
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_status
+          ON llm_tasks(lang_id, status);
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_llm_tasks_status
+          ON llm_tasks(status);
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_llm_tasks_created_at
+          ON llm_tasks(created_at);
+        """
+    )
+
 
     # Lightweight migration if an older DB created child_words without 'link'
     # (Your production DB currently does not have it.)
@@ -174,9 +269,108 @@ def init_db():
 
     db.commit()
 
+def init_usage_db():
+    """
+    Initialize the separate usage database for LLM metrics.
+    """
+    dbu = _connect_usage_db()
+    try:
+        # Events table
+        dbu.execute(
+            """
+            CREATE TABLE IF NOT EXISTS usage_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              ts TEXT NOT NULL,
+              app TEXT NOT NULL,
+              model TEXT NOT NULL,
+              endpoint TEXT NOT NULL,
+              email TEXT,
+              request_id TEXT,
+              tokens_in INTEGER NOT NULL DEFAULT 0,
+              tokens_out INTEGER NOT NULL DEFAULT 0,
+              total_tokens INTEGER NOT NULL DEFAULT 0,
+              duration_ms INTEGER NOT NULL DEFAULT 0,
+              cost_usd REAL NOT NULL DEFAULT 0.0,
+              meta TEXT  -- JSON
+            );
+            """
+        )
+        dbu.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_usage_events_ts
+              ON usage_events(ts);
+            """
+        )
+        dbu.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_usage_events_model
+              ON usage_events(model);
+            """
+        )
+        dbu.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_usage_events_app
+              ON usage_events(app);
+            """
+        )
+
+        # Totals all time
+        dbu.execute(
+            """
+            CREATE TABLE IF NOT EXISTS totals_all_time (
+              id INTEGER PRIMARY KEY CHECK (id = 1),
+              tokens_in INTEGER NOT NULL DEFAULT 0,
+              tokens_out INTEGER NOT NULL DEFAULT 0,
+              total_tokens INTEGER NOT NULL DEFAULT 0,
+              calls INTEGER NOT NULL DEFAULT 0,
+              last_ts TEXT NOT NULL
+            );
+            """
+        )
+
+        # Totals by model
+        dbu.execute(
+            """
+            CREATE TABLE IF NOT EXISTS totals_by_model (
+              model TEXT PRIMARY KEY,
+              tokens_in INTEGER NOT NULL DEFAULT 0,
+              tokens_out INTEGER NOT NULL DEFAULT 0,
+              total_tokens INTEGER NOT NULL DEFAULT 0,
+              calls INTEGER NOT NULL DEFAULT 0,
+              first_ts TEXT NOT NULL,
+              last_ts TEXT NOT NULL
+            );
+            """
+        )
+
+        # Totals daily
+        dbu.execute(
+            """
+            CREATE TABLE IF NOT EXISTS totals_daily (
+              day TEXT NOT NULL,
+              model TEXT NOT NULL,
+              tokens_in INTEGER NOT NULL DEFAULT 0,
+              tokens_out INTEGER NOT NULL DEFAULT 0,
+              total_tokens INTEGER NOT NULL DEFAULT 0,
+              calls INTEGER NOT NULL DEFAULT 0,
+              PRIMARY KEY (day, model)
+            );
+            """
+        )
+
+        dbu.commit()
+    finally:
+        dbu.close()
+
 @app.before_request
 def _init_once():
     init_db()
+
+@app.before_first_request
+def _boot():
+    init_db()
+    init_usage_db()
+    _start_llm_worker_once()
 
 def require_admin_key():
     expected = os.environ.get(ADMIN_KEY_ENV)
@@ -191,6 +385,351 @@ def handle_error(e):
     if isinstance(e, HTTPException):
         return jsonify(error=e.description), e.code
     return jsonify(error="Internal server error"), 500
+
+
+def _utc_iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+def _utc_day() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+def _connect_usage_db():
+    # Separate DB from lang.db
+    conn = sqlite3.connect(USAGE_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def _extract_token_usage(resp) -> tuple[int, int, int]:
+    """
+    Best-effort extraction for OpenAI Responses API usage.
+    Returns (tokens_in, tokens_out, total_tokens).
+    """
+    tokens_in = tokens_out = total = 0
+
+    # OpenAI SDK commonly exposes .usage as an object or dict with input/output/total tokens
+    usage = getattr(resp, "usage", None)
+    if usage:
+        # dict-like
+        if isinstance(usage, dict):
+            tokens_in = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+            tokens_out = int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
+            total = int(usage.get("total_tokens") or (tokens_in + tokens_out) or 0)
+            return tokens_in, tokens_out, total
+
+        # object-like
+        tokens_in = int(getattr(usage, "input_tokens", 0) or getattr(usage, "prompt_tokens", 0) or 0)
+        tokens_out = int(getattr(usage, "output_tokens", 0) or getattr(usage, "completion_tokens", 0) or 0)
+        total = int(getattr(usage, "total_tokens", 0) or (tokens_in + tokens_out) or 0)
+        return tokens_in, tokens_out, total
+
+    # fallback: sometimes nested
+    for attr in ("input_tokens", "prompt_tokens"):
+        v = getattr(resp, attr, None)
+        if v is not None:
+            tokens_in = int(v)
+            break
+    for attr in ("output_tokens", "completion_tokens"):
+        v = getattr(resp, attr, None)
+        if v is not None:
+            tokens_out = int(v)
+            break
+    total = tokens_in + tokens_out
+    return tokens_in, tokens_out, total
+
+def log_llm_usage_event(
+    *,
+    model: str,
+    endpoint: str,
+    request_id: str | None,
+    tokens_in: int,
+    tokens_out: int,
+    total_tokens: int,
+    duration_ms: int,
+    meta: dict | None = None,
+    email: str | None = None,
+):
+    """
+    Writes to llm_usage.db usage_events + updates totals tables.
+    """
+    ts = _utc_iso_now()
+    day = _utc_day()
+    meta_json = json.dumps(meta or {}, ensure_ascii=False)
+
+    dbu = _connect_usage_db()
+    try:
+        # 1) usage_events
+        dbu.execute(
+            """
+            INSERT INTO usage_events
+              (ts, app, model, endpoint, email, request_id, tokens_in, tokens_out, total_tokens, duration_ms, cost_usd, meta)
+            VALUES
+              (?,  ?,   ?,     ?,        ?,     ?,          ?,         ?,          ?,            ?,           0.0,     ?)
+            """,
+            (ts, USAGE_APP_NAME, model, endpoint, email, request_id or "", int(tokens_in), int(tokens_out), int(total_tokens), int(duration_ms), meta_json),
+        )
+
+        # 2) totals_all_time (single row id=1)
+        dbu.execute(
+            """
+            INSERT INTO totals_all_time (id, tokens_in, tokens_out, total_tokens, calls, last_ts)
+            VALUES (1, ?, ?, ?, 1, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              tokens_in = tokens_in + excluded.tokens_in,
+              tokens_out = tokens_out + excluded.tokens_out,
+              total_tokens = total_tokens + excluded.total_tokens,
+              calls = calls + 1,
+              last_ts = excluded.last_ts
+            """,
+            (int(tokens_in), int(tokens_out), int(total_tokens), ts),
+        )
+
+        # 3) totals_by_model
+        dbu.execute(
+            """
+            INSERT INTO totals_by_model (model, tokens_in, tokens_out, total_tokens, calls, first_ts, last_ts)
+            VALUES (?, ?, ?, ?, 1, ?, ?)
+            ON CONFLICT(model) DO UPDATE SET
+              tokens_in = tokens_in + excluded.tokens_in,
+              tokens_out = tokens_out + excluded.tokens_out,
+              total_tokens = total_tokens + excluded.total_tokens,
+              calls = calls + 1,
+              last_ts = excluded.last_ts
+            """,
+            (model, int(tokens_in), int(tokens_out), int(total_tokens), ts, ts),
+        )
+
+        # 4) totals_daily
+        dbu.execute(
+            """
+            INSERT INTO totals_daily (day, model, tokens_in, tokens_out, total_tokens, calls)
+            VALUES (?, ?, ?, ?, ?, 1)
+            ON CONFLICT(day, model) DO UPDATE SET
+              tokens_in = tokens_in + excluded.tokens_in,
+              tokens_out = tokens_out + excluded.tokens_out,
+              total_tokens = total_tokens + excluded.total_tokens,
+              calls = calls + 1
+            """,
+            (day, model, int(tokens_in), int(tokens_out), int(total_tokens)),
+        )
+
+        dbu.commit()
+    finally:
+        dbu.close()
+
+
+class OrbitTheme(BaseModel):
+    name: str
+    description: str
+    orbiting_phrases: List[str]
+    orbiting_ideas: Optional[List[str]] = None
+
+class LangWordPlan(BaseModel):
+    primary_phrase: str
+    optional_modifier: Optional[str] = None
+    themes: List[OrbitTheme]
+
+
+PROMPT_CREATE_LANG_WORDS = """You will be given:
+a Primary Phrase (a system, entity, idea, institution, scale, or pattern), and
+an Optional Modifier that may add context, constraints, or a preferred lens.
+The phrase may range from highly abstract (e.g., physical limits) to large-scale systems (e.g., economies) to concrete institutions (e.g., government platforms).
+Your job is to:
+Infer what kind of thing the primary phrase represents.
+Incorporate the modifier if provided to guide emphasis, scope, or perspective.
+Generate 4–8 distinct themes that meaningfully describe how the thing works, is structured, or is experienced.
+For each theme, build a set of orbiting words/phrases that cluster naturally around it.
+Inputs
+Primary Phrase: [REQUIRED]
+Optional Modifier: [OPTIONAL — may specify perspective, domain, audience, timeframe, or concern]
+Examples of modifiers:
+“from a policy perspective”
+“focusing on failure modes”
+“emphasizing technical constraints”
+“for first-time users”
+“historical evolution”
+“economic and incentive structures”
+“ethical and societal implications”
+How to Use the Modifier
+If a modifier is provided, prioritize themes and orbiting phrases that align with it.
+Do not force the modifier into every theme—apply it where it naturally fits.
+If no modifier is given, default to a balanced, systems-level analysis.
+Output Structure
+Use the following format:
+Theme N: [Short, precise theme name]
+One-sentence description of what this theme captures.
+word / phrase
+word / phrase
+word / phrase
+word / phrase
+word / phrase
+(Optionally include 1–2 “orbiting ideas” if they clarify deeper structure or consequences.)
+Guidelines
+Do not simply restate the primary phrase.
+Keep themes conceptually distinct and non-redundant.
+Orbiting phrases may include:
+components or structures
+processes or dynamics
+stakeholders or agents
+constraints, limits, or bottlenecks
+emergent behaviors or outcomes
+Match abstraction level to the input:
+scientific → theory, limits, models
+economic → scale, flows, incentives, risk
+institutional → governance, procedures, users, friction
+Use clear, neutral, descriptive language.
+Now analyze the following inputs and generate the themes and orbiting phrase sets:
+Primary Phrase: {primary_phrase}
+Optional Modifier: {optional_modifier}
+"""
+
+LLM_MODEL_CREATE_LANG_WORDS = "gpt-5-mini-2025-08-07"
+
+def _run_create_lang_words_llm(primary_phrase: str, optional_modifier: str | None) -> LangWordPlan:
+    start_time = time.time()
+    client = OpenAI()
+    prompt = PROMPT_CREATE_LANG_WORDS.format(
+        primary_phrase=primary_phrase,
+        optional_modifier=(optional_modifier or "").strip()
+    )
+
+    # Use structured parsing via Responses API
+    resp = client.responses.parse(
+        model=LLM_MODEL_CREATE_LANG_WORDS,
+        input=[
+            {"role": "system", "content": "Return a structured JSON plan following the provided schema."},
+            {"role": "user", "content": prompt},
+        ],
+        text_format=LangWordPlan,
+    )
+
+    # Log usage
+    duration_ms = int((time.time() - start_time) * 1000)
+    tokens_in, tokens_out, total_tokens = _extract_token_usage(resp)
+    log_llm_usage_event(
+        model=LLM_MODEL_CREATE_LANG_WORDS,
+        endpoint="responses.parse",
+        request_id=getattr(resp, "id", None),
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        total_tokens=total_tokens,
+        duration_ms=duration_ms,
+        meta={"primary_phrase": primary_phrase, "optional_modifier": optional_modifier},
+    )
+
+    return resp.output_parsed
+
+
+_worker_started = False
+_worker_lock = threading.Lock()
+
+def _now_dt_sql():
+    return "datetime('now')"
+
+def _start_llm_worker_once():
+    global _worker_started
+    with _worker_lock:
+        if _worker_started:
+            return
+        _worker_started = True
+
+    t = threading.Thread(target=_llm_worker_loop, name="llm-worker", daemon=True)
+    t.start()
+
+def _llm_worker_loop():
+    # NOTE: uses new sqlite connections (not Flask g)
+    while True:
+        try:
+            _process_one_task()
+        except Exception:
+            # Never crash the worker loop
+            traceback.print_exc()
+        time.sleep(1.0)
+
+def _process_one_task():
+    db = sqlite3.connect(DB_PATH)
+    db.row_factory = sqlite3.Row
+
+    # Claim one queued task
+    task = db.execute(
+        """
+        SELECT id, lang_id, task_type, identifier, payload
+        FROM llm_tasks
+        WHERE status = 'queued'
+        ORDER BY id ASC
+        LIMIT 1
+        """
+    ).fetchone()
+
+    if task is None:
+        db.close()
+        return
+
+    task_id = int(task["id"])
+
+    # Mark running
+    db.execute(
+        "UPDATE llm_tasks SET status='running', updated_at=datetime('now') WHERE id=?",
+        (task_id,)
+    )
+    db.commit()
+
+    try:
+        task_type = task["task_type"]
+        lang_id = int(task["lang_id"])
+        identifier = json.loads(task["identifier"])
+        payload = json.loads(task["payload"])
+
+        if task_type != "create_lang_words":
+            raise ValueError(f"Unknown task_type: {task_type}")
+        modifier = (payload.get("modifier") or "").strip() or None
+
+        # Fetch lang name for Primary Phrase
+        lr = db.execute("SELECT id, name FROM langs WHERE id=?", (lang_id,)).fetchone()
+        if lr is None:
+            raise ValueError(f"Lang not found: {lang_id}")
+        primary_phrase = lr["name"]
+
+        plan = _run_create_lang_words_llm(primary_phrase, modifier)
+
+        # Store in temporary_writings
+        writing_id = db.execute(
+            """
+            INSERT INTO temporary_writings (lang_id, identifier, prompt_type, text, model, modifier, task_id, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            """,
+            (
+                lang_id,
+                json.dumps({"lang_id": lang_id}),
+                "create_lang_words",
+                json.dumps(plan.model_dump(), ensure_ascii=False),
+                LLM_MODEL_CREATE_LANG_WORDS,
+                modifier or "",
+                task_id,
+            )
+        ).lastrowid
+
+        db.execute(
+            """
+            UPDATE llm_tasks
+            SET status='done', result_writing_id=?, updated_at=datetime('now')
+            WHERE id=?
+            """,
+            (int(writing_id), task_id)
+        )
+        db.commit()
+
+    except Exception as e:
+        db.execute(
+            """
+            UPDATE llm_tasks
+            SET status='error', error=?, updated_at=datetime('now')
+            WHERE id=?
+            """,
+            (str(e), task_id)
+        )
+        db.commit()
+    finally:
+        db.close()
 
 
 # =========================
@@ -1090,6 +1629,134 @@ def get_child_sentence(child_sentence_id: int):
         "updated_at": r["updated_at"],
         "child_words": child_words_out
     })
+
+
+@app.post("/api/write/create_lang_words")
+def enqueue_create_lang_words():
+    require_admin_key()
+    db = get_db()
+
+    data = request.get_json(silent=True) or {}
+    lang_id = data.get("lang_id", None)
+    modifier = (data.get("modifier") or "").strip()
+
+    if lang_id is None:
+        abort(400, description="Missing lang_id.")
+    try:
+        lang_id = int(lang_id)
+    except Exception:
+        abort(400, description="Invalid lang_id.")
+
+    # Ensure lang exists
+    lr = db.execute("SELECT id FROM langs WHERE id=?", (lang_id,)).fetchone()
+    if lr is None:
+        abort(404, description="Lang not found.")
+
+    # Check for existing queued/running task for this lang
+    existing = db.execute(
+        """
+        SELECT id, status
+        FROM llm_tasks
+        WHERE lang_id=? AND task_type=? AND status IN ('queued','running')
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (lang_id, "create_lang_words"),
+    ).fetchone()
+
+    if existing is not None:
+        return jsonify(ok=True, task_id=int(existing["id"]), status=existing["status"], deduped=True), 202
+
+    identifier = {"lang_id": lang_id}
+    payload = {"modifier": modifier}
+
+    cur = db.execute(
+        """
+        INSERT INTO llm_tasks (lang_id, task_type, identifier, payload, status, updated_at)
+        VALUES (?, ?, ?, ?, 'queued', datetime('now'))
+        """,
+        (lang_id, "create_lang_words", json.dumps(identifier), json.dumps(payload)),
+    )
+    db.commit()
+
+    return jsonify(ok=True, task_id=cur.lastrowid), 202
+
+
+@app.get("/api/write/tasks/<int:task_id>")
+def get_task(task_id: int):
+    require_admin_key()
+    db = get_db()
+    r = db.execute(
+        """
+        SELECT id, lang_id, task_type, identifier, payload, status, error, result_writing_id, created_at, updated_at
+        FROM llm_tasks
+        WHERE id=?
+        """,
+        (task_id,),
+    ).fetchone()
+    if r is None:
+        abort(404, description="Task not found.")
+
+    return jsonify({
+        "id": int(r["id"]),
+        "lang_id": int(r["lang_id"]) if r["lang_id"] is not None else None,
+        "task_type": r["task_type"],
+        "identifier": json.loads(r["identifier"]),
+        "payload": json.loads(r["payload"]),
+        "status": r["status"],
+        "error": r["error"] or "",
+        "result_writing_id": r["result_writing_id"],
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+    })
+
+
+@app.get("/api/temporary_writings")
+def list_temporary_writings():
+    require_admin_key()
+    db = get_db()
+
+    lang_id = request.args.get("lang_id", "").strip()
+    if not lang_id:
+        abort(400, description="Missing lang_id.")
+    try:
+        lang_id_int = int(lang_id)
+    except Exception:
+        abort(400, description="Invalid lang_id.")
+
+    ident = json.dumps({"lang_id": lang_id_int})
+
+    rows = db.execute(
+        """
+        SELECT id, lang_id, identifier, prompt_type, text, model, modifier, task_id, created_at, updated_at
+        FROM temporary_writings
+        WHERE lang_id = ? AND prompt_type = 'create_lang_words'
+        ORDER BY id DESC
+        LIMIT 50
+        """,
+        (lang_id_int,),
+    ).fetchall()
+
+    out = []
+    for r in rows:
+        try:
+            text_json = json.loads(r["text"])
+        except Exception:
+            text_json = r["text"]
+        out.append({
+            "id": int(r["id"]),
+            "lang_id": int(r["lang_id"]) if r["lang_id"] is not None else None,
+            "identifier": json.loads(r["identifier"]),
+            "prompt_type": r["prompt_type"],
+            "text": text_json,
+            "model": r["model"] or "",
+            "modifier": r["modifier"] or "",
+            "task_id": r["task_id"],
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"],
+        })
+
+    return jsonify(writings=out)
 
 
 
