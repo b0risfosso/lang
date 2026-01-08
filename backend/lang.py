@@ -58,6 +58,71 @@ def _table_has_column(db, table: str, col: str) -> bool:
     rows = db.execute(f"PRAGMA table_info({table})").fetchall()
     return any(r["name"] == col for r in rows)
 
+def _create_lang_word_with_children(db, parent_word: str, child_words: list[str]) -> int:
+    """
+    Creates:
+      - lang_words row
+      - lang_word_versions row (version=1)
+      - child_words rows for that version
+    Returns the new lang_word_id.
+    """
+    parent_word = (parent_word or "").strip()
+    if not parent_word:
+        raise ValueError("Empty theme name (lang word).")
+
+    # Create lang_words
+    try:
+        cur = db.execute("INSERT INTO lang_words (word) VALUES (?)", (parent_word,))
+        lang_word_id = int(cur.lastrowid)
+    except sqlite3.IntegrityError:
+        # If already exists, reuse existing word id
+        r = db.execute("SELECT id FROM lang_words WHERE word = ?", (parent_word,)).fetchone()
+        if r is None:
+            raise
+        lang_word_id = int(r["id"])
+
+    # Ensure a version exists; create version=1 if none
+    v = db.execute(
+        """
+        SELECT id, version
+        FROM lang_word_versions
+        WHERE lang_word_id = ?
+        ORDER BY version DESC
+        LIMIT 1
+        """,
+        (lang_word_id,),
+    ).fetchone()
+
+    if v is None:
+        curv = db.execute(
+            "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, 1)",
+            (lang_word_id,),
+        )
+        version_id = int(curv.lastrowid)
+    else:
+        # If it exists, use latest version (or choose to always create a new version—your call)
+        version_id = int(v["id"])
+
+    # Insert child words (dedupe + strip)
+    seen = set()
+    for cw in child_words or []:
+        cw = (cw or "").strip()
+        if not cw:
+            continue
+        if cw.lower() in seen:
+            continue
+        seen.add(cw.lower())
+
+        db.execute(
+            """
+            INSERT INTO child_words (lang_word_version_id, word)
+            VALUES (?, ?)
+            """,
+            (version_id, cw),
+        )
+
+    return lang_word_id
+
 def init_db():
     """
     Idempotent: create missing tables/indexes and run lightweight migrations.
@@ -527,7 +592,6 @@ def log_llm_usage_event(
 
 class OrbitTheme(BaseModel):
     name: str
-    description: str
     orbiting_phrases: List[str]
 
 class LangWordPlan(BaseModel):
@@ -563,7 +627,6 @@ If no modifier is given, default to a balanced, systems-level analysis.
 Output Structure
 Use the following format:
 Theme N: [Short, precise theme name]
-One-sentence description of what this theme captures.
 word / phrase
 word / phrase
 word / phrase
@@ -1864,6 +1927,90 @@ def list_temporary_writings():
 
     return jsonify(writings=out)
 
+
+@app.post("/api/temporary_writings/<int:writing_id>/apply_create_lang_words")
+def apply_temporary_writing_create_lang_words(writing_id: int):
+    require_admin_key()
+    db = get_db()
+
+    # Load temporary writing
+    tw = db.execute(
+        """
+        SELECT id, lang_id, prompt_type, text
+        FROM temporary_writings
+        WHERE id = ?
+        """,
+        (writing_id,),
+    ).fetchone()
+    if tw is None:
+        abort(404, description="Temporary writing not found.")
+
+    if tw["prompt_type"] != "create_lang_words":
+        abort(400, description="Unsupported prompt_type for apply.")
+
+    lang_id = int(tw["lang_id"])
+
+    # Ensure lang exists and load current ids
+    lr = db.execute("SELECT id, name, lang_word_ids FROM langs WHERE id = ?", (lang_id,)).fetchone()
+    if lr is None:
+        abort(404, description="Lang not found.")
+
+    try:
+        plan = json.loads(tw["text"])
+    except Exception:
+        abort(400, description="Temporary writing text is not valid JSON.")
+
+    themes = plan.get("themes") if isinstance(plan, dict) else None
+    if not isinstance(themes, list) or not themes:
+        abort(400, description="No themes found in temporary writing.")
+
+    # Parse existing lang_word_ids
+    try:
+        current_ids = json.loads(lr["lang_word_ids"])
+        if not isinstance(current_ids, list):
+            current_ids = []
+        current_ids = [int(x) for x in current_ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+    except Exception:
+        current_ids = []
+
+    created_ids = []
+
+    try:
+        # Create lang_words for each theme
+        for t in themes:
+            if not isinstance(t, dict):
+                continue
+            theme_name = (t.get("name") or "").strip()
+            orbit = t.get("orbiting_phrases") or []
+            if not isinstance(orbit, list):
+                orbit = []
+
+            new_id = _create_lang_word_with_children(db, theme_name, orbit)
+            created_ids.append(new_id)
+
+        # Add created ids to lang (append, dedupe)
+        merged = current_ids[:]
+        s = set(merged)
+        for nid in created_ids:
+            if nid not in s:
+                merged.append(nid)
+                s.add(nid)
+
+        db.execute(
+            "UPDATE langs SET lang_word_ids = ?, updated_at = datetime('now') WHERE id = ?",
+            (json.dumps(merged), lang_id),
+        )
+
+        # Delete the temporary writing after successful creation
+        db.execute("DELETE FROM temporary_writings WHERE id = ?", (writing_id,))
+
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        abort(500, description=f"Failed to apply writing: {e}")
+
+    return jsonify(ok=True, lang_id=lang_id, created_lang_word_ids=created_ids)
 
 
 _start_background_services()

@@ -434,7 +434,29 @@
         left.appendChild(title);
         left.appendChild(meta);
 
+        const createBtn = document.createElement("button");
+        createBtn.type = "button";
+        createBtn.textContent = "create writing";
+        createBtn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!confirm("Create lang_words from this writing and delete it?")) return;
+
+          createBtn.disabled = true;
+          try {
+            const out = await apiPost(`/api/temporary_writings/${encodeURIComponent(w.id)}/apply_create_lang_words`, {});
+            // refresh both sides: lang tree and writings list
+            await loadRead();
+            await loadWritings();
+          } catch (err) {
+            alert(err.message || String(err));
+          } finally {
+            createBtn.disabled = false;
+          }
+        });
+
         row.appendChild(left);
+        row.appendChild(createBtn);
         sum.appendChild(row);
         wrap.appendChild(sum);
 
