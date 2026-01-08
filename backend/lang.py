@@ -274,6 +274,108 @@ def list_langs():
     return jsonify(langs=out)
 
 
+@app.get("/api/write")
+def write_tree():
+    """
+    Returns a nested structure:
+    langs -> lang_words -> versions -> child_words
+    With counts at each level for display in write.html
+    """
+    db = get_db()
+
+    langs_rows = db.execute(
+        """
+        SELECT id, name, lang_word_ids, created_at, updated_at
+        FROM langs
+        ORDER BY name ASC, id ASC
+        """
+    ).fetchall()
+
+    langs_out = []
+
+    for lr in langs_rows:
+        # parse lang_word_ids
+        try:
+            ids = json.loads(lr["lang_word_ids"])
+            if not isinstance(ids, list):
+                ids = []
+            ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+        except Exception:
+            ids = []
+
+        # keep order as stored in lang_word_ids
+        words_out = []
+        total_child_words = 0
+
+        for wid in ids:
+            wrow = db.execute("SELECT id, word FROM lang_words WHERE id = ?", (wid,)).fetchone()
+            if wrow is None:
+                continue
+
+            vrows = db.execute(
+                """
+                SELECT id AS version_id, version
+                FROM lang_word_versions
+                WHERE lang_word_id = ?
+                ORDER BY version DESC
+                """,
+                (wid,)
+            ).fetchall()
+
+            versions_out = []
+            child_count_for_word = 0
+
+            for vr in vrows:
+                crows = db.execute(
+                    """
+                    SELECT id, word, link, created_at, updated_at
+                    FROM child_words
+                    WHERE lang_word_version_id = ?
+                    ORDER BY created_at ASC, id ASC
+                    """,
+                    (vr["version_id"],)
+                ).fetchall()
+
+                children = [{
+                    "id": int(cr["id"]),
+                    "word": cr["word"],
+                    "link": cr["link"] or "",
+                    "created_at": cr["created_at"],
+                    "updated_at": cr["updated_at"],
+                } for cr in crows]
+
+                child_count_for_word += len(children)
+
+                versions_out.append({
+                    "version_id": int(vr["version_id"]),
+                    "version": int(vr["version"]),
+                    "child_words": children,
+                    "child_word_count": len(children),
+                })
+
+            total_child_words += child_count_for_word
+
+            words_out.append({
+                "lang_word_id": int(wrow["id"]),
+                "word": wrow["word"],
+                "version_count": len(versions_out),
+                "child_word_count": child_count_for_word,
+                "versions": versions_out,
+            })
+
+        langs_out.append({
+            "id": int(lr["id"]),
+            "name": lr["name"],
+            "lang_word_count": len(words_out),
+            "child_word_count": total_child_words,
+            "lang_words": words_out,
+            "created_at": lr["created_at"],
+            "updated_at": lr["updated_at"],
+        })
+
+    return jsonify(langs=langs_out)
+
+
 @app.post("/api/langs")
 def create_lang():
     require_admin_key()

@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>write</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; line-height: 1.5; }
+    main { max-width: 64rem; margin: 8vh auto; }
+    a { text-decoration: none; border-bottom: 1px solid currentColor; }
+    .top { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; justify-content:space-between; }
+    .panel { border: 1px solid color-mix(in oklab, currentColor 40%, transparent); border-radius: 1rem; padding: 1rem; margin-top: 1rem; }
+    .muted { opacity: .75; }
+    .row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    .pill { border: 1px solid currentColor; border-radius: 999px; padding: .15rem .6rem; font-size: .9rem; }
+    button {
+      border: 1px solid currentColor; background: transparent; color: inherit;
+      border-radius: .6rem; padding: .35rem .6rem; cursor: pointer; white-space: nowrap;
+    }
+    button:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+
+    details { border-radius: .9rem; }
+    summary { cursor: pointer; list-style: none; }
+    summary::-webkit-details-marker { display:none; }
+
+    .item {
+      border: 1px solid color-mix(in oklab, currentColor 25%, transparent);
+      border-radius: .9rem;
+      padding: .75rem .85rem;
+      margin: .6rem 0;
+    }
+    .indent { padding-left: 1.25rem; margin-top: .5rem; }
+
+    ul { padding-left: 1.25rem; margin: .5rem 0 0; }
+    li { margin: .35rem 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="top">
+      <div>
+        <p style="margin:0 0 .35rem;"><a href="./">← back</a></p>
+        <h1 style="margin:0;">write</h1>
+      </div>
+      <div class="row">
+        <span class="pill" id="meta">locked</span>
+        <button id="refresh" type="button" disabled>refresh</button>
+      </div>
+    </div>
+
+    <section class="panel">
+      <h2 style="margin:0 0 .75rem; font-size:1rem;">langs</h2>
+      <div class="muted" id="status" style="margin-top:0;">auth…</div>
+      <div id="root"></div>
+    </section>
+  </main>
+
+  <script>
+    // ===== Admin protection =====
+    const ADMIN_KEY_STORAGE = "lang_admin_key";
+
+    function getAdminKey() { return localStorage.getItem(ADMIN_KEY_STORAGE) || ""; }
+    function setAdminKey(key) { localStorage.setItem(ADMIN_KEY_STORAGE, key); }
+    function clearAdminKey() { localStorage.removeItem(ADMIN_KEY_STORAGE); }
+
+    async function verifyAdminKey(key) {
+      const res = await fetch("/api/admin/ping", {
+        headers: { "Accept": "application/json", "X-Admin-Key": key }
+      });
+      return res.ok;
+    }
+
+    function hardClose() {
+      // Some browsers only allow close() if opened by script; still try.
+      try { window.close(); } catch (_) {}
+      // Fallback: blank the page
+      document.documentElement.innerHTML = "";
+    }
+
+    // ===== UI =====
+    const metaEl = document.getElementById("meta");
+    const statusEl = document.getElementById("status");
+    const rootEl = document.getElementById("root");
+    const refreshBtn = document.getElementById("refresh");
+
+    function openLang(id) {
+      window.open(`lang.html?id=${encodeURIComponent(id)}`, "_blank", "noopener,noreferrer");
+    }
+    function openWord(versionId) {
+      window.open(`lang_word.html?id=${encodeURIComponent(versionId)}`, "_blank", "noopener,noreferrer");
+    }
+
+    function childWordNode(c) {
+      if (c.link && String(c.link).trim()) {
+        const a = document.createElement("a");
+        a.href = c.link;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = c.word;
+        return a;
+      }
+      return document.createTextNode(c.word);
+    }
+
+    function render(data) {
+      rootEl.innerHTML = "";
+
+      const langs = Array.isArray(data.langs) ? data.langs : [];
+      metaEl.textContent = `${langs.length} lang(s)`;
+
+      if (!langs.length) {
+        statusEl.textContent = "no langs.";
+        return;
+      }
+      statusEl.textContent = "";
+
+      for (const L of langs) {
+        const langWrap = document.createElement("details");
+        langWrap.className = "item";
+
+        const langSummary = document.createElement("summary");
+        const summaryRow = document.createElement("div");
+        summaryRow.className = "row";
+
+        const title = document.createElement("strong");
+        title.textContent = L.name;
+
+        const counts = document.createElement("span");
+        counts.className = "muted";
+        counts.textContent = `— ${L.lang_word_count} word(s) · ${L.child_word_count} child word(s)`;
+
+        const openBtn = document.createElement("button");
+        openBtn.type = "button";
+        openBtn.textContent = "open";
+        openBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openLang(L.id);
+        });
+
+        summaryRow.appendChild(title);
+        summaryRow.appendChild(counts);
+        summaryRow.appendChild(openBtn);
+        langSummary.appendChild(summaryRow);
+        langWrap.appendChild(langSummary);
+
+        const langBody = document.createElement("div");
+        langBody.className = "indent";
+
+        const words = Array.isArray(L.lang_words) ? L.lang_words : [];
+        if (!words.length) {
+          const p = document.createElement("div");
+          p.className = "muted";
+          p.textContent = "no words in this lang.";
+          langBody.appendChild(p);
+        }
+
+        for (const W of words) {
+          const wordWrap = document.createElement("details");
+          wordWrap.className = "item";
+          wordWrap.style.margin = ".5rem 0";
+
+          const wordSummary = document.createElement("summary");
+          const wrow = document.createElement("div");
+          wrow.className = "row";
+
+          const wtitle = document.createElement("span");
+          wtitle.innerHTML = `<strong>${W.word}</strong> <span class="muted">(lang_word ${W.lang_word_id})</span>`;
+
+          const wcounts = document.createElement("span");
+          wcounts.className = "muted";
+          wcounts.textContent = `— ${W.version_count} version(s) · ${W.child_word_count} child word(s)`;
+
+          const latestVersion = (Array.isArray(W.versions) && W.versions.length) ? W.versions[0] : null;
+
+          const wopen = document.createElement("button");
+          wopen.type = "button";
+          wopen.textContent = "open";
+          wopen.disabled = !latestVersion;
+          wopen.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (latestVersion) openWord(latestVersion.version_id);
+          });
+
+          wrow.appendChild(wtitle);
+          wrow.appendChild(wcounts);
+          wrow.appendChild(wopen);
+          wordSummary.appendChild(wrow);
+          wordWrap.appendChild(wordSummary);
+
+          const wordBody = document.createElement("div");
+          wordBody.className = "indent";
+
+          const versions = Array.isArray(W.versions) ? W.versions : [];
+          if (!versions.length) {
+            const p = document.createElement("div");
+            p.className = "muted";
+            p.textContent = "no versions.";
+            wordBody.appendChild(p);
+          }
+
+          for (const V of versions) {
+            const verWrap = document.createElement("details");
+            verWrap.className = "item";
+            verWrap.style.margin = ".5rem 0";
+
+            const verSummary = document.createElement("summary");
+            const vrow = document.createElement("div");
+            vrow.className = "row";
+
+            const vtitle = document.createElement("span");
+            vtitle.innerHTML = `<strong>v${V.version}</strong> <span class="muted">(version_id ${V.version_id})</span>`;
+
+            const vcounts = document.createElement("span");
+            vcounts.className = "muted";
+            vcounts.textContent = `— ${V.child_word_count} child word(s)`;
+
+            const vopen = document.createElement("button");
+            vopen.type = "button";
+            vopen.textContent = "open";
+            vopen.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openWord(V.version_id);
+            });
+
+            vrow.appendChild(vtitle);
+            vrow.appendChild(vcounts);
+            vrow.appendChild(vopen);
+            verSummary.appendChild(vrow);
+            verWrap.appendChild(verSummary);
+
+            const verBody = document.createElement("div");
+            verBody.className = "indent";
+
+            const kids = Array.isArray(V.child_words) ? V.child_words : [];
+            if (!kids.length) {
+              const p = document.createElement("div");
+              p.className = "muted";
+              p.textContent = "no child words.";
+              verBody.appendChild(p);
+            } else {
+              const ul = document.createElement("ul");
+              for (const c of kids) {
+                const li = document.createElement("li");
+                li.appendChild(childWordNode(c));
+                ul.appendChild(li);
+              }
+              verBody.appendChild(ul);
+            }
+
+            verWrap.appendChild(verBody);
+            wordBody.appendChild(verWrap);
+          }
+
+          wordWrap.appendChild(wordBody);
+          langBody.appendChild(wordWrap);
+        }
+
+        langWrap.appendChild(langBody);
+        rootEl.appendChild(langWrap);
+      }
+    }
+
+    async function load(adminKey) {
+      statusEl.textContent = "loading…";
+      rootEl.innerHTML = "";
+      metaEl.textContent = "ok";
+
+      const r = await fetch("/api/write", {
+        headers: { "Accept": "application/json", "X-Admin-Key": adminKey }
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        statusEl.textContent = err.error || `failed (${r.status})`;
+        return;
+      }
+      const data = await r.json().catch(() => ({}));
+      render(data);
+    }
+
+    // ===== Boot: enforce admin key and close on failure =====
+    (async () => {
+      let key = getAdminKey();
+
+      // if no stored key, prompt immediately
+      if (!key) {
+        key = prompt("Admin key:", "") || "";
+        key = key.trim();
+        if (!key) {
+          alert("No key provided. Closing.");
+          hardClose();
+          return;
+        }
+        setAdminKey(key);
+      }
+
+      // verify stored/prompted key; if bad, prompt once more
+      let ok = await verifyAdminKey(key);
+      if (!ok) {
+        clearAdminKey();
+        const retry = (prompt("Invalid key. Try again:", "") || "").trim();
+        if (!retry) {
+          alert("Invalid key. Closing.");
+          hardClose();
+          return;
+        }
+        setAdminKey(retry);
+        ok = await verifyAdminKey(retry);
+        if (!ok) {
+          clearAdminKey();
+          alert("Invalid key. Closing.");
+          hardClose();
+          return;
+        }
+        key = retry;
+      }
+
+      // authorized
+      refreshBtn.disabled = false;
+      refreshBtn.addEventListener("click", () => load(key));
+      await load(key);
+    })();
+  </script>
+</body>
+</html>
