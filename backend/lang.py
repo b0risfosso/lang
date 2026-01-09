@@ -228,6 +228,41 @@ def init_db():
               ON lang_sentences(updated_at);
             """
         )
+
+        # Join table: which langs were used to form sentences (for auto-expansion)
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lang_sentence_langs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_sentence_id INTEGER NOT NULL,
+              lang_id INTEGER NOT NULL,
+              auto_expand INTEGER NOT NULL DEFAULT 1, -- 1=true: add new lang words to sentence
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              UNIQUE(lang_sentence_id, lang_id),
+              FOREIGN KEY (lang_sentence_id) REFERENCES lang_sentences(id) ON DELETE CASCADE,
+              FOREIGN KEY (lang_id) REFERENCES langs(id) ON DELETE CASCADE
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_lang_sentence_langs_sentence_id
+              ON lang_sentence_langs(lang_sentence_id);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_lang_sentence_langs_lang_id
+              ON lang_sentence_langs(lang_id);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_lang_sentence_langs_auto_expand
+              ON lang_sentence_langs(auto_expand);
+            """
+        )
         db.execute(
             """
             CREATE TABLE IF NOT EXISTS child_sentences (
@@ -1150,6 +1185,16 @@ def update_lang(lang_id: int):
     db = get_db()
     _lang_row_or_404(db, lang_id)
 
+    # Capture old lang_word_ids before updating (for auto-expansion)
+    old_row = db.execute("SELECT lang_word_ids FROM langs WHERE id = ?", (lang_id,)).fetchone()
+    try:
+        old_ids = json.loads(old_row["lang_word_ids"] or "[]")
+        if not isinstance(old_ids, list):
+            old_ids = []
+        old_ids = [int(x) for x in old_ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+    except Exception:
+        old_ids = []
+
     data = request.get_json(silent=True) or {}
     name = data.get("name", None)
     ids_val = data.get("lang_word_ids", None)
@@ -1192,6 +1237,79 @@ def update_lang(lang_id: int):
         db.commit()
     except sqlite3.IntegrityError:
         abort(409, description="Lang name already exists.")
+
+    # Auto-expand: if new words were added to this lang, append them to linked sentences
+    if ids_val is not None:
+        new_ids = ids  # this is what we parsed via _parse_ids(ids_val)
+        added_ids = [i for i in new_ids if i not in set(old_ids)]
+
+        if added_ids:
+            # Helper function to merge arrays without duplicates
+            def _merge_json_int_arrays(existing_ids, to_add):
+                out = []
+                seen = set()
+                for x in existing_ids:
+                    try:
+                        n = int(x)
+                    except Exception:
+                        continue
+                    if n not in seen:
+                        seen.add(n)
+                        out.append(n)
+                for x in to_add:
+                    try:
+                        n = int(x)
+                    except Exception:
+                        continue
+                    if n not in seen:
+                        seen.add(n)
+                        out.append(n)
+                return out
+
+            # Find sentences that were formed using this lang and should auto-expand
+            srows = db.execute(
+                """
+                SELECT ls.id, ls.lang_word_ids
+                FROM lang_sentences ls
+                JOIN lang_sentence_langs lsl
+                  ON lsl.lang_sentence_id = ls.id
+                WHERE lsl.lang_id = ?
+                  AND lsl.auto_expand = 1
+                """,
+                (lang_id,)
+            ).fetchall()
+
+            for sr in srows:
+                sid = int(sr["id"])
+                try:
+                    existing = json.loads(sr["lang_word_ids"] or "[]")
+                    if not isinstance(existing, list):
+                        existing = []
+                except Exception:
+                    existing = []
+
+                merged = _merge_json_int_arrays(existing, added_ids)
+                if merged != existing:
+                    db.execute(
+                        """
+                        UPDATE lang_sentences
+                        SET lang_word_ids = ?, updated_at = datetime('now')
+                        WHERE id = ?
+                        """,
+                        (json.dumps(merged), sid)
+                    )
+
+            # Also bump the join rows updated_at (optional, but nice for auditing)
+            db.execute(
+                """
+                UPDATE lang_sentence_langs
+                SET updated_at = datetime('now')
+                WHERE lang_id = ? AND auto_expand = 1
+                """,
+                (lang_id,)
+            )
+
+            db.commit()
 
     r2 = _lang_row_or_404(db, lang_id)
     try:
@@ -1734,6 +1852,18 @@ def create_lang_sentence():
         "INSERT INTO lang_sentences (lang_word_ids, sentence) VALUES (?, ?)",
         (json.dumps(merged), sentence)
     )
+    sentence_id = int(cur.lastrowid)
+
+    # Record which langs were used to form this sentence (for auto-expansion)
+    for lid in lang_ids:
+        db.execute(
+            """
+            INSERT OR IGNORE INTO lang_sentence_langs (lang_sentence_id, lang_id, auto_expand, updated_at)
+            VALUES (?, ?, 1, datetime('now'))
+            """,
+            (sentence_id, int(lid))
+        )
+
     db.commit()
 
     # Optional: include lang_ids back in response for UI clarity
@@ -1957,6 +2087,55 @@ def get_child_sentence(child_sentence_id: int):
         "updated_at": r["updated_at"],
         "child_words": child_words_out
     })
+
+
+@app.post("/api/lang_sentence_langs/backfill")
+def backfill_lang_sentence_langs():
+    require_admin_key()
+    db = get_db()
+
+    # Load langs and their word sets
+    langs = db.execute("SELECT id, lang_word_ids FROM langs").fetchall()
+    lang_sets = []
+    for r in langs:
+        try:
+            ids = json.loads(r["lang_word_ids"] or "[]")
+            if not isinstance(ids, list): ids = []
+            s = set(int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit()))
+        except Exception:
+            s = set()
+        lang_sets.append((int(r["id"]), s))
+
+    srows = db.execute("SELECT id, lang_word_ids FROM lang_sentences").fetchall()
+    inserted = 0
+
+    for sr in srows:
+        sid = int(sr["id"])
+        try:
+            ids = json.loads(sr["lang_word_ids"] or "[]")
+            if not isinstance(ids, list): ids = []
+            sent_set = set(int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit()))
+        except Exception:
+            sent_set = set()
+
+        if not sent_set:
+            continue
+
+        for (lang_id, Lset) in lang_sets:
+            # heuristic: sentence words subset of lang
+            if sent_set.issubset(Lset):
+                cur = db.execute(
+                    """
+                    INSERT OR IGNORE INTO lang_sentence_langs (lang_sentence_id, lang_id, auto_expand, updated_at)
+                    VALUES (?, ?, 1, datetime('now'))
+                    """,
+                    (sid, lang_id)
+                )
+                # sqlite3 doesn't reliably give rowcount for INSERT OR IGNORE; count via changes():
+                inserted += db.execute("SELECT changes() AS c").fetchone()["c"]
+
+    db.commit()
+    return jsonify(ok=True, inserted=int(inserted))
 
 
 @app.post("/api/write/create_lang_words")
