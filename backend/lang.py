@@ -1,1223 +1,1160 @@
 #!/usr/bin/env python3
-"""
-lang.py (updated)
-
-New data model:
-- No `langs` table.
-- `lang_words` are nodes with version history in `lang_word_versions`.
-- Each version can have:
-    * child_words (orbiting phrases) in `child_words`
-    * child lang words (themes/subthemes) via `lang_word_children` edges from parent version -> child lang_word_id
-- Sentences live in `lang_sentences` (JSON list of lang_word_ids).
-- Optional child sentences live in `child_sentences` (JSON list of child_word_ids).
-- LLM pipeline tables are keyed by `parent_lang_word_id` (a root/parent word), not `lang_id`.
-
-This file is intended to fully replace your previous lang.py.
-"""
-
-from __future__ import annotations
-
-import json
 import os
 import sqlite3
+import json
+from flask import Flask, g, jsonify, request, abort
+from werkzeug.exceptions import HTTPException
 import threading
 import time
 import traceback
-from typing import Any, Optional
+from typing import Optional, List
+from datetime import datetime, timezone
+import atexit
+import fcntl
 
-from flask import Flask, abort, g, jsonify, request
-
-# Optional: OpenAI for the built-in LLM worker.
-# If you don't want the in-process worker, you can remove these imports and the worker functions.
-try:
-    from openai import OpenAI
-except Exception:
-    OpenAI = None  # type: ignore
-
-
-# ---------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------
+from openai import OpenAI
+from pydantic import BaseModel
 
 DB_DIR = "/var/www/site/data"
 LANG_DB_PATH = os.path.join(DB_DIR, "lang.db")
+DB_PATH = LANG_DB_PATH  # alias for backward compatibility
 
+USAGE_DB_PATH = os.path.join(DB_DIR, "llm_usage.db")
+USAGE_APP_NAME = "lang"  # schema comment says 'jid'|'crayon', but not enforced; use a stable tag
+
+def connect_lang_db():
+    conn = sqlite3.connect(LANG_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    # good practice for concurrency
+    conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
+    return conn
+
+# Set this env var in your service config:
+#   export LANG_ADMIN_KEY="your-secret"
 ADMIN_KEY_ENV = "LANG_ADMIN_KEY"
-ADMIN_KEY_DEFAULT = "your-secret"  # fallback if env not set
-
-# LLM config
-LLM_MODEL_CREATE_LANG_WORDS = os.environ.get("LLM_MODEL_CREATE_LANG_WORDS", "gpt-5-mini-2025-08-07")
-
-
-# ---------------------------------------------------------------------
-# App
-# ---------------------------------------------------------------------
 
 app = Flask(__name__)
 
-_worker_started = False
-_worker_lock = threading.Lock()
-
-
-# ---------------------------------------------------------------------
-# DB helpers
-# ---------------------------------------------------------------------
-
-def ensure_db_dir() -> None:
+def ensure_db_dir():
     os.makedirs(DB_DIR, exist_ok=True)
 
-
-def get_db() -> sqlite3.Connection:
-    """
-    Flask request-scoped DB connection.
-    """
+def get_db():
     if "db" not in g:
         ensure_db_dir()
         g.db = sqlite3.connect(LANG_DB_PATH)
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON;")
-        # WAL is fine; we use it for better concurrency on a single file DB.
         g.db.execute("PRAGMA journal_mode = WAL;")
     return g.db
 
-
 @app.teardown_appcontext
-def close_db(_exc: Optional[BaseException]) -> None:
+def close_db(_exc):
     db = g.pop("db", None)
     if db is not None:
         db.close()
 
+def _table_has_column(db, table: str, col: str) -> bool:
+    rows = db.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(r["name"] == col for r in rows)
 
-def require_admin_key() -> None:
-    expected = os.environ.get(ADMIN_KEY_ENV, ADMIN_KEY_DEFAULT)
-    got = request.headers.get("X-Admin-Key", "")
-    if not got or got != expected:
-        abort(401, description="Missing/invalid admin key.")
+def _create_lang_word_with_children(db, parent_word: str, child_words: list[str]) -> int:
+    """
+    Creates:
+      - lang_words row
+      - lang_word_versions row (version=1)
+      - child_words rows for that version
+    Returns the new lang_word_id.
+    """
+    parent_word = (parent_word or "").strip()
+    if not parent_word:
+        raise ValueError("Empty theme name (lang word).")
 
-
-def _json_loads_safe(s: Any, default: Any) -> Any:
+    # Create lang_words
     try:
-        out = json.loads(s) if isinstance(s, str) else default
-        return out
-    except Exception:
-        return default
+        cur = db.execute("INSERT INTO lang_words (word) VALUES (?)", (parent_word,))
+        lang_word_id = int(cur.lastrowid)
+    except sqlite3.IntegrityError:
+        # If already exists, reuse existing word id
+        r = db.execute("SELECT id FROM lang_words WHERE word = ?", (parent_word,)).fetchone()
+        if r is None:
+            raise
+        lang_word_id = int(r["id"])
 
-
-def _parse_int_list_json(s: str) -> list[int]:
-    arr = _json_loads_safe(s, [])
-    if not isinstance(arr, list):
-        return []
-    out: list[int] = []
-    for x in arr:
-        if isinstance(x, int):
-            out.append(x)
-        elif isinstance(x, str) and x.isdigit():
-            out.append(int(x))
-    return out
-
-
-def ensure_word_has_v1(db: sqlite3.Connection, lang_word_id: int) -> int:
-    """
-    Ensure there is at least version 1 for this lang_word.
-    Returns the newest version_id (v1 if newly created).
-    """
+    # Ensure a version exists; create version=1 if none
     v = db.execute(
-        "SELECT id, version FROM lang_word_versions WHERE lang_word_id=? ORDER BY version DESC LIMIT 1",
+        """
+        SELECT id, version
+        FROM lang_word_versions
+        WHERE lang_word_id = ?
+        ORDER BY version DESC
+        LIMIT 1
+        """,
         (lang_word_id,),
     ).fetchone()
-    if v is not None:
-        return int(v["id"])
 
-    cur = db.execute(
-        "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, 1)",
-        (lang_word_id,),
-    )
-    return int(cur.lastrowid)
+    if v is None:
+        curv = db.execute(
+            "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, 1)",
+            (lang_word_id,),
+        )
+        version_id = int(curv.lastrowid)
+    else:
+        # If it exists, use latest version (or choose to always create a new version—your call)
+        version_id = int(v["id"])
 
+    # Insert child words (dedupe + strip)
+    seen = set()
+    for cw in child_words or []:
+        cw = (cw or "").strip()
+        if not cw:
+            continue
+        if cw.lower() in seen:
+            continue
+        seen.add(cw.lower())
 
-def create_next_version(db: sqlite3.Connection, lang_word_id: int) -> int:
+        db.execute(
+            """
+            INSERT INTO child_words (lang_word_version_id, word)
+            VALUES (?, ?)
+            """,
+            (version_id, cw),
+        )
+
+    return lang_word_id
+
+def init_db():
     """
-    Create and return a new version row for a lang_word (v+1).
-    If no versions exist yet, creates v1.
+    Idempotent: create missing tables/indexes and run lightweight migrations.
+    Your existing DB already has most tables; this keeps dev + prod consistent.
     """
-    last = db.execute(
-        "SELECT version FROM lang_word_versions WHERE lang_word_id=? ORDER BY version DESC LIMIT 1",
-        (lang_word_id,),
-    ).fetchone()
-    next_version = int(last["version"]) + 1 if last else 1
-    cur = db.execute(
-        "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, ?)",
-        (lang_word_id, next_version),
-    )
-    return int(cur.lastrowid)
+    db = connect_lang_db()
+    try:
+        # Core tables
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lang_words (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              word TEXT NOT NULL UNIQUE,
+              created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lang_word_versions (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_word_id INTEGER NOT NULL,
+              version INTEGER NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              UNIQUE(lang_word_id, version),
+              FOREIGN KEY (lang_word_id) REFERENCES lang_words(id) ON DELETE CASCADE
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_versions_lang_word_id
+              ON lang_word_versions(lang_word_id);
+            """
+        )
+
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS child_words (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_word_version_id INTEGER NOT NULL,
+              word TEXT NOT NULL,
+              link TEXT,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (lang_word_version_id) REFERENCES lang_word_versions(id) ON DELETE CASCADE
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_child_words_version_id
+              ON child_words(lang_word_version_id);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_child_words_link
+              ON child_words(link);
+            """
+        )
+
+        # Langs (collections of lang_words)
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS langs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL UNIQUE,
+              lang_word_ids TEXT NOT NULL,  -- JSON array of ints
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_langs_name
+              ON langs(name);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_langs_updated
+              ON langs(updated_at);
+            """
+        )
+
+        # Sentences table
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lang_sentences (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_word_ids TEXT NOT NULL,  -- JSON array of ints
+              sentence TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_lang_sentences_updated
+              ON lang_sentences(updated_at);
+            """
+        )
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS child_sentences (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_sentence_id INTEGER NOT NULL,
+              child_word_ids TEXT NOT NULL,  -- JSON array of ints
+              sentence TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (lang_sentence_id) REFERENCES lang_sentences(id) ON DELETE CASCADE
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_child_sentences_lang_sentence_id
+              ON child_sentences(lang_sentence_id);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_child_sentences_updated
+              ON child_sentences(updated_at);
+            """
+        )
+
+        # Temporary writings (LLM outputs)
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS temporary_writings (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_id INTEGER NOT NULL,
+              identifier TEXT NOT NULL,        -- JSON (e.g., {"lang_id": 1})
+              prompt_type TEXT NOT NULL,       -- e.g. "create_lang_words"
+              text TEXT NOT NULL,              -- JSON output from LLM
+              model TEXT,
+              modifier TEXT,
+              task_id INTEGER,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id
+              ON temporary_writings(lang_id);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id_created
+              ON temporary_writings(lang_id, created_at);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_temp_writings_prompt_type
+              ON temporary_writings(prompt_type);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_temp_writings_created_at
+              ON temporary_writings(created_at);
+            """
+        )
+
+        # LLM task queue
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS llm_tasks (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              lang_id INTEGER NOT NULL,
+              task_type TEXT NOT NULL,         -- "create_lang_words"
+              identifier TEXT NOT NULL,        -- JSON {"lang_id": ...}
+              payload TEXT NOT NULL,           -- JSON {modifier, ...}
+              status TEXT NOT NULL DEFAULT 'queued',  -- queued|running|done|error
+              error TEXT,
+              result_writing_id INTEGER,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_id
+              ON llm_tasks(lang_id);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_status
+              ON llm_tasks(lang_id, status);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_llm_tasks_status
+              ON llm_tasks(status);
+            """
+        )
+        db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_llm_tasks_created_at
+              ON llm_tasks(created_at);
+            """
+        )
 
 
-    cur = db.execute(
-        "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, 1)",
-        (lang_word_id,),
-    )
-    return int(cur.lastrowid)
+        # Lightweight migration if an older DB created child_words without 'link'
+        # (Your production DB currently does not have it.)
+        if not _table_has_column(db, "child_words", "link"):
+            db.execute("ALTER TABLE child_words ADD COLUMN link TEXT;")
 
-
-# ---------------------------------------------------------------------
-# Schema init
-# ---------------------------------------------------------------------
-
-def ensure_schema(db: sqlite3.Connection) -> None:
+db.execute(
     """
-    Create tables if missing. Safe to call many times.
+    CREATE TABLE IF NOT EXISTS star_stuff (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      child_word_id INTEGER NOT NULL,
+      lang_word_id INTEGER NOT NULL,
+      lang_id INTEGER,
+      lang_name TEXT NOT NULL,
+      lang_word TEXT NOT NULL,
+      child_word TEXT NOT NULL,
+      prompt_type TEXT NOT NULL,
+      modifier TEXT,
+      text TEXT NOT NULL,
+      model TEXT,
+      task_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (child_word_id) REFERENCES child_words(id) ON DELETE CASCADE,
+      FOREIGN KEY (lang_word_id) REFERENCES lang_words(id) ON DELETE CASCADE,
+      FOREIGN KEY (lang_id) REFERENCES langs(id) ON DELETE SET NULL,
+      FOREIGN KEY (task_id) REFERENCES llm_tasks(id) ON DELETE SET NULL
+    );
     """
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS lang_words (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          word TEXT NOT NULL UNIQUE,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        """
+)
+db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_child_word_id ON star_stuff(child_word_id);")
+db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_updated ON star_stuff(updated_at);")
+db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_prompt_type ON star_stuff(prompt_type);")
+
+    db.commit()
+    finally:
+        db.close()
+
+def init_usage_db():
+    """
+    Initialize the separate usage database for LLM metrics.
+    """
+    dbu = _connect_usage_db()
+    try:
+        # Events table
+        dbu.execute(
+            """
+            CREATE TABLE IF NOT EXISTS usage_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              ts TEXT NOT NULL,
+              app TEXT NOT NULL,
+              model TEXT NOT NULL,
+              endpoint TEXT NOT NULL,
+              email TEXT,
+              request_id TEXT,
+              tokens_in INTEGER NOT NULL DEFAULT 0,
+              tokens_out INTEGER NOT NULL DEFAULT 0,
+              total_tokens INTEGER NOT NULL DEFAULT 0,
+              duration_ms INTEGER NOT NULL DEFAULT 0,
+              cost_usd REAL NOT NULL DEFAULT 0.0,
+              meta TEXT  -- JSON
+            );
+            """
+        )
+        dbu.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_usage_events_ts
+              ON usage_events(ts);
+            """
+        )
+        dbu.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_usage_events_model
+              ON usage_events(model);
+            """
+        )
+        dbu.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_usage_events_app
+              ON usage_events(app);
+            """
+        )
+
+        # Totals all time
+        dbu.execute(
+            """
+            CREATE TABLE IF NOT EXISTS totals_all_time (
+              id INTEGER PRIMARY KEY CHECK (id = 1),
+              tokens_in INTEGER NOT NULL DEFAULT 0,
+              tokens_out INTEGER NOT NULL DEFAULT 0,
+              total_tokens INTEGER NOT NULL DEFAULT 0,
+              calls INTEGER NOT NULL DEFAULT 0,
+              last_ts TEXT NOT NULL
+            );
+            """
+        )
+
+        # Totals by model
+        dbu.execute(
+            """
+            CREATE TABLE IF NOT EXISTS totals_by_model (
+              model TEXT PRIMARY KEY,
+              tokens_in INTEGER NOT NULL DEFAULT 0,
+              tokens_out INTEGER NOT NULL DEFAULT 0,
+              total_tokens INTEGER NOT NULL DEFAULT 0,
+              calls INTEGER NOT NULL DEFAULT 0,
+              first_ts TEXT NOT NULL,
+              last_ts TEXT NOT NULL
+            );
+            """
+        )
+
+        # Totals daily
+        dbu.execute(
+            """
+            CREATE TABLE IF NOT EXISTS totals_daily (
+              day TEXT NOT NULL,
+              model TEXT NOT NULL,
+              tokens_in INTEGER NOT NULL DEFAULT 0,
+              tokens_out INTEGER NOT NULL DEFAULT 0,
+              total_tokens INTEGER NOT NULL DEFAULT 0,
+              calls INTEGER NOT NULL DEFAULT 0,
+              PRIMARY KEY (day, model)
+            );
+            """
+        )
+
+        dbu.commit()
+    finally:
+        dbu.close()
+
+@app.before_request
+def _init_once():
+    init_db()
+
+def require_admin_key():
+    expected = os.environ.get(ADMIN_KEY_ENV)
+    if not expected:
+        abort(500, description=f"{ADMIN_KEY_ENV} is not set on the server.")
+    supplied = request.headers.get("X-Admin-Key", "")
+    if not supplied or supplied != expected:
+        abort(401, description="Invalid or missing admin key.")
+
+@app.errorhandler(Exception)
+def handle_error(e):
+    if isinstance(e, HTTPException):
+        return jsonify(error=e.description), e.code
+    return jsonify(error="Internal server error"), 500
+
+
+def _utc_iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+def _utc_day() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+def _connect_usage_db():
+    # Separate DB from lang.db
+    conn = sqlite3.connect(USAGE_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def _extract_token_usage(resp) -> tuple[int, int, int]:
+    """
+    Best-effort extraction for OpenAI Responses API usage.
+    Returns (tokens_in, tokens_out, total_tokens).
+    """
+    tokens_in = tokens_out = total = 0
+
+    # OpenAI SDK commonly exposes .usage as an object or dict with input/output/total tokens
+    usage = getattr(resp, "usage", None)
+    if usage:
+        # dict-like
+        if isinstance(usage, dict):
+            tokens_in = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+            tokens_out = int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
+            total = int(usage.get("total_tokens") or (tokens_in + tokens_out) or 0)
+            return tokens_in, tokens_out, total
+
+        # object-like
+        tokens_in = int(getattr(usage, "input_tokens", 0) or getattr(usage, "prompt_tokens", 0) or 0)
+        tokens_out = int(getattr(usage, "output_tokens", 0) or getattr(usage, "completion_tokens", 0) or 0)
+        total = int(getattr(usage, "total_tokens", 0) or (tokens_in + tokens_out) or 0)
+        return tokens_in, tokens_out, total
+
+    # fallback: sometimes nested
+    for attr in ("input_tokens", "prompt_tokens"):
+        v = getattr(resp, attr, None)
+        if v is not None:
+            tokens_in = int(v)
+            break
+    for attr in ("output_tokens", "completion_tokens"):
+        v = getattr(resp, attr, None)
+        if v is not None:
+            tokens_out = int(v)
+            break
+    total = tokens_in + tokens_out
+    return tokens_in, tokens_out, total
+
+def log_llm_usage_event(
+    *,
+    model: str,
+    endpoint: str,
+    request_id: str | None,
+    tokens_in: int,
+    tokens_out: int,
+    total_tokens: int,
+    duration_ms: int,
+    meta: dict | None = None,
+    email: str | None = None,
+):
+    """
+    Writes to llm_usage.db usage_events + updates totals tables.
+    """
+    ts = _utc_iso_now()
+    day = _utc_day()
+    meta_json = json.dumps(meta or {}, ensure_ascii=False)
+
+    dbu = _connect_usage_db()
+    try:
+        # 1) usage_events
+        dbu.execute(
+            """
+            INSERT INTO usage_events
+              (ts, app, model, endpoint, email, request_id, tokens_in, tokens_out, total_tokens, duration_ms, cost_usd, meta)
+            VALUES
+              (?,  ?,   ?,     ?,        ?,     ?,          ?,         ?,          ?,            ?,           0.0,     ?)
+            """,
+            (ts, USAGE_APP_NAME, model, endpoint, email, request_id or "", int(tokens_in), int(tokens_out), int(total_tokens), int(duration_ms), meta_json),
+        )
+
+        # 2) totals_all_time (single row id=1)
+        dbu.execute(
+            """
+            INSERT INTO totals_all_time (id, tokens_in, tokens_out, total_tokens, calls, last_ts)
+            VALUES (1, ?, ?, ?, 1, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              tokens_in = tokens_in + excluded.tokens_in,
+              tokens_out = tokens_out + excluded.tokens_out,
+              total_tokens = total_tokens + excluded.total_tokens,
+              calls = calls + 1,
+              last_ts = excluded.last_ts
+            """,
+            (int(tokens_in), int(tokens_out), int(total_tokens), ts),
+        )
+
+        # 3) totals_by_model
+        dbu.execute(
+            """
+            INSERT INTO totals_by_model (model, tokens_in, tokens_out, total_tokens, calls, first_ts, last_ts)
+            VALUES (?, ?, ?, ?, 1, ?, ?)
+            ON CONFLICT(model) DO UPDATE SET
+              tokens_in = tokens_in + excluded.tokens_in,
+              tokens_out = tokens_out + excluded.tokens_out,
+              total_tokens = total_tokens + excluded.total_tokens,
+              calls = calls + 1,
+              last_ts = excluded.last_ts
+            """,
+            (model, int(tokens_in), int(tokens_out), int(total_tokens), ts, ts),
+        )
+
+        # 4) totals_daily
+        dbu.execute(
+            """
+            INSERT INTO totals_daily (day, model, tokens_in, tokens_out, total_tokens, calls)
+            VALUES (?, ?, ?, ?, ?, 1)
+            ON CONFLICT(day, model) DO UPDATE SET
+              tokens_in = tokens_in + excluded.tokens_in,
+              tokens_out = tokens_out + excluded.tokens_out,
+              total_tokens = total_tokens + excluded.total_tokens,
+              calls = calls + 1
+            """,
+            (day, model, int(tokens_in), int(tokens_out), int(total_tokens)),
+        )
+
+        dbu.commit()
+    finally:
+        dbu.close()
+
+
+class OrbitTheme(BaseModel):
+    name: str
+    orbiting_phrases: List[str]
+
+class LangWordPlan(BaseModel):
+    primary_phrase: str
+    optional_modifier: Optional[str] = None
+    themes: List[OrbitTheme]
+
+
+PROMPT_CREATE_LANG_WORDS = """You will be given:
+a Primary Phrase (a system, entity, idea, institution, scale, or pattern), and
+an Optional Modifier that may add context, constraints, or a preferred lens.
+The phrase may range from highly abstract (e.g., physical limits) to large-scale systems (e.g., economies) to concrete institutions (e.g., government platforms).
+Your job is to:
+Infer what kind of thing the primary phrase represents.
+Incorporate the modifier if provided to guide emphasis, scope, or perspective.
+Generate 4–8 distinct themes that meaningfully describe how the thing works, is structured, or is experienced.
+For each theme, build a set of orbiting words/phrases that cluster naturally around it.
+Inputs
+Primary Phrase: [REQUIRED]
+Optional Modifier: [OPTIONAL — may specify perspective, domain, audience, timeframe, or concern]
+Examples of modifiers:
+“from a policy perspective”
+“focusing on failure modes”
+“emphasizing technical constraints”
+“for first-time users”
+“historical evolution”
+“economic and incentive structures”
+“ethical and societal implications”
+How to Use the Modifier
+If a modifier is provided, prioritize themes and orbiting phrases that align with it.
+Do not force the modifier into every theme—apply it where it naturally fits.
+If no modifier is given, default to a balanced, systems-level analysis.
+Output Structure
+Use the following format:
+Theme N: [Short, precise theme name]
+word / phrase
+word / phrase
+word / phrase
+word / phrase
+word / phrase
+Guidelines
+Do not simply restate the primary phrase.
+Keep themes conceptually distinct and non-redundant.
+Orbiting phrases may include:
+components or structures
+processes or dynamics
+stakeholders or agents
+constraints, limits, or bottlenecks
+emergent behaviors or outcomes
+Match abstraction level to the input:
+scientific → theory, limits, models
+economic → scale, flows, incentives, risk
+institutional → governance, procedures, users, friction
+Use clear, neutral, descriptive language.
+Now analyze the following inputs and generate the themes and orbiting phrase sets:
+Primary Phrase: {primary_phrase}
+Optional Modifier: {optional_modifier}
+"""
+
+LLM_MODEL_CREATE_LANG_WORDS = "gpt-5-mini-2025-08-07"
+
+
+# =========================
+# Star Stuff (LLM prompts)
+# =========================
+
+STAR_STUFF_TASK_TYPES = {
+    "create_star_stuff_words",
+    "create_star_stuff_images",
+    "create_star_stuff_data",
+    "create_star_stuff_synthetic_data",
+    "create_star_stuff_code",
+}
+
+PROMPT_CREATE_STAR_STUFF_WORDS = """Role:
+You are an expert technical writer and domain specialist.
+Task:
+Build a clear, accurate, and well-structured description of the following Phrase, using the provided Context to frame its domain, purpose, and relevance. If a Modifier is provided, use it to guide emphasis, scope, or perspective.
+Inputs
+Phrase:
+{PHRASE}
+Context:
+{CONTEXT}
+Modifier (optional):
+{MODIFIER}
+Instructions
+Define and situate the phrase
+Clearly explain what the phrase refers to
+Place it within the scientific, technical, organizational, or conceptual domain implied by the context
+Explain structure, function, or mechanism
+Describe how the system/entity/idea works
+Highlight key components, processes, or relationships
+Use domain-appropriate terminology with clarity
+Describe role and significance
+Explain why it matters within the given context
+Connect it to broader workflows, lifecycles, or ecosystems where applicable
+Apply the modifier (if provided)
+Adjust tone, depth, and emphasis according to the modifier
+Examples: technical, conceptual, user-focused, regulatory, educational, comparative, computational
+Maintain clarity and structure
+Use short sections with informative headings
+Avoid unnecessary jargon unless the modifier specifies an expert audience
+Output Requirements
+Length: ~200–400 words
+Style: Clear, professional, and explanatory
+Structure:
+Title or opening definition
+2–4 short thematic sections
+Do not ask follow-up questions
+Do not reference this prompt or the input format
+"""
+
+PROMPT_CREATE_STAR_STUFF_IMAGES = """Role
+You are an expert research assistant skilled in visual curation for education, analysis, and conceptual communication.
+Inputs
+Phrase:
+{PHRASE}
+(e.g., “Android”, “agency review, scoring, and decision notification”, “main-sequence lifetimes”, “collective electronic response to external perturbation”)
+Context:
+{CONTEXT}
+(e.g., “Google / Product Ecosystems & Platforms”, “systems biology modeling software / Modeling paradigms & simulation types”, “solar panel components & technology / Photovoltaic cells”)
+Optional Modifier (if provided):
+{MODIFIER}
+(e.g., “UX perspective”, “quantitative modeling”, “early-stage mechanism”, “policy workflow”, “materials-scale physics”)
+Task
+Collect and curate representative images that visually explain and contextualize the Phrase, interpreted within the provided Context and guided by the Optional Modifier.
+The images should help a knowledgeable reader understand:
+What the system/entity/idea is
+How it functions or evolves
+How it fits within the stated context
+Instructions
+Organize images into clear conceptual groups, such as:
+Overview / system-level representations
+Structural or architectural components
+Processes, mechanisms, or workflows
+Outputs, behaviors, or outcomes
+For each image, provide:
+Title (concise and descriptive)
+What the image shows (visual content and key elements)
+Why it is relevant to the Phrase and Context
+Image source, clearly identified (e.g.):
+Government website
+Academic textbook
+Peer-reviewed journal
+Official product documentation
+Reputable educational or institutional source
+Prefer:
+Diagrams, schematics, and explanatory figures
+Authoritative and educational sources
+Images commonly used in teaching, documentation, or expert communication
+Avoid:
+Decorative or purely illustrative images
+Unverifiable or low-credibility sources
+UI screenshots requiring pixel-perfect accuracy unless explicitly requested
+Output Format
+Use the following structure:
+## [Conceptual Group Name]
+
+Image 1:
+- Title:
+- Description:
+- Relevance:
+- Source:
+
+Image 2:
+- Title:
+- Description:
+- Relevance:
+- Source:
+Repeat for each conceptual group.
+Tone & Level
+Clear, structured, and analytical
+Suitable for technical, educational, or professional audiences
+Assume the reader values conceptual accuracy over visual novelty
+"""
+
+PROMPT_CREATE_STAR_STUFF_DATA = """You are an expert analyst and technical explainer.
+
+TASK:
+Describe the DATA associated with the following phrase, focusing on:
+- What data exist
+- How the data are generated or measured
+- How the data are structured and used
+- Where the data come from (data sources)
+- What assumptions or limitations apply
+
+PHRASE:
+"{PHRASE}"
+
+CONTEXT:
+{CONTEXT}
+(Use this context to interpret scope, domain, and level of abstraction.)
+
+OPTIONAL MODIFIER:
+{MODIFIER}
+(If provided, use this to guide emphasis, depth, or framing. If absent, choose a neutral, technical framing.)
+
+REQUIREMENTS:
+- Focus on data, measurements, datasets, and evidence — not high-level definitions alone
+- Distinguish between:
+  • Primary data (direct measurements)
+  • Derived data (processed, modeled, inferred)
+  • Generated data (simulations, predictions)
+- Explicitly name data sources (e.g., instruments, platforms, repositories, standards, systems)
+- Use structured sections and tables where appropriate
+- Avoid procedural “how-to” instructions unless they directly explain data generation
+- Assume an expert or technical audience
+
+OUTPUT STRUCTURE:
+1. Phrase overview (data-centric)
+2. Core data types
+3. Data sources & origins
+4. Data flows or lifecycle (if applicable)
+5. Derived or modeled data
+6. Key limitations, uncertainties, or biases
+7. Concise summary of how data define understanding of the phrase
+"""
+
+PROMPT_CREATE_STAR_STUFF_SYNTHETIC_DATA = """SYSTEM / ROLE
+You are an expert synthetic data architect and domain modeler.
+You generate fictional but internally consistent datasets suitable for analysis, simulation, ML, and education.
+You do not reproduce real proprietary or observational datasets.
+
+TASK INSTRUCTION (Prompt Body)
+Build a synthetic dataset describing the following:
+Phrase: {PHRASE}
+Context: {CONTEXT}
+Modifier (if provided): {MODIFIER}
+The dataset should:
+Model the system realistically, using domain-appropriate variables, relationships, and constraints.
+Be explicitly synthetic (fictional but plausible).
+Reflect how experts reason about this system (not surface-level descriptors).
+Support downstream use in:
+analysis
+simulation
+machine learning
+systems modeling
+education
+
+REQUIRED OUTPUT STRUCTURE
+1. Dataset Overview
+2. Dataset Schema
+3. Synthetic Dataset (tables; prefer CSV-style; 20–50 rows unless otherwise specified)
+4. Design Notes
+5. Optional Extensions (brief list)
+
+CONSTRAINTS
+Do not require external data
+Do not cite real proprietary datasets
+Do not hallucinate specific experimental measurements
+Favor structural correctness over numerical precision
+
+STYLE GUIDELINES
+Clear, technical, neutral
+No marketing language
+No emojis
+No references to being an AI
+
+OUTPUT START
+Begin by generating the dataset for:
+Phrase = {PHRASE}
+Context = {CONTEXT}
+Modifier = {MODIFIER}
+"""
+
+PROMPT_CREATE_STAR_STUFF_CODE = """You are a senior software engineer and technical educator. Your job is to write runnable, well-structured code that models or implements the system/entity/idea/mechanism/pattern named in the PHRASE below, using the CONTEXT as scope guidance.
+
+PHRASE:
+{PHRASE}
+
+CONTEXT (scope, domain, and framing; may be empty):
+{CONTEXT}
+
+OPTIONAL MODIFIER (constraints or focus; may be empty):
+{MODIFIER}
+
+DELIVERABLE:
+Write code that directly addresses the PHRASE within the CONTEXT. The code should be useful as a starting point for real work: modular, readable, and runnable. Prefer correctness and clarity over brevity.
+
+REQUIREMENTS:
+1) Choose an appropriate language and ecosystem for the PHRASE+CONTEXT. If the choice is ambiguous, default to:
+   - Kotlin for Android/platform work
+   - Python for scientific modeling, simulation, math, or data workflows
+2) Include:
+   - A brief header comment describing what the code does and how it relates to PHRASE+CONTEXT
+   - Clear module/class/function structure
+   - A minimal runnable demo or CLI entrypoint
+   - Basic error handling and sensible defaults
+3) If PHRASE implies a workflow or lifecycle, model the stages as explicit states and transitions (state machine or pipeline).
+4) If PHRASE implies a scientific mechanism, implement a computational model.
+5) Do NOT output lab protocols for biological wet-lab procedures. If biology is involved, focus on software tooling, data models, simulations, QC tracking, or analysis code.
+6) Output ONLY the code in a single fenced code block with the language specified. No additional explanation outside the code block.
+
+Now write the code.
+"""
+
+# Default model for Star Stuff (can be split later if desired)
+LLM_MODEL_STAR_STUFF = LLM_MODEL_CREATE_LANG_WORDS
+
+def _response_to_text(resp) -> str:
+    # Robustly extract text from OpenAI Responses API objects/dicts.
+    if resp is None:
+        return ""
+    # New SDK often provides output as list of items with content blocks.
+    out = getattr(resp, "output", None) or (resp.get("output") if isinstance(resp, dict) else None) or []
+    parts = []
+    for item in out:
+        content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else None) or []
+        for c in content:
+            c_type = getattr(c, "type", None) or (c.get("type") if isinstance(c, dict) else None)
+            if c_type in ("output_text", "text"):
+                txt = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
+                if txt:
+                    parts.append(txt)
+    # Fallbacks
+    if not parts:
+        txt = getattr(resp, "output_text", None) or (resp.get("output_text") if isinstance(resp, dict) else None)
+        if txt:
+            parts.append(txt)
+    return "\n".join(parts).strip()
+
+def _run_star_stuff_llm(task_type: str, phrase: str, context: str, modifier: str | None) -> str:
+    start_time = time.time()
+    client = OpenAI()
+
+    modifier_txt = (modifier or "").strip()
+    prompt_map = {
+        "create_star_stuff_words": PROMPT_CREATE_STAR_STUFF_WORDS,
+        "create_star_stuff_images": PROMPT_CREATE_STAR_STUFF_IMAGES,
+        "create_star_stuff_data": PROMPT_CREATE_STAR_STUFF_DATA,
+        "create_star_stuff_synthetic_data": PROMPT_CREATE_STAR_STUFF_SYNTHETIC_DATA,
+        "create_star_stuff_code": PROMPT_CREATE_STAR_STUFF_CODE,
+    }
+    if task_type not in prompt_map:
+        raise ValueError(f"Unknown star stuff task_type: {task_type}")
+
+    prompt = prompt_map[task_type].format(
+        PHRASE=phrase,
+        CONTEXT=context,
+        MODIFIER=modifier_txt,
     )
 
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS lang_word_versions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          lang_word_id INTEGER NOT NULL,
-          version INTEGER NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          UNIQUE(lang_word_id, version),
-          FOREIGN KEY (lang_word_id) REFERENCES lang_words(id) ON DELETE CASCADE
-        );
-        """
+    resp = client.responses.create(
+        model=LLM_MODEL_STAR_STUFF,
+        input=[
+            {"role": "system", "content": "Follow the user's instructions precisely."},
+            {"role": "user", "content": prompt},
+        ],
     )
-    db.execute("CREATE INDEX IF NOT EXISTS idx_versions_lang_word_id ON lang_word_versions(lang_word_id);")
 
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS child_words (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          lang_word_version_id INTEGER NOT NULL,
-          word TEXT NOT NULL,
-          link TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (lang_word_version_id) REFERENCES lang_word_versions(id) ON DELETE CASCADE
-        );
-        """
+    duration_ms = int((time.time() - start_time) * 1000)
+    tokens_in, tokens_out, total_tokens = _extract_token_usage(resp)
+    log_llm_usage_event(
+        model=LLM_MODEL_STAR_STUFF,
+        endpoint="responses.create",
+        request_id=getattr(resp, "id", None),
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        total_tokens=total_tokens,
+        duration_ms=duration_ms,
+        meta={"task_type": task_type, "phrase": phrase},
     )
-    db.execute("CREATE INDEX IF NOT EXISTS idx_child_words_version_id ON child_words(lang_word_version_id);")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_child_words_link ON child_words(link);")
 
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS lang_word_children (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          parent_lang_word_version_id INTEGER NOT NULL,
-          child_lang_word_id INTEGER NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          UNIQUE(parent_lang_word_version_id, child_lang_word_id),
-          FOREIGN KEY (parent_lang_word_version_id) REFERENCES lang_word_versions(id) ON DELETE CASCADE,
-          FOREIGN KEY (child_lang_word_id) REFERENCES lang_words(id) ON DELETE CASCADE
-        );
-        """
+    return _response_to_text(resp)
+
+
+def _run_create_lang_words_llm(primary_phrase: str, optional_modifier: str | None) -> LangWordPlan:
+    start_time = time.time()
+    client = OpenAI()
+    prompt = PROMPT_CREATE_LANG_WORDS.format(
+        primary_phrase=primary_phrase,
+        optional_modifier=(optional_modifier or "").strip()
     )
-    db.execute("CREATE INDEX IF NOT EXISTS idx_lwc_parent_version ON lang_word_children(parent_lang_word_version_id);")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_lwc_child_word ON lang_word_children(child_lang_word_id);")
 
+    # Use structured parsing via Responses API
+    resp = client.responses.parse(
+        model=LLM_MODEL_CREATE_LANG_WORDS,
+        input=[
+            {"role": "system", "content": "Return a structured JSON plan following the provided schema."},
+            {"role": "user", "content": prompt},
+        ],
+        text_format=LangWordPlan,
+    )
+
+    # Log usage
+    duration_ms = int((time.time() - start_time) * 1000)
+    tokens_in, tokens_out, total_tokens = _extract_token_usage(resp)
+    log_llm_usage_event(
+        model=LLM_MODEL_CREATE_LANG_WORDS,
+        endpoint="responses.parse",
+        request_id=getattr(resp, "id", None),
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        total_tokens=total_tokens,
+        duration_ms=duration_ms,
+        meta={"primary_phrase": primary_phrase, "optional_modifier": optional_modifier},
+    )
+
+    return resp.output_parsed
+
+
+_worker_started = False
+_worker_lock = threading.Lock()
+
+def _now_dt_sql():
+    return "datetime('now')"
+
+def _ensure_llm_schema(db):
     db.execute(
         """
-        CREATE TABLE IF NOT EXISTS lang_sentences (
+        CREATE TABLE IF NOT EXISTS llm_tasks (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          lang_word_ids TEXT NOT NULL,   -- JSON array of ints (lang_words.id)
-          sentence TEXT NOT NULL,
+          lang_id INTEGER NOT NULL,
+          task_type TEXT NOT NULL,
+          identifier TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'queued',
+          error TEXT,
+          result_writing_id INTEGER,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         """
     )
-    db.execute("CREATE INDEX IF NOT EXISTS idx_lang_sentences_updated ON lang_sentences(updated_at);")
-
-    # Optional child sentences (keep backend support even if the page is deleted)
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS child_sentences (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          lang_sentence_id INTEGER NOT NULL,
-          child_word_ids TEXT NOT NULL,     -- JSON array of ints (child_words.id)
-          sentence TEXT NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (lang_sentence_id) REFERENCES lang_sentences(id) ON DELETE CASCADE
-        );
-        """
-    )
-    db.execute("CREATE INDEX IF NOT EXISTS idx_child_sentences_lang_sentence_id ON child_sentences(lang_sentence_id);")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_child_sentences_updated ON child_sentences(updated_at);")
-
-    # LLM pipeline (keyed by parent_lang_word_id)
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS llm_tasks (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          parent_lang_word_id INTEGER NOT NULL,
-          task_type TEXT NOT NULL,         -- e.g. "create_lang_words"
-          identifier TEXT NOT NULL,        -- JSON {"parent_lang_word_id": ...}
-          payload TEXT NOT NULL,           -- JSON {modifier, ...}
-          status TEXT NOT NULL DEFAULT 'queued',  -- queued|running|done|error
-          error TEXT,
-          result_writing_id INTEGER,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (parent_lang_word_id) REFERENCES lang_words(id) ON DELETE CASCADE
-        );
-        """
-    )
     db.execute("CREATE INDEX IF NOT EXISTS idx_llm_tasks_status ON llm_tasks(status);")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_llm_tasks_parent_id ON llm_tasks(parent_lang_word_id);")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_llm_tasks_parent_status ON llm_tasks(parent_lang_word_id, status);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_id ON llm_tasks(lang_id);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_llm_tasks_lang_status ON llm_tasks(lang_id, status);")
     db.execute("CREATE INDEX IF NOT EXISTS idx_llm_tasks_created_at ON llm_tasks(created_at);")
 
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS temporary_writings (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          parent_lang_word_id INTEGER NOT NULL,
-          identifier TEXT NOT NULL,        -- JSON {"parent_lang_word_id": ...}
-          prompt_type TEXT NOT NULL,       -- e.g. "create_lang_words"
-          text TEXT NOT NULL,              -- JSON output from LLM
+          lang_id INTEGER NOT NULL,
+          identifier TEXT NOT NULL,
+          prompt_type TEXT NOT NULL,
+          text TEXT NOT NULL,
           model TEXT,
           modifier TEXT,
           task_id INTEGER,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (parent_lang_word_id) REFERENCES lang_words(id) ON DELETE CASCADE
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         """
     )
-    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_parent_id ON temporary_writings(parent_lang_word_id);")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_parent_created ON temporary_writings(parent_lang_word_id, created_at);")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_prompt_type ON temporary_writings(prompt_type);")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_created_at ON temporary_writings(created_at);")
-
-    # updated_at triggers
-    db.execute(
-        """
-        CREATE TRIGGER IF NOT EXISTS trg_child_words_updated_at
-        AFTER UPDATE ON child_words
-        FOR EACH ROW
-        BEGIN
-          UPDATE child_words SET updated_at = datetime('now') WHERE id = NEW.id;
-        END;
-        """
-    )
-    db.execute(
-        """
-        CREATE TRIGGER IF NOT EXISTS trg_lang_sentences_updated_at
-        AFTER UPDATE ON lang_sentences
-        FOR EACH ROW
-        BEGIN
-          UPDATE lang_sentences SET updated_at = datetime('now') WHERE id = NEW.id;
-        END;
-        """
-    )
-    db.execute(
-        """
-        CREATE TRIGGER IF NOT EXISTS trg_child_sentences_updated_at
-        AFTER UPDATE ON child_sentences
-        FOR EACH ROW
-        BEGIN
-          UPDATE child_sentences SET updated_at = datetime('now') WHERE id = NEW.id;
-        END;
-        """
-    )
-    db.execute(
-        """
-        CREATE TRIGGER IF NOT EXISTS trg_llm_tasks_updated_at
-        AFTER UPDATE ON llm_tasks
-        FOR EACH ROW
-        BEGIN
-          UPDATE llm_tasks SET updated_at = datetime('now') WHERE id = NEW.id;
-        END;
-        """
-    )
-    db.execute(
-        """
-        CREATE TRIGGER IF NOT EXISTS trg_temporary_writings_updated_at
-        AFTER UPDATE ON temporary_writings
-        FOR EACH ROW
-        BEGIN
-          UPDATE temporary_writings SET updated_at = datetime('now') WHERE id = NEW.id;
-        END;
-        """
-    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id ON temporary_writings(lang_id);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_writings_lang_id_created ON temporary_writings(lang_id, created_at);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_writings_prompt_type ON temporary_writings(prompt_type);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_temp_writings_created_at ON temporary_writings(created_at);")
 
     db.commit()
 
+_WORKER_LOCK_FD = None
 
-@app.before_request
-def _ensure_schema_and_worker() -> None:
-    db = get_db()
-    ensure_schema(db)
-    _ensure_worker_started()
-
-
-# ---------------------------------------------------------------------
-# Admin
-# ---------------------------------------------------------------------
-
-@app.get("/api/admin/ping")
-def admin_ping():
+def _start_background_services():
     """
-    Returns ok:true if the provided X-Admin-Key matches.
+    Start services that should run when the process starts.
+    Under gunicorn, multiple workers will import this module—so we guard with a file lock.
     """
-    require_admin_key()
-    return jsonify(ok=True)
+    global _WORKER_LOCK_FD
 
-
-# ---------------------------------------------------------------------
-# Words + versions + children
-# ---------------------------------------------------------------------
-
-@app.get("/api/lang_words")
-def list_lang_words():
-    db = get_db()
-    rows = db.execute("SELECT id, word, created_at FROM lang_words ORDER BY word ASC, id ASC").fetchall()
-
-    out = []
-    for r in rows:
-        v = db.execute(
-            "SELECT id AS version_id, version FROM lang_word_versions WHERE lang_word_id=? ORDER BY version DESC LIMIT 1",
-            (r["id"],),
-        ).fetchone()
-        out.append({
-            "lang_word_id": int(r["id"]),
-            "word": r["word"],
-            "created_at": r["created_at"],
-            "latest_version_id": int(v["version_id"]) if v else None,
-            "latest_version": int(v["version"]) if v else None,
-        })
-    return jsonify(words=out)
-
-
-@app.post("/api/lang_words")
-def create_lang_word_generic():
-    """
-    Generic lang word creation (admin). Use /api/lang_words/parents for explicit "root" creation in the UI,
-    but this endpoint remains useful for scripts.
-    """
-    require_admin_key()
-    db = get_db()
-
-    data = request.get_json(silent=True) or {}
-    word = (data.get("word") or "").strip()
-    if not word:
-        abort(400, description="Missing 'word'.")
-
-    cur = db.execute("INSERT INTO lang_words (word) VALUES (?)", (word,))
-    lang_word_id = int(cur.lastrowid)
-    version_id = ensure_word_has_v1(db, lang_word_id)
-    db.commit()
-
-    return jsonify(ok=True, lang_word_id=lang_word_id, version_id=version_id, word=word), 201
-
-
-@app.post("/api/lang_words/parents")
-def create_parent_lang_word():
-    """
-    Create a parent/root lang word (admin). Root-ness is defined by "has no parent edge in lang_word_children".
-    """
-    require_admin_key()
-    db = get_db()
-
-    data = request.get_json(silent=True) or {}
-    word = (data.get("word") or "").strip()
-    if not word:
-        abort(400, description="Missing 'word'.")
-    if len(word) > 200:
-        abort(400, description="Word too long (max 200 chars).")
-
-    cur = db.execute("INSERT INTO lang_words (word) VALUES (?)", (word,))
-    lang_word_id = int(cur.lastrowid)
-    version_id = ensure_word_has_v1(db, lang_word_id)
-    db.commit()
-    return jsonify(ok=True, lang_word_id=lang_word_id, version_id=version_id, word=word), 201
-
-
-@app.post("/api/lang_words/<int:lang_word_id>/versions")
-def create_lang_word_version(lang_word_id: int):
-    require_admin_key()
-    db = get_db()
-
-    w = db.execute("SELECT id FROM lang_words WHERE id=?", (lang_word_id,)).fetchone()
-    if w is None:
-        abort(404, description="Lang word not found.")
-
-    last = db.execute(
-        "SELECT version FROM lang_word_versions WHERE lang_word_id=? ORDER BY version DESC LIMIT 1",
-        (lang_word_id,),
-    ).fetchone()
-    next_version = int(last["version"]) + 1 if last else 1
-
-    cur = db.execute(
-        "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, ?)",
-        (lang_word_id, next_version),
-    )
-    db.commit()
-    return jsonify(ok=True, version_id=int(cur.lastrowid), version=next_version), 201
-
-
-@app.get("/api/lang_words/<int:version_id>")
-def get_lang_word_version(version_id: int):
-    """
-    Get a specific lang_word_version, including:
-      - child_words
-      - child_lang_words (linked via lang_word_children)
-    """
-    db = get_db()
-
-    vr = db.execute(
-        """
-        SELECT v.id AS version_id, v.version, v.created_at, w.id AS lang_word_id, w.word
-        FROM lang_word_versions v
-        JOIN lang_words w ON w.id = v.lang_word_id
-        WHERE v.id=?
-        """,
-        (version_id,),
-    ).fetchone()
-    if vr is None:
-        abort(404, description="Version not found.")
-
-    crows = db.execute(
-        """
-        SELECT id, word, link, created_at, updated_at
-        FROM child_words
-        WHERE lang_word_version_id=?
-        ORDER BY created_at ASC, id ASC
-        """,
-        (version_id,),
-    ).fetchall()
-
-    child_words = [{
-        "id": int(r["id"]),
-        "word": r["word"],
-        "link": r["link"] or "",
-        "created_at": r["created_at"],
-        "updated_at": r["updated_at"],
-    } for r in crows]
-
-    grows = db.execute(
-        """
-        SELECT w.id, w.word
-        FROM lang_word_children lwc
-        JOIN lang_words w ON w.id = lwc.child_lang_word_id
-        WHERE lwc.parent_lang_word_version_id=?
-        ORDER BY w.word ASC, w.id ASC
-        """,
-        (version_id,),
-    ).fetchall()
-
-    child_lang_words = [{"lang_word_id": int(r["id"]), "word": r["word"]} for r in grows]
-
-    return jsonify({
-        "version_id": int(vr["version_id"]),
-        "version": int(vr["version"]),
-        "created_at": vr["created_at"],
-        "lang_word_id": int(vr["lang_word_id"]),
-        "word": vr["word"],
-        "child_words": child_words,
-        "child_lang_words": child_lang_words,
-    })
-
-
-@app.delete("/api/lang_words/<int:lang_word_id>")
-def delete_lang_word(lang_word_id: int):
-    require_admin_key()
-    db = get_db()
-    db.execute("DELETE FROM lang_words WHERE id=?", (lang_word_id,))
-    db.commit()
-    return jsonify(ok=True)
-
-
-@app.delete("/api/lang_word_versions/<int:version_id>")
-def delete_lang_word_version(version_id: int):
-    require_admin_key()
-    db = get_db()
-    db.execute("DELETE FROM lang_word_versions WHERE id=?", (version_id,))
-    db.commit()
-    return jsonify(ok=True)
-
-
-@app.post("/api/lang_word_versions/<int:version_id>/child_words")
-def create_child_word(version_id: int):
-    require_admin_key()
-    db = get_db()
-
-    vr = db.execute("SELECT id FROM lang_word_versions WHERE id=?", (version_id,)).fetchone()
-    if vr is None:
-        abort(404, description="Version not found.")
-
-    data = request.get_json(silent=True) or {}
-    word = (data.get("word") or "").strip()
-    link = (data.get("link") or "").strip() or None
-    if not word:
-        abort(400, description="Missing 'word'.")
-
-    cur = db.execute(
-        "INSERT INTO child_words (lang_word_version_id, word, link) VALUES (?, ?, ?)",
-        (version_id, word, link),
-    )
-    db.commit()
-    return jsonify(ok=True, child_id=int(cur.lastrowid)), 201
-
-
-@app.post("/api/lang_word_versions/<int:version_id>/child_lang_words")
-def add_child_lang_word(version_id: int):
-    require_admin_key()
-    db = get_db()
-
-    parent = db.execute("SELECT id FROM lang_word_versions WHERE id=?", (version_id,)).fetchone()
-    if parent is None:
-        abort(404, description="Version not found.")
-
-    data = request.get_json(silent=True) or {}
-    child_lang_word_id = data.get("child_lang_word_id", None)
+    # Always ensure DB tables exist
     try:
-        child_lang_word_id = int(child_lang_word_id)
+        init_db()
+        init_usage_db()
     except Exception:
-        abort(400, description="Missing/invalid child_lang_word_id.")
+        # Don't prevent boot if init_db fails; but you may prefer to raise
+        traceback.print_exc()
 
-    exists = db.execute("SELECT id FROM lang_words WHERE id=?", (child_lang_word_id,)).fetchone()
-    if exists is None:
-        abort(404, description="Child lang word not found.")
-
-    db.execute(
-        """
-        INSERT OR IGNORE INTO lang_word_children (parent_lang_word_version_id, child_lang_word_id)
-        VALUES (?, ?)
-        """,
-        (version_id, child_lang_word_id),
-    )
-    db.commit()
-    return jsonify(ok=True, parent_version_id=version_id, child_lang_word_id=child_lang_word_id)
-
-
-@app.put("/api/child_words/<int:child_id>")
-def update_child_word(child_id: int):
-    require_admin_key()
-    db = get_db()
-
-    row = db.execute("SELECT id FROM child_words WHERE id=?", (child_id,)).fetchone()
-    if row is None:
-        abort(404, description="Child word not found.")
-
-    data = request.get_json(silent=True) or {}
-    word = (data.get("word") or "").strip()
-    link = (data.get("link") or "").strip()
-
-    if not word:
-        abort(400, description="Missing 'word'.")
-
-    db.execute(
-        "UPDATE child_words SET word=?, link=? WHERE id=?",
-        (word, link or None, child_id),
-    )
-    db.commit()
-    return jsonify(ok=True)
-
-
-@app.delete("/api/child_words/<int:child_id>")
-def delete_child_word(child_id: int):
-    require_admin_key()
-    db = get_db()
-    db.execute("DELETE FROM child_words WHERE id=?", (child_id,))
-    db.commit()
-    return jsonify(ok=True)
-
-
-@app.put("/api/child_words/<int:child_id>/move")
-def move_child_word(child_id: int):
-    """
-    Move a child_word to a different lang_word_version.
-    Body: { "to_version_id": 123 }
-    """
-    require_admin_key()
-    db = get_db()
-
-    row = db.execute("SELECT id FROM child_words WHERE id=?", (child_id,)).fetchone()
-    if row is None:
-        abort(404, description="Child word not found.")
-
-    data = request.get_json(silent=True) or {}
-    to_version_id = data.get("to_version_id", None)
+    # Acquire a host-level lock so only ONE process runs the LLM queue thread
+    lock_path = "/tmp/lang_llm_worker.lock"
     try:
-        to_version_id = int(to_version_id)
+        fd = open(lock_path, "w")
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # non-blocking
+        _WORKER_LOCK_FD = fd  # keep open so lock is held
+    except BlockingIOError:
+        # Another worker already started the background thread
+        return
     except Exception:
-        abort(400, description="Missing/invalid to_version_id.")
+        traceback.print_exc()
+        return
 
-    vr = db.execute("SELECT id FROM lang_word_versions WHERE id=?", (to_version_id,)).fetchone()
-    if vr is None:
-        abort(404, description="Target version not found.")
+    # Start your DB-backed queue worker thread
+    _start_llm_worker_once()
 
-    db.execute("UPDATE child_words SET lang_word_version_id=? WHERE id=?", (to_version_id, child_id))
-    db.commit()
-    return jsonify(ok=True)
-
-
-# ---------------------------------------------------------------------
-# Write tree (for write.html read panel)
-# ---------------------------------------------------------------------
-
-@app.get("/api/write")
-def write_tree():
-    """
-    Return root/parent lang words (words that are NOT a child of any parent version),
-    with their versions, and (for each version) both child_words and child_lang_words.
-
-    Shape:
-    {
-      "roots": [
-        {
-          "lang_word_id": ...,
-          "word": ...,
-          "versions": [
-            {
-              "version_id": ...,
-              "version": ...,
-              "child_words": [...],
-              "child_lang_words": [...]
-            }, ...
-          ],
-          "current_child_lang_words": [...]  # children of latest version
-        }
-      ]
-    }
-    """
-    db = get_db()
-
-    root_rows = db.execute(
-        """
-        SELECT w.id, w.word, w.created_at
-        FROM lang_words w
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM lang_word_children lwc
-          WHERE lwc.child_lang_word_id = w.id
-        )
-        ORDER BY w.word ASC, w.id ASC
-        """
-    ).fetchall()
-
-    def load_versions(lang_word_id: int):
-        vrows = db.execute(
-            """
-            SELECT id AS version_id, version, created_at
-            FROM lang_word_versions
-            WHERE lang_word_id=?
-            ORDER BY version DESC
-            """,
-            (lang_word_id,),
-        ).fetchall()
-
-        versions_out = []
-        for vr in vrows:
-            version_id = int(vr["version_id"])
-
-            crows = db.execute(
-                """
-                SELECT id, word, link, created_at, updated_at
-                FROM child_words
-                WHERE lang_word_version_id=?
-                ORDER BY created_at ASC, id ASC
-                """,
-                (version_id,),
-            ).fetchall()
-            child_words = [{
-                "id": int(cr["id"]),
-                "word": cr["word"],
-                "link": cr["link"] or "",
-                "created_at": cr["created_at"],
-                "updated_at": cr["updated_at"],
-            } for cr in crows]
-
-            grows = db.execute(
-                """
-                SELECT w.id, w.word
-                FROM lang_word_children lwc
-                JOIN lang_words w ON w.id = lwc.child_lang_word_id
-                WHERE lwc.parent_lang_word_version_id=?
-                ORDER BY w.word ASC, w.id ASC
-                """,
-                (version_id,),
-            ).fetchall()
-            child_lang_words = [{"lang_word_id": int(r["id"]), "word": r["word"]} for r in grows]
-
-            versions_out.append({
-                "version_id": version_id,
-                "version": int(vr["version"]),
-                "created_at": vr["created_at"],
-                "child_words": child_words,
-                "child_word_count": len(child_words),
-                "child_lang_words": child_lang_words,
-                "child_lang_word_count": len(child_lang_words),
-            })
-        return versions_out
-
-    roots_out = []
-    for rr in root_rows:
-        lang_word_id = int(rr["id"])
-        versions = load_versions(lang_word_id)
-        latest = versions[0] if versions else None
-        current_children = latest["child_lang_words"] if latest else []
-        roots_out.append({
-            "lang_word_id": lang_word_id,
-            "word": rr["word"],
-            "created_at": rr["created_at"],
-            "versions": versions,
-            "version_count": len(versions),
-            "current_child_lang_words": current_children,
-            "current_child_lang_word_count": len(current_children),
-        })
-
-    return jsonify(roots=roots_out)
-
-
-# ---------------------------------------------------------------------
-# Sentences
-# ---------------------------------------------------------------------
-
-@app.get("/api/lang_sentences")
-def list_lang_sentences():
-    db = get_db()
-    rows = db.execute(
-        """
-        SELECT id, lang_word_ids, sentence, created_at, updated_at
-        FROM lang_sentences
-        ORDER BY updated_at DESC, id DESC
-        LIMIT 1000
-        """
-    ).fetchall()
-
-    out = []
-    for r in rows:
-        out.append({
-            "id": int(r["id"]),
-            "lang_word_ids": _parse_int_list_json(r["lang_word_ids"]),
-            "sentence": r["sentence"],
-            "created_at": r["created_at"],
-            "updated_at": r["updated_at"],
-        })
-    return jsonify(sentences=out)
-
-
-@app.post("/api/lang_sentences")
-def create_lang_sentence():
-    require_admin_key()
-    db = get_db()
-
-    data = request.get_json(silent=True) or {}
-    ids = data.get("lang_word_ids", [])
-    sentence = (data.get("sentence") or "").strip()
-
-    if not isinstance(ids, list):
-        abort(400, description="lang_word_ids must be a list.")
-    ids_int: list[int] = []
-    for x in ids:
+    # Release lock on exit
+    def _cleanup():
+        global _WORKER_LOCK_FD
         try:
-            ids_int.append(int(x))
+            if _WORKER_LOCK_FD is not None:
+                fcntl.flock(_WORKER_LOCK_FD, fcntl.LOCK_UN)
+                _WORKER_LOCK_FD.close()
         except Exception:
             pass
+        _WORKER_LOCK_FD = None
 
-    if not sentence:
-        abort(400, description="Missing 'sentence'.")
-    if not ids_int:
-        abort(400, description="lang_word_ids cannot be empty.")
+    atexit.register(_cleanup)
 
-    # Ensure all words exist
-    for wid in ids_int:
-        w = db.execute("SELECT id FROM lang_words WHERE id=?", (wid,)).fetchone()
-        if w is None:
-            abort(400, description=f"lang_word_id {wid} does not exist.")
-
-    cur = db.execute(
-        "INSERT INTO lang_sentences (lang_word_ids, sentence) VALUES (?, ?)",
-        (json.dumps(ids_int), sentence),
-    )
-    db.commit()
-    return jsonify(ok=True, id=int(cur.lastrowid)), 201
-
-
-@app.get("/api/lang_sentences/<int:sentence_id>")
-def get_lang_sentence(sentence_id: int):
-    db = get_db()
-    r = db.execute(
-        "SELECT id, lang_word_ids, sentence, created_at, updated_at FROM lang_sentences WHERE id=?",
-        (sentence_id,),
-    ).fetchone()
-    if r is None:
-        abort(404, description="Sentence not found.")
-    return jsonify({
-        "id": int(r["id"]),
-        "lang_word_ids": _parse_int_list_json(r["lang_word_ids"]),
-        "sentence": r["sentence"],
-        "created_at": r["created_at"],
-        "updated_at": r["updated_at"],
-    })
-
-
-# Optional child-sentence endpoints
-@app.get("/api/lang_sentences/<int:sentence_id>/child_sentences")
-def list_child_sentences(sentence_id: int):
-    db = get_db()
-    sr = db.execute("SELECT id FROM lang_sentences WHERE id=?", (sentence_id,)).fetchone()
-    if sr is None:
-        abort(404, description="Sentence not found.")
-
-    rows = db.execute(
-        """
-        SELECT id, lang_sentence_id, child_word_ids, sentence, created_at, updated_at
-        FROM child_sentences
-        WHERE lang_sentence_id=?
-        ORDER BY updated_at DESC, id DESC
-        """,
-        (sentence_id,),
-    ).fetchall()
-
-    out = []
-    for r in rows:
-        out.append({
-            "id": int(r["id"]),
-            "lang_sentence_id": int(r["lang_sentence_id"]),
-            "child_word_ids": _parse_int_list_json(r["child_word_ids"]),
-            "sentence": r["sentence"],
-            "created_at": r["created_at"],
-            "updated_at": r["updated_at"],
-        })
-    return jsonify(child_sentences=out)
-
-
-@app.post("/api/lang_sentences/<int:sentence_id>/child_sentences")
-def create_child_sentence(sentence_id: int):
-    require_admin_key()
-    db = get_db()
-
-    sr = db.execute("SELECT id FROM lang_sentences WHERE id=?", (sentence_id,)).fetchone()
-    if sr is None:
-        abort(404, description="Sentence not found.")
-
-    data = request.get_json(silent=True) or {}
-    ids = data.get("child_word_ids", [])
-    sentence = (data.get("sentence") or "").strip()
-
-    if not isinstance(ids, list):
-        abort(400, description="child_word_ids must be a list.")
-    ids_int: list[int] = []
-    for x in ids:
-        try:
-            ids_int.append(int(x))
-        except Exception:
-            pass
-
-    if not sentence:
-        abort(400, description="Missing 'sentence'.")
-    if not ids_int:
-        abort(400, description="child_word_ids cannot be empty.")
-
-    # Ensure child_words exist
-    for cid in ids_int:
-        w = db.execute("SELECT id FROM child_words WHERE id=?", (cid,)).fetchone()
-        if w is None:
-            abort(400, description=f"child_word_id {cid} does not exist.")
-
-    cur = db.execute(
-        "INSERT INTO child_sentences (lang_sentence_id, child_word_ids, sentence) VALUES (?, ?, ?)",
-        (sentence_id, json.dumps(ids_int), sentence),
-    )
-    db.commit()
-    return jsonify(ok=True, id=int(cur.lastrowid)), 201
-
-
-@app.get("/api/child_sentences/<int:child_sentence_id>")
-def get_child_sentence(child_sentence_id: int):
-    db = get_db()
-    r = db.execute(
-        """
-        SELECT id, lang_sentence_id, child_word_ids, sentence, created_at, updated_at
-        FROM child_sentences
-        WHERE id=?
-        """,
-        (child_sentence_id,),
-    ).fetchone()
-    if r is None:
-        abort(404, description="Child sentence not found.")
-    return jsonify({
-        "id": int(r["id"]),
-        "lang_sentence_id": int(r["lang_sentence_id"]),
-        "child_word_ids": _parse_int_list_json(r["child_word_ids"]),
-        "sentence": r["sentence"],
-        "created_at": r["created_at"],
-        "updated_at": r["updated_at"],
-    })
-
-
-# ---------------------------------------------------------------------
-# LLM task queue + temporary writings
-# ---------------------------------------------------------------------
-
-@app.post("/api/write/create_lang_words")
-def enqueue_create_lang_words():
-    """
-    Queue an LLM job to create child lang words ("themes") under a selected parent lang word.
-    Body: { parent_lang_word_id: int, modifier: str? }
-    """
-    require_admin_key()
-    db = get_db()
-
-    data = request.get_json(silent=True) or {}
-    parent_lang_word_id = data.get("parent_lang_word_id", None)
-    modifier = (data.get("modifier") or "").strip()
-
-    if parent_lang_word_id is None:
-        abort(400, description="Missing parent_lang_word_id.")
-    try:
-        parent_lang_word_id = int(parent_lang_word_id)
-    except Exception:
-        abort(400, description="Invalid parent_lang_word_id.")
-
-    pr = db.execute("SELECT id FROM lang_words WHERE id=?", (parent_lang_word_id,)).fetchone()
-    if pr is None:
-        abort(404, description="Parent lang word not found.")
-
-    existing = db.execute(
-        """
-        SELECT id, status
-        FROM llm_tasks
-        WHERE parent_lang_word_id=? AND task_type=? AND status IN ('queued','running')
-        ORDER BY id DESC
-        LIMIT 1
-        """,
-        (parent_lang_word_id, "create_lang_words"),
-    ).fetchone()
-
-    if existing is not None:
-        return jsonify(ok=True, task_id=int(existing["id"]), status=existing["status"], deduped=True), 202
-
-    identifier = {"parent_lang_word_id": parent_lang_word_id}
-    payload = {"modifier": modifier}
-
-    cur = db.execute(
-        """
-        INSERT INTO llm_tasks (parent_lang_word_id, task_type, identifier, payload, status)
-        VALUES (?, ?, ?, ?, 'queued')
-        """,
-        (parent_lang_word_id, "create_lang_words", json.dumps(identifier), json.dumps(payload)),
-    )
-    db.commit()
-    return jsonify(ok=True, task_id=int(cur.lastrowid)), 202
-
-
-@app.get("/api/write/tasks/<int:task_id>")
-def get_write_task(task_id: int):
-    db = get_db()
-    r = db.execute(
-        """
-        SELECT id, parent_lang_word_id, task_type, identifier, payload, status, error, result_writing_id, created_at, updated_at
-        FROM llm_tasks
-        WHERE id=?
-        """,
-        (task_id,),
-    ).fetchone()
-    if r is None:
-        abort(404, description="Task not found.")
-    return jsonify({
-        "id": int(r["id"]),
-        "parent_lang_word_id": int(r["parent_lang_word_id"]),
-        "task_type": r["task_type"],
-        "identifier": _json_loads_safe(r["identifier"], {}),
-        "payload": _json_loads_safe(r["payload"], {}),
-        "status": r["status"],
-        "error": r["error"] or "",
-        "result_writing_id": int(r["result_writing_id"]) if r["result_writing_id"] is not None else None,
-        "created_at": r["created_at"],
-        "updated_at": r["updated_at"],
-    })
-
-
-@app.get("/api/temporary_writings")
-def list_temporary_writings():
-    """
-    Query: ?parent_lang_word_id=...
-    """
-    require_admin_key()
-    db = get_db()
-
-    parent_id = (request.args.get("parent_lang_word_id") or "").strip()
-    if not parent_id:
-        abort(400, description="Missing parent_lang_word_id.")
-    try:
-        parent_id = int(parent_id)
-    except Exception:
-        abort(400, description="Invalid parent_lang_word_id.")
-
-    rows = db.execute(
-        """
-        SELECT id, parent_lang_word_id, identifier, prompt_type, text, model, modifier, task_id, created_at, updated_at
-        FROM temporary_writings
-        WHERE parent_lang_word_id=? AND prompt_type='create_lang_words'
-        ORDER BY id DESC
-        LIMIT 50
-        """,
-        (parent_id,),
-    ).fetchall()
-
-    out = []
-    for r in rows:
-        out.append({
-            "id": int(r["id"]),
-            "parent_lang_word_id": int(r["parent_lang_word_id"]),
-            "identifier": _json_loads_safe(r["identifier"], {}),
-            "prompt_type": r["prompt_type"],
-            "text": _json_loads_safe(r["text"], {}),
-            "model": r["model"] or "",
-            "modifier": r["modifier"] or "",
-            "task_id": int(r["task_id"]) if r["task_id"] is not None else None,
-            "created_at": r["created_at"],
-            "updated_at": r["updated_at"],
-        })
-
-    return jsonify(writings=out)
-
-
-@app.post("/api/temporary_writings/<int:writing_id>/apply_create_lang_words")
-def apply_create_lang_words(writing_id: int):
-    """
-    Apply a temporary writing:
-      - create a NEW version of the selected parent word and link ONLY the newly generated themes to that new parent version.
-      - create child_words (orbiting phrases) under each created theme's version (v1).
-
-    Expected writing JSON:
-      { "themes": [ { "theme": "...", "orbiting_phrases": ["...", ...] }, ... ] }
-    """
-    require_admin_key()
-    db = get_db()
-
-    wr = db.execute(
-        "SELECT id, parent_lang_word_id, prompt_type, text FROM temporary_writings WHERE id=?",
-        (writing_id,),
-    ).fetchone()
-    if wr is None:
-        abort(404, description="Temporary writing not found.")
-    if wr["prompt_type"] != "create_lang_words":
-        abort(400, description="Wrong prompt_type for this apply endpoint.")
-
-    parent_lang_word_id = int(wr["parent_lang_word_id"])
-    parent_version_id = create_next_version(db, parent_lang_word_id)
-
-    try:
-        payload = json.loads(wr["text"] or "{}")
-    except Exception:
-        abort(400, description="Temporary writing JSON is invalid.")
-
-    themes = payload.get("themes", [])
-    if not isinstance(themes, list):
-        themes = []
-
-    created: list[dict[str, Any]] = []
-
-    for t in themes:
-        if not isinstance(t, dict):
-            continue
-        theme_word = (t.get("theme") or "").strip()
-        if not theme_word:
-            continue
-
-        # Create or reuse child lang word (lang_words.word is UNIQUE)
-        existing = db.execute(
-            "SELECT id FROM lang_words WHERE word=?",
-            (theme_word,),
-        ).fetchone()
-
-        if existing is not None:
-            child_lang_word_id = int(existing["id"])
-        else:
-            cur = db.execute("INSERT INTO lang_words (word) VALUES (?)", (theme_word,))
-            child_lang_word_id = int(cur.lastrowid)
-
-        # Create a NEW version for an existing theme word so orbiting phrases don't mutate old versions
-        child_version_id = create_next_version(db, child_lang_word_id) if existing is not None else ensure_word_has_v1(db, child_lang_word_id)
-
-        # Link parent version -> child lang word
-        db.execute(
-            """
-            INSERT OR IGNORE INTO lang_word_children (parent_lang_word_version_id, child_lang_word_id)
-            VALUES (?, ?)
-            """,
-            (parent_version_id, child_lang_word_id),
-        )
-
-        # Create orbiting phrases as child_words under the child theme's version
-        orbit = t.get("orbiting_phrases", [])
-        if isinstance(orbit, list):
-            for phrase in orbit:
-                phrase = (str(phrase) or "").strip()
-                if not phrase:
-                    continue
-                db.execute(
-                    "INSERT INTO child_words (lang_word_version_id, word, link) VALUES (?, ?, NULL)",
-                    (child_version_id, phrase),
-                )
-
-        created.append({
-            "child_lang_word_id": child_lang_word_id,
-            "word": theme_word,
-            "child_version_id": child_version_id,
-        })
-
-    db.execute("DELETE FROM temporary_writings WHERE id=?", (writing_id,))
-    db.commit()
-
-    return jsonify(ok=True, parent_lang_word_id=parent_lang_word_id, created=created)
-
-
-# ---------------------------------------------------------------------
-# In-process LLM worker (optional)
-# ---------------------------------------------------------------------
-
-def _ensure_worker_started() -> None:
-    """
-    Starts a single background worker thread per process to drain llm_tasks.
-    """
+def _start_llm_worker_once():
     global _worker_started
     with _worker_lock:
         if _worker_started:
             return
         _worker_started = True
-        t = threading.Thread(target=_llm_worker_loop, name="llm-worker", daemon=True)
-        t.start()
 
+    t = threading.Thread(target=_llm_worker_loop, name="llm-worker", daemon=True)
+    t.start()
 
-def _llm_worker_loop() -> None:
+def _llm_worker_loop():
+    # NOTE: uses new sqlite connections (not Flask g)
     while True:
         try:
             _process_one_task()
             time.sleep(1.0)
+        except sqlite3.OperationalError as e:
+            if "no such table" in str(e):
+                traceback.print_exc()
+                time.sleep(5.0)
+                continue
+            raise
         except Exception:
+            # Never crash the worker loop
             traceback.print_exc()
             time.sleep(2.0)
 
+def _process_one_task():
+    db = connect_lang_db()
 
-def _process_one_task() -> None:
-    """
-    Claim one queued task and run it.
-    """
-    ensure_db_dir()
-    db = sqlite3.connect(LANG_DB_PATH)
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA foreign_keys = ON;")
-    db.execute("PRAGMA journal_mode = WAL;")
-    ensure_schema(db)
+    # Ensure schema exists (idempotent)
+    _ensure_llm_schema(db)
 
+    # Claim one queued task
     task = db.execute(
         """
-        SELECT id, parent_lang_word_id, task_type, identifier, payload
+        SELECT id, lang_id, task_type, identifier, payload
         FROM llm_tasks
         WHERE status = 'queued'
         ORDER BY id ASC
@@ -1230,149 +1167,1416 @@ def _process_one_task() -> None:
         return
 
     task_id = int(task["id"])
-    db.execute("UPDATE llm_tasks SET status='running' WHERE id=?", (task_id,))
+
+    # Mark running
+    db.execute(
+        "UPDATE llm_tasks SET status='running', updated_at=datetime('now') WHERE id=?",
+        (task_id,)
+    )
     db.commit()
 
     try:
         task_type = task["task_type"]
-        parent_id = int(task["parent_lang_word_id"])
-        payload = _json_loads_safe(task["payload"], {})
-
-        if task_type != "create_lang_words":
-            raise ValueError(f"Unknown task_type: {task_type}")
+        lang_id = int(task["lang_id"])
+        identifier = json.loads(task["identifier"])
+        payload = json.loads(task["payload"])
 
         modifier = (payload.get("modifier") or "").strip() or None
 
-        pr = db.execute("SELECT word FROM lang_words WHERE id=?", (parent_id,)).fetchone()
-        if pr is None:
-            raise ValueError("Parent lang word not found.")
-        primary_phrase = pr["word"]
+# Star stuff tasks
+if task_type in STAR_STUFF_TASK_TYPES:
+    child_word_id = int(identifier.get("child_word_id") or payload.get("child_word_id") or 0)
+    if not child_word_id:
+        raise ValueError("child_word_id is required for star stuff tasks")
 
-        # Run LLM and store result
-        plan = _run_create_lang_words_llm(primary_phrase=primary_phrase, optional_modifier=modifier)
+    ctx = _get_star_context(db, child_word_id, preferred_lang_id=lang_id)
+    phrase = ctx["child_word"]
+    context = f'{ctx["lang_name"]} / {ctx["lang_word"]}'
 
-        cur = db.execute(
+    out_text = _run_star_stuff_llm(task_type, phrase, context, modifier)
+
+    ss_id = db.execute(
+        """
+        INSERT INTO star_stuff (
+          child_word_id, lang_word_id, lang_id, lang_name, lang_word, child_word,
+          prompt_type, modifier, text, model, task_id, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        """,
+        (
+            int(ctx["child_word_id"]),
+            int(ctx["lang_word_id"]),
+            int(ctx["lang_id"]),
+            ctx["lang_name"],
+            ctx["lang_word"],
+            ctx["child_word"],
+            task_type,
+            modifier or "",
+            out_text,
+            LLM_MODEL_STAR_STUFF,
+            task_id,
+        )
+    ).lastrowid
+
+    db.execute(
+        """
+        UPDATE llm_tasks
+        SET status='done', result_writing_id=?, updated_at=datetime('now')
+        WHERE id=?
+        """,
+        (int(ss_id), task_id)
+    )
+    db.commit()
+    return
+
+if task_type != "create_lang_words":
+    raise ValueError(f"Unknown task_type: {task_type}")
+
+
+        # Fetch lang name for Primary Phrase
+        lr = db.execute("SELECT id, name FROM langs WHERE id=?", (lang_id,)).fetchone()
+        if lr is None:
+            raise ValueError(f"Lang not found: {lang_id}")
+        primary_phrase = lr["name"]
+
+        plan = _run_create_lang_words_llm(primary_phrase, modifier)
+
+        # Store in temporary_writings
+        writing_id = db.execute(
             """
-            INSERT INTO temporary_writings (parent_lang_word_id, identifier, prompt_type, text, model, modifier, task_id)
-            VALUES (?, ?, 'create_lang_words', ?, ?, ?, ?)
+            INSERT INTO temporary_writings (lang_id, identifier, prompt_type, text, model, modifier, task_id, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
             """,
             (
-                parent_id,
-                json.dumps({"parent_lang_word_id": parent_id}),
-                json.dumps(plan),
+                lang_id,
+                json.dumps({"lang_id": lang_id}),
+                "create_lang_words",
+                json.dumps(plan.model_dump(), ensure_ascii=False),
                 LLM_MODEL_CREATE_LANG_WORDS,
                 modifier or "",
                 task_id,
-            ),
-        )
-        writing_id = int(cur.lastrowid)
+            )
+        ).lastrowid
 
         db.execute(
             """
             UPDATE llm_tasks
-            SET status='done', result_writing_id=?
+            SET status='done', result_writing_id=?, updated_at=datetime('now')
             WHERE id=?
             """,
-            (writing_id, task_id),
+            (int(writing_id), task_id)
         )
         db.commit()
 
     except Exception as e:
         db.execute(
-            "UPDATE llm_tasks SET status='error', error=? WHERE id=?",
-            (str(e), task_id),
+            """
+            UPDATE llm_tasks
+            SET status='error', error=?, updated_at=datetime('now')
+            WHERE id=?
+            """,
+            (str(e), task_id)
         )
         db.commit()
     finally:
         db.close()
 
 
-def _run_create_lang_words_llm(primary_phrase: str, optional_modifier: Optional[str]) -> dict[str, Any]:
-    """
-    Produce a plan:
-      { "themes": [ { "theme": "...", "orbiting_phrases": ["...", ...] }, ... ] }
 
-    Uses OpenAI Responses API if openai package is installed and OPENAI_API_KEY is set.
-    If not available, raises an error.
-    """
-    if OpenAI is None:
-        raise RuntimeError("openai package not installed in this environment.")
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY is not set.")
 
-    modifier_txt = (optional_modifier or "").strip()
-    system = (
-        "You create concise hierarchical theme plans for a phrase.\n"
-        "Return ONLY valid JSON with the schema:\n"
-        "{ \"themes\": [ { \"theme\": string, \"orbiting_phrases\": [string, ...] }, ... ] }\n"
-        "Do not include markdown or extra keys."
-    )
+# =========================
+# Stars / Star Stuff
+# =========================
 
-    user = f"Primary phrase: {primary_phrase}\n"
-    if modifier_txt:
-        user += f"Modifier: {modifier_txt}\n"
-    user += (
-        "Generate 5-12 themes. Each theme should be a short phrase.\n"
-        "For each theme, provide 3-12 orbiting_phrases (short phrases) that relate to that theme.\n"
-        "Keep everything lower-case unless a proper noun.\n"
-    )
+def _get_star_context(db, child_word_id: int, preferred_lang_id: int | None = None):
+    # child_word -> version -> lang_word
+    crow = db.execute(
+        """
+        SELECT
+          cw.id AS child_word_id,
+          cw.word AS child_word,
+          lwv.id AS lang_word_version_id,
+          lwv.lang_word_id AS lang_word_id,
+          lw.word AS lang_word
+        FROM child_words cw
+        JOIN lang_word_versions lwv ON lwv.id = cw.lang_word_version_id
+        JOIN lang_words lw ON lw.id = lwv.lang_word_id
+        WHERE cw.id = ?
+        """,
+        (int(child_word_id),)
+    ).fetchone()
+    if crow is None:
+        raise ValueError("Child word not found")
 
-    client = OpenAI()
-    resp = client.responses.create(
-        model=LLM_MODEL_CREATE_LANG_WORDS,
-        input=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-    )
+    lang_word_id = int(crow["lang_word_id"])
 
-    # Attempt to parse JSON from the output text
-    text_out = ""
+    # Resolve lang containing this lang_word_id (langs.lang_word_ids is JSON array of ints)
+    if preferred_lang_id:
+        lrow = db.execute(
+            """
+            SELECT id, name
+            FROM langs
+            WHERE id = ?
+              AND EXISTS (
+                SELECT 1 FROM json_each(langs.lang_word_ids)
+                WHERE json_each.value = ?
+              )
+            """,
+            (int(preferred_lang_id), lang_word_id)
+        ).fetchone()
+    else:
+        lrow = None
+
+    if lrow is None:
+        lrow = db.execute(
+            """
+            SELECT id, name
+            FROM langs
+            WHERE EXISTS (
+              SELECT 1 FROM json_each(langs.lang_word_ids)
+              WHERE json_each.value = ?
+            )
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 1
+            """,
+            (lang_word_id,)
+        ).fetchone()
+
+    if lrow is None:
+        raise ValueError("Lang not found for this word")
+
+    return {
+        "lang_id": int(lrow["id"]),
+        "lang_name": lrow["name"],
+        "lang_word_id": int(crow["lang_word_id"]),
+        "lang_word": crow["lang_word"],
+        "child_word_id": int(crow["child_word_id"]),
+        "child_word": crow["child_word"],
+        "lang_word_version_id": int(crow["lang_word_version_id"]),
+    }
+
+@app.get("/api/stars")
+def api_stars_get():
+    child_word_id = request.args.get("child_word_id", type=int)
+    if not child_word_id:
+        abort(400, description="child_word_id is required")
+    preferred_lang_id = request.args.get("lang_id", type=int) or None
+    db = connect_lang_db()
     try:
-        # responses.create returns output text in resp.output_text in newer SDKs
-        text_out = getattr(resp, "output_text", "") or ""
-    except Exception:
-        text_out = ""
+        ctx = _get_star_context(db, int(child_word_id), preferred_lang_id=preferred_lang_id)
+        return jsonify(ctx)
+    finally:
+        db.close()
 
-    text_out = text_out.strip()
-    if not text_out:
-        # fallback: try to dig through raw structure
+@app.get("/api/star_stuff")
+def api_star_stuff_list():
+    child_word_id = request.args.get("child_word_id", type=int)
+    if not child_word_id:
+        abort(400, description="child_word_id is required")
+
+    db = connect_lang_db()
+    try:
+        # ensure schema (idempotent)
+        _ensure_llm_schema(db)
+
+        rows = db.execute(
+            """
+            SELECT id, prompt_type, modifier, model, text, created_at, updated_at, task_id
+            FROM star_stuff
+            WHERE child_word_id = ?
+            ORDER BY updated_at DESC, id DESC
+            """,
+            (int(child_word_id),)
+        ).fetchall()
+
+        # also include queued/running tasks for this child word
+        tasks = db.execute(
+            """
+            SELECT id, task_type, status, error, created_at, updated_at
+            FROM llm_tasks
+            WHERE json_extract(identifier, '$.child_word_id') = ?
+              AND task_type IN (
+                'create_star_stuff_words',
+                'create_star_stuff_images',
+                'create_star_stuff_data',
+                'create_star_stuff_synthetic_data',
+                'create_star_stuff_code'
+              )
+              AND status IN ('queued','running','error')
+            ORDER BY id DESC
+            """,
+            (int(child_word_id),)
+        ).fetchall()
+
+        return jsonify(
+            items=[dict(r) for r in rows],
+            tasks=[dict(t) for t in tasks],
+        )
+    finally:
+        db.close()
+
+@app.post("/api/star_stuff/create")
+def api_star_stuff_create():
+    require_admin_key()
+
+    body = request.get_json(silent=True) or {}
+    child_word_id = int(body.get("child_word_id") or 0)
+    prompts = body.get("prompts") or []
+    modifier = (body.get("modifier") or "").strip()
+
+    if not child_word_id:
+        abort(400, description="child_word_id is required")
+    if not isinstance(prompts, list) or not prompts:
+        abort(400, description="prompts must be a non-empty list")
+
+    # validate prompts
+    prompts = [str(p).strip() for p in prompts if str(p).strip()]
+    invalid = [p for p in prompts if p not in STAR_STUFF_TASK_TYPES]
+    if invalid:
+        abort(400, description=f"invalid prompts: {', '.join(invalid)}")
+
+    db = connect_lang_db()
+    try:
+        _ensure_llm_schema(db)
+        ctx = _get_star_context(db, int(child_word_id))
+
+        task_ids = []
+        for task_type in prompts:
+            payload = {
+                "modifier": modifier,
+                "child_word_id": int(child_word_id),
+            }
+            identifier = {
+                "child_word_id": int(child_word_id),
+            }
+            tid = db.execute(
+                """
+                INSERT INTO llm_tasks (lang_id, task_type, identifier, payload, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'queued', datetime('now'), datetime('now'))
+                """,
+                (int(ctx["lang_id"]), task_type, json.dumps(identifier), json.dumps(payload))
+            ).lastrowid
+            task_ids.append(int(tid))
+
+        db.commit()
+        return jsonify(ok=True, task_ids=task_ids)
+    finally:
+        db.close()
+
+# =========================
+# Langs (new)
+# =========================
+
+def _lang_row_or_404(db, lang_id: int):
+    r = db.execute(
+        """
+        SELECT id, name, lang_word_ids, created_at, updated_at
+        FROM langs
+        WHERE id = ?
+        """,
+        (lang_id,),
+    ).fetchone()
+    if r is None:
+        abort(404, description="Lang not found.")
+    return r
+
+
+def _resolve_latest_words_for_ids(db, ids):
+    """
+    For a list of lang_word_id ints, return [{lang_word_id, word, version_id, version}]
+    in the same order, skipping ids that no longer exist or have no versions.
+    """
+    out = []
+    for wid in ids:
+        wrow = db.execute("SELECT id, word FROM lang_words WHERE id = ?", (wid,)).fetchone()
+        if wrow is None:
+            continue
+        vrow = db.execute(
+            """
+            SELECT id AS version_id, version
+            FROM lang_word_versions
+            WHERE lang_word_id = ?
+            ORDER BY version DESC
+            LIMIT 1
+            """,
+            (wid,),
+        ).fetchone()
+        if vrow is None:
+            continue
+        out.append({
+            "lang_word_id": int(wrow["id"]),
+            "word": wrow["word"],
+            "version_id": int(vrow["version_id"]),
+            "version": int(vrow["version"]),
+        })
+    return out
+
+
+@app.get("/api/langs")
+def list_langs():
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT id, name, lang_word_ids, created_at, updated_at
+        FROM langs
+        ORDER BY name ASC, id ASC
+        """
+    ).fetchall()
+
+    out = []
+    for r in rows:
         try:
-            text_out = json.dumps(resp.model_dump(), ensure_ascii=False)
+            ids = json.loads(r["lang_word_ids"])
+            if not isinstance(ids, list):
+                ids = []
+            ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
         except Exception:
-            raise RuntimeError("LLM returned no text output.")
+            ids = []
+        out.append({
+            "id": int(r["id"]),
+            "name": r["name"],
+            "lang_word_ids": ids,
+            "count": len(ids),
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"],
+        })
 
-    # If the model returned extra prose, attempt to extract the first JSON object.
-    plan = None
+    return jsonify(langs=out)
+
+
+@app.get("/api/write")
+def write_tree():
+    """
+    Returns a nested structure:
+    langs -> lang_words -> versions -> child_words
+    With counts at each level for display in write.html
+    """
+    db = get_db()
+
+    langs_rows = db.execute(
+        """
+        SELECT id, name, lang_word_ids, created_at, updated_at
+        FROM langs
+        ORDER BY name ASC, id ASC
+        """
+    ).fetchall()
+
+    langs_out = []
+
+    for lr in langs_rows:
+        # parse lang_word_ids
+        try:
+            ids = json.loads(lr["lang_word_ids"])
+            if not isinstance(ids, list):
+                ids = []
+            ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+        except Exception:
+            ids = []
+
+        # keep order as stored in lang_word_ids
+        words_out = []
+        total_child_words = 0
+
+        for wid in ids:
+            wrow = db.execute("SELECT id, word FROM lang_words WHERE id = ?", (wid,)).fetchone()
+            if wrow is None:
+                continue
+
+            vrows = db.execute(
+                """
+                SELECT id AS version_id, version
+                FROM lang_word_versions
+                WHERE lang_word_id = ?
+                ORDER BY version DESC
+                """,
+                (wid,)
+            ).fetchall()
+
+            versions_out = []
+            child_count_for_word = 0
+
+            for vr in vrows:
+                crows = db.execute(
+                    """
+                    SELECT id, word, link, created_at, updated_at
+                    FROM child_words
+                    WHERE lang_word_version_id = ?
+                    ORDER BY created_at ASC, id ASC
+                    """,
+                    (vr["version_id"],)
+                ).fetchall()
+
+                children = [{
+                    "id": int(cr["id"]),
+                    "word": cr["word"],
+                    "link": cr["link"] or "",
+                    "created_at": cr["created_at"],
+                    "updated_at": cr["updated_at"],
+                } for cr in crows]
+
+                child_count_for_word += len(children)
+
+                versions_out.append({
+                    "version_id": int(vr["version_id"]),
+                    "version": int(vr["version"]),
+                    "child_words": children,
+                    "child_word_count": len(children),
+                })
+
+            total_child_words += child_count_for_word
+
+            words_out.append({
+                "lang_word_id": int(wrow["id"]),
+                "word": wrow["word"],
+                "version_count": len(versions_out),
+                "child_word_count": child_count_for_word,
+                "versions": versions_out,
+            })
+
+        langs_out.append({
+            "id": int(lr["id"]),
+            "name": lr["name"],
+            "lang_word_count": len(words_out),
+            "child_word_count": total_child_words,
+            "lang_words": words_out,
+            "created_at": lr["created_at"],
+            "updated_at": lr["updated_at"],
+        })
+
+    return jsonify(langs=langs_out)
+
+
+@app.post("/api/langs")
+def create_lang():
+    require_admin_key()
+    db = get_db()
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    ids = _parse_ids(data.get("lang_word_ids"))  # optional; can be []
+
+    if not name:
+        abort(400, description="Missing 'name'.")
+    if len(name) > 200:
+        abort(400, description="Name too long (max 200 chars).")
+
+    # Validate word ids exist
+    if ids:
+        qmarks = ",".join("?" for _ in ids)
+        found = db.execute(f"SELECT id FROM lang_words WHERE id IN ({qmarks})", ids).fetchall()
+        found_ids = {int(r["id"]) for r in found}
+        missing = [i for i in ids if i not in found_ids]
+        if missing:
+            abort(400, description=f"Unknown lang_word_id(s): {', '.join(map(str, missing))}")
+
     try:
-        plan = json.loads(text_out)
+        cur = db.execute(
+            "INSERT INTO langs (name, lang_word_ids) VALUES (?, ?)",
+            (name, json.dumps(ids)),
+        )
+        db.commit()
+    except sqlite3.IntegrityError:
+        abort(409, description="Lang name already exists.")
+
+    return jsonify(ok=True, id=cur.lastrowid, name=name, lang_word_ids=ids), 201
+
+
+@app.get("/api/langs/<int:lang_id>")
+def get_lang(lang_id: int):
+    db = get_db()
+    r = _lang_row_or_404(db, lang_id)
+
+    try:
+        ids = json.loads(r["lang_word_ids"])
+        if not isinstance(ids, list):
+            ids = []
+        ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
     except Exception:
-        # naive extraction
-        start = text_out.find("{")
-        end = text_out.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            plan = json.loads(text_out[start:end+1])
+        ids = []
 
-    if not isinstance(plan, dict) or "themes" not in plan:
-        raise RuntimeError("LLM output did not match expected JSON schema.")
-    if not isinstance(plan.get("themes"), list):
-        raise RuntimeError("LLM output 'themes' must be a list.")
+    words = _resolve_latest_words_for_ids(db, ids)
 
-    return plan
+    return jsonify({
+        "id": int(r["id"]),
+        "name": r["name"],
+        "lang_word_ids": ids,
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+        "words": words,  # [{lang_word_id, word, version_id, version}]
+    })
 
 
-# ---------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------
+@app.put("/api/langs/<int:lang_id>")
+def update_lang(lang_id: int):
+    require_admin_key()
+    db = get_db()
+    _lang_row_or_404(db, lang_id)
+
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", None)
+    ids_val = data.get("lang_word_ids", None)
+
+    updates = []
+    params = []
+
+    if name is not None:
+        name = str(name).strip()
+        if not name:
+            abort(400, description="Missing 'name'.")
+        if len(name) > 200:
+            abort(400, description="Name too long (max 200 chars).")
+        updates.append("name = ?")
+        params.append(name)
+
+    if ids_val is not None:
+        ids = _parse_ids(ids_val)
+
+        if ids:
+            qmarks = ",".join("?" for _ in ids)
+            found = db.execute(f"SELECT id FROM lang_words WHERE id IN ({qmarks})", ids).fetchall()
+            found_ids = {int(rr["id"]) for rr in found}
+            missing = [i for i in ids if i not in found_ids]
+            if missing:
+                abort(400, description=f"Unknown lang_word_id(s): {', '.join(map(str, missing))}")
+
+        updates.append("lang_word_ids = ?")
+        params.append(json.dumps(ids))
+
+    if not updates:
+        abort(400, description="Nothing to update.")
+
+    updates.append("updated_at = datetime('now')")
+    sql = f"UPDATE langs SET {', '.join(updates)} WHERE id = ?"
+    params.append(lang_id)
+
+    try:
+        db.execute(sql, params)
+        db.commit()
+    except sqlite3.IntegrityError:
+        abort(409, description="Lang name already exists.")
+
+    r2 = _lang_row_or_404(db, lang_id)
+    try:
+        out_ids = json.loads(r2["lang_word_ids"])
+        if not isinstance(out_ids, list):
+            out_ids = []
+        out_ids = [int(x) for x in out_ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+    except Exception:
+        out_ids = []
+
+    return jsonify(ok=True, id=int(r2["id"]), name=r2["name"], lang_word_ids=out_ids)
+
+
+# =========================
+# Words + Versions (existing)
+# =========================
+
+@app.get("/api/lang_words")
+def list_lang_words():
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT w.id AS lang_word_id, w.word,
+               v.id AS version_id, v.version
+        FROM lang_words w
+        JOIN lang_word_versions v
+          ON v.lang_word_id = w.id
+        WHERE v.version = (
+          SELECT MAX(v2.version) FROM lang_word_versions v2 WHERE v2.lang_word_id = w.id
+        )
+        ORDER BY w.word ASC
+        """
+    ).fetchall()
+
+    return jsonify(words=[
+        {"lang_word_id": r["lang_word_id"], "word": r["word"], "version_id": r["version_id"], "version": r["version"]}
+        for r in rows
+    ])
+
+
+@app.post("/api/lang_words")
+def create_lang_word():
+    require_admin_key()
+    db = get_db()
+
+    data = request.get_json(silent=True) or {}
+    word = (data.get("word") or "").strip()
+    if not word:
+        abort(400, description="Missing 'word'.")
+    if len(word) > 200:
+        abort(400, description="Word too long (max 200 chars).")
+
+    try:
+        cur = db.execute("INSERT INTO lang_words (word) VALUES (?)", (word,))
+        lang_word_id = cur.lastrowid
+        cur2 = db.execute(
+            "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, ?)",
+            (lang_word_id, 1)
+        )
+        version_id = cur2.lastrowid
+        db.commit()
+    except sqlite3.IntegrityError:
+        abort(409, description="Word already exists.")
+
+    return jsonify(ok=True, lang_word_id=lang_word_id, version_id=version_id, word=word), 201
+
+
+@app.post("/api/lang_words/<int:lang_word_id>/versions")
+def create_version(lang_word_id: int):
+    require_admin_key()
+    db = get_db()
+
+    exists = db.execute("SELECT 1 FROM lang_words WHERE id = ?", (lang_word_id,)).fetchone()
+    if exists is None:
+        abort(404, description="Lang word not found.")
+
+    row = db.execute(
+        "SELECT COALESCE(MAX(version), 0) AS mv FROM lang_word_versions WHERE lang_word_id = ?",
+        (lang_word_id,)
+    ).fetchone()
+    next_ver = int(row["mv"]) + 1
+
+    cur = db.execute(
+        "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, ?)",
+        (lang_word_id, next_ver)
+    )
+    db.commit()
+    return jsonify(ok=True, version_id=cur.lastrowid, lang_word_id=lang_word_id, version=next_ver), 201
+
+
+@app.get("/api/lang_words/<int:version_id>")
+def get_lang_word_by_version(version_id: int):
+    db = get_db()
+
+    v = db.execute(
+        """
+        SELECT v.id AS version_id, v.version, v.lang_word_id, w.word
+        FROM lang_word_versions v
+        JOIN lang_words w ON w.id = v.lang_word_id
+        WHERE v.id = ?
+        """,
+        (version_id,)
+    ).fetchone()
+    if v is None:
+        abort(404, description="Lang word version not found.")
+
+    versions = db.execute(
+        """
+        SELECT id AS version_id, version
+        FROM lang_word_versions
+        WHERE lang_word_id = ?
+        ORDER BY version ASC
+        """,
+        (v["lang_word_id"],)
+    ).fetchall()
+
+    out_versions = []
+    for vr in versions:
+        kids = db.execute(
+            "SELECT id, word, link FROM child_words WHERE lang_word_version_id = ? ORDER BY id ASC",
+            (vr["version_id"],)
+        ).fetchall()
+
+        out_versions.append({
+            "version_id": vr["version_id"],
+            "version": vr["version"],
+            "child_words": [{"id": k["id"], "word": k["word"], "link": k["link"]} for k in kids]
+        })
+
+    return jsonify({
+        "lang_word_id": v["lang_word_id"],
+        "word": v["word"],
+        "current_version_id": v["version_id"],
+        "current_version": v["version"],
+        "versions": out_versions
+    })
+
+@app.delete("/api/lang_words/<int:lang_word_id>")
+def delete_lang_word(lang_word_id: int):
+    require_admin_key()
+    db = get_db()
+
+    row = db.execute("SELECT id, word FROM lang_words WHERE id = ?", (lang_word_id,)).fetchone()
+    if row is None:
+        abort(404, description="Lang word not found.")
+
+    # ON DELETE CASCADE removes lang_word_versions and child_words
+    db.execute("DELETE FROM lang_words WHERE id = ?", (lang_word_id,))
+    db.commit()
+    return jsonify(ok=True, lang_word_id=lang_word_id, word=row["word"])
+
+
+@app.delete("/api/lang_word_versions/<int:version_id>")
+def delete_lang_word_version(version_id: int):
+    require_admin_key()
+    db = get_db()
+
+    v = db.execute(
+        "SELECT id, lang_word_id, version FROM lang_word_versions WHERE id = ?",
+        (version_id,),
+    ).fetchone()
+    if v is None:
+        abort(404, description="Version not found.")
+
+    cnt = db.execute(
+        "SELECT COUNT(*) AS c FROM lang_word_versions WHERE lang_word_id = ?",
+        (v["lang_word_id"],),
+    ).fetchone()
+
+    # Prevent orphaning the parent word with zero versions
+    if int(cnt["c"]) <= 1:
+        abort(400, description="Cannot delete the only version. Delete the lang word instead.")
+
+    # ON DELETE CASCADE removes child_words for this version
+    db.execute("DELETE FROM lang_word_versions WHERE id = ?", (version_id,))
+    db.commit()
+    return jsonify(ok=True, version_id=version_id, lang_word_id=v["lang_word_id"], version=v["version"])
+
+
+
+@app.post("/api/lang_word_versions/<int:version_id>/child_words")
+def create_child_word(version_id: int):
+    require_admin_key()
+    db = get_db()
+
+    parent = db.execute("SELECT 1 FROM lang_word_versions WHERE id = ?", (version_id,)).fetchone()
+    if parent is None:
+        abort(404, description="Version not found.")
+
+    data = request.get_json(silent=True) or {}
+    word = (data.get("word") or "").strip()
+    link = (data.get("link") or "").strip() or None
+
+    if not word:
+        abort(400, description="Missing 'word'.")
+    if len(word) > 200:
+        abort(400, description="Word too long (max 200 chars).")
+    if link and len(link) > 2000:
+        abort(400, description="Link too long (max 2000 chars).")
+
+    cur = db.execute(
+        "INSERT INTO child_words (lang_word_version_id, word, link) VALUES (?, ?, ?)",
+        (version_id, word, link)
+    )
+    db.commit()
+    return jsonify(ok=True, id=cur.lastrowid, word=word, link=link), 201
+
+
+@app.put("/api/child_words/<int:child_id>")
+def update_child_word(child_id: int):
+    require_admin_key()
+    db = get_db()
+
+    data = request.get_json(silent=True) or {}
+    word = (data.get("word") or "").strip()
+    link = (data.get("link") or "").strip()
+    link = link if link else None
+
+    if not word:
+        abort(400, description="Missing 'word'.")
+    if len(word) > 200:
+        abort(400, description="Word too long (max 200 chars).")
+    if link and len(link) > 2000:
+        abort(400, description="Link too long (max 2000 chars).")
+
+    cur = db.execute(
+        "UPDATE child_words SET word = ?, link = ?, updated_at = datetime('now') WHERE id = ?",
+        (word, link, child_id)
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        abort(404, description="Child word not found.")
+
+    return jsonify(ok=True, id=child_id, word=word, link=link)
+
+
+@app.delete("/api/child_words/<int:child_id>")
+def delete_child_word(child_id: int):
+    require_admin_key()
+    db = get_db()
+
+    cur = db.execute("DELETE FROM child_words WHERE id = ?", (child_id,))
+    db.commit()
+    if cur.rowcount == 0:
+        abort(404, description="Child word not found.")
+
+    return jsonify(ok=True, id=child_id)
+
+
+@app.get("/api/admin/ping")
+def admin_ping():
+    require_admin_key()
+    return jsonify(ok=True)
+
+
+@app.put("/api/child_words/<int:child_id>/move")
+def move_child_word(child_id: int):
+    require_admin_key()
+    db = get_db()
+
+    data = request.get_json(silent=True) or {}
+    target_version_id = data.get("lang_word_version_id")
+    if not isinstance(target_version_id, int):
+        abort(400, description="Missing/invalid 'lang_word_version_id'.")
+
+    parent = db.execute("SELECT 1 FROM lang_word_versions WHERE id = ?", (target_version_id,)).fetchone()
+    if parent is None:
+        abort(404, description="Target version not found.")
+
+    cur = db.execute(
+        "UPDATE child_words SET lang_word_version_id = ?, updated_at = datetime('now') WHERE id = ?",
+        (target_version_id, child_id)
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        abort(404, description="Child word not found.")
+
+    return jsonify(ok=True, id=child_id, lang_word_version_id=target_version_id)
+
+
+# =========================
+# Sentences (new)
+# =========================
+
+def _parse_ids(value):
+    """
+    Accept JSON array string, comma-separated string, list of ints, etc.
+    Return a de-duplicated list[int] preserving order.
+    """
+    ids = []
+    if value is None:
+        return ids
+
+    if isinstance(value, list):
+        raw = value
+    elif isinstance(value, str):
+        s = value.strip()
+        if not s:
+            raw = []
+        else:
+            # try JSON first
+            if s.startswith("["):
+                try:
+                    raw = json.loads(s)
+                except Exception:
+                    raw = []
+            else:
+                raw = [x.strip() for x in s.split(",")]
+    else:
+        raw = []
+
+    seen = set()
+    for x in raw:
+        try:
+            n = int(x)
+        except Exception:
+            continue
+        if n > 0 and n not in seen:
+            seen.add(n)
+            ids.append(n)
+    return ids
+
+@app.get("/api/lang_sentences")
+def list_lang_sentences():
+    db = get_db()
+
+    # Optional filter: ?lang_word_ids=1,2,3  (means: sentences containing ALL selected ids)
+    filter_ids = _parse_ids(request.args.get("lang_word_ids"))
+
+    rows = db.execute(
+        """
+        SELECT id, lang_word_ids, sentence, created_at, updated_at
+        FROM lang_sentences
+        ORDER BY updated_at DESC, id DESC
+        """
+    ).fetchall()
+
+    out = []
+    for r in rows:
+        try:
+            ids = json.loads(r["lang_word_ids"])
+            if not isinstance(ids, list):
+                ids = []
+            ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+        except Exception:
+            ids = []
+
+        if filter_ids:
+            s = set(ids)
+            if any(fid not in s for fid in filter_ids):
+                continue
+
+        out.append({
+            "id": r["id"],
+            "lang_word_ids": ids,
+            "sentence": r["sentence"],
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"]
+        })
+
+    return jsonify(sentences=out)
+
+
+@app.post("/api/lang_sentences")
+def create_lang_sentence():
+    require_admin_key()
+    db = get_db()
+
+    data = request.get_json(silent=True) or {}
+    sentence = (data.get("sentence") or "").strip()
+    ids = _parse_ids(data.get("lang_word_ids"))
+
+    if not sentence:
+        abort(400, description="Missing 'sentence'.")
+    if len(sentence) > 4000:
+        abort(400, description="Sentence too long (max 4000 chars).")
+    if not ids:
+        abort(400, description="Select at least one lang_word_id.")
+
+    # Ensure referenced words exist
+    qmarks = ",".join("?" for _ in ids)
+    found = db.execute(f"SELECT id FROM lang_words WHERE id IN ({qmarks})", ids).fetchall()
+    found_ids = {int(r["id"]) for r in found}
+    missing = [i for i in ids if i not in found_ids]
+    if missing:
+        abort(400, description=f"Unknown lang_word_id(s): {', '.join(map(str, missing))}")
+
+    cur = db.execute(
+        "INSERT INTO lang_sentences (lang_word_ids, sentence) VALUES (?, ?)",
+        (json.dumps(ids), sentence)
+    )
+    db.commit()
+    return jsonify(ok=True, id=cur.lastrowid, lang_word_ids=ids, sentence=sentence), 201
+
+
+@app.get("/api/lang_sentences/<int:sentence_id>")
+def get_lang_sentence(sentence_id: int):
+    db = get_db()
+
+    r = db.execute(
+        """
+        SELECT id, lang_word_ids, sentence, created_at, updated_at
+        FROM lang_sentences
+        WHERE id = ?
+        """,
+        (sentence_id,)
+    ).fetchone()
+    if r is None:
+        abort(404, description="Sentence not found.")
+
+    try:
+        ids = json.loads(r["lang_word_ids"])
+        if not isinstance(ids, list):
+            ids = []
+        ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+    except Exception:
+        ids = []
+
+    # For each lang_word_id: resolve latest version and its child words (with link)
+    words_out = []
+    for wid in ids:
+        wrow = db.execute("SELECT id, word FROM lang_words WHERE id = ?", (wid,)).fetchone()
+        if wrow is None:
+            continue
+
+        vrow = db.execute(
+            """
+            SELECT id AS version_id, version
+            FROM lang_word_versions
+            WHERE lang_word_id = ?
+            ORDER BY version DESC
+            LIMIT 1
+            """,
+            (wid,)
+        ).fetchone()
+        if vrow is None:
+            continue
+
+        kids = db.execute(
+            "SELECT id, word, link FROM child_words WHERE lang_word_version_id = ? ORDER BY id ASC",
+            (vrow["version_id"],)
+        ).fetchall()
+
+        words_out.append({
+            "lang_word_id": int(wrow["id"]),
+            "word": wrow["word"],
+            "version_id": int(vrow["version_id"]),
+            "version": int(vrow["version"]),
+            "child_words": [{"id": k["id"], "word": k["word"], "link": k["link"]} for k in kids]
+        })
+
+    return jsonify({
+        "id": r["id"],
+        "lang_word_ids": ids,
+        "sentence": r["sentence"],
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+        "words": words_out
+    })
+
+@app.get("/api/lang_sentences/<int:sentence_id>/child_sentences")
+def list_child_sentences(sentence_id: int):
+    db = get_db()
+
+    # ensure parent sentence exists
+    parent = db.execute("SELECT 1 FROM lang_sentences WHERE id = ?", (sentence_id,)).fetchone()
+    if parent is None:
+        abort(404, description="Sentence not found.")
+
+    filter_ids = _parse_ids(request.args.get("child_word_ids"))
+
+    rows = db.execute(
+        """
+        SELECT id, child_word_ids, sentence, created_at, updated_at
+        FROM child_sentences
+        WHERE lang_sentence_id = ?
+        ORDER BY updated_at DESC, id DESC
+        """,
+        (sentence_id,)
+    ).fetchall()
+
+    out = []
+    for r in rows:
+        try:
+            ids = json.loads(r["child_word_ids"])
+            if not isinstance(ids, list):
+                ids = []
+            ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+        except Exception:
+            ids = []
+
+        if filter_ids:
+            s = set(ids)
+            if any(fid not in s for fid in filter_ids):
+                continue
+
+        out.append({
+            "id": r["id"],
+            "child_word_ids": ids,
+            "sentence": r["sentence"],
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"]
+        })
+
+    return jsonify(child_sentences=out)
+
+
+@app.post("/api/lang_sentences/<int:sentence_id>/child_sentences")
+def create_child_sentence(sentence_id: int):
+    require_admin_key()
+    db = get_db()
+
+    parent = db.execute("SELECT 1 FROM lang_sentences WHERE id = ?", (sentence_id,)).fetchone()
+    if parent is None:
+        abort(404, description="Sentence not found.")
+
+    data = request.get_json(silent=True) or {}
+    sentence = (data.get("sentence") or "").strip()
+    ids = _parse_ids(data.get("child_word_ids"))
+
+    if not sentence:
+        abort(400, description="Missing 'sentence'.")
+    if len(sentence) > 4000:
+        abort(400, description="Sentence too long (max 4000 chars).")
+    if not ids:
+        abort(400, description="Select at least one child_word_id.")
+
+    # ensure child_word ids exist
+    qmarks = ",".join("?" for _ in ids)
+    found = db.execute(f"SELECT id FROM child_words WHERE id IN ({qmarks})", ids).fetchall()
+    found_ids = {int(r["id"]) for r in found}
+    missing = [i for i in ids if i not in found_ids]
+    if missing:
+        abort(400, description=f"Unknown child_word_id(s): {', '.join(map(str, missing))}")
+
+    cur = db.execute(
+        "INSERT INTO child_sentences (lang_sentence_id, child_word_ids, sentence) VALUES (?, ?, ?)",
+        (sentence_id, json.dumps(ids), sentence)
+    )
+    db.commit()
+
+    return jsonify(ok=True, id=cur.lastrowid, child_word_ids=ids, sentence=sentence), 201
+
+
+@app.get("/api/child_sentences/<int:child_sentence_id>")
+def get_child_sentence(child_sentence_id: int):
+    db = get_db()
+
+    r = db.execute(
+        """
+        SELECT id, lang_sentence_id, child_word_ids, sentence, created_at, updated_at
+        FROM child_sentences
+        WHERE id = ?
+        """,
+        (child_sentence_id,)
+    ).fetchone()
+    if r is None:
+        abort(404, description="Child sentence not found.")
+
+    # parse child_word_ids
+    try:
+        ids = json.loads(r["child_word_ids"])
+        if not isinstance(ids, list):
+            ids = []
+        ids = [int(x) for x in ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+    except Exception:
+        ids = []
+
+    # load child word rows (with link) + their parent word/version info (optional but useful)
+    child_words_out = []
+    for cid in ids:
+        crow = db.execute(
+            """
+            SELECT cw.id AS child_word_id, cw.word AS child_word, cw.link,
+                   v.id AS version_id, v.version,
+                   w.id AS lang_word_id, w.word AS lang_word
+            FROM child_words cw
+            JOIN lang_word_versions v ON v.id = cw.lang_word_version_id
+            JOIN lang_words w ON w.id = v.lang_word_id
+            WHERE cw.id = ?
+            """,
+            (cid,)
+        ).fetchone()
+
+        if crow is None:
+            continue
+
+        child_words_out.append({
+            "child_word_id": int(crow["child_word_id"]),
+            "word": crow["child_word"],
+            "link": crow["link"],
+            "lang_word_id": int(crow["lang_word_id"]),
+            "lang_word": crow["lang_word"],
+            "version_id": int(crow["version_id"]),
+            "version": int(crow["version"]),
+        })
+
+    return jsonify({
+        "id": int(r["id"]),
+        "lang_sentence_id": int(r["lang_sentence_id"]),
+        "child_word_ids": ids,
+        "sentence": r["sentence"],
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+        "child_words": child_words_out
+    })
+
+
+@app.post("/api/write/create_lang_words")
+def enqueue_create_lang_words():
+    require_admin_key()
+    db = get_db()
+
+    data = request.get_json(silent=True) or {}
+    lang_id = data.get("lang_id", None)
+    modifier = (data.get("modifier") or "").strip()
+
+    if lang_id is None:
+        abort(400, description="Missing lang_id.")
+    try:
+        lang_id = int(lang_id)
+    except Exception:
+        abort(400, description="Invalid lang_id.")
+
+    # Ensure lang exists
+    lr = db.execute("SELECT id FROM langs WHERE id=?", (lang_id,)).fetchone()
+    if lr is None:
+        abort(404, description="Lang not found.")
+
+    # Check for existing queued/running task for this lang
+    existing = db.execute(
+        """
+        SELECT id, status
+        FROM llm_tasks
+        WHERE lang_id=? AND task_type=? AND status IN ('queued','running')
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (lang_id, "create_lang_words"),
+    ).fetchone()
+
+    if existing is not None:
+        return jsonify(ok=True, task_id=int(existing["id"]), status=existing["status"], deduped=True), 202
+
+    identifier = {"lang_id": lang_id}
+    payload = {"modifier": modifier}
+
+    cur = db.execute(
+        """
+        INSERT INTO llm_tasks (lang_id, task_type, identifier, payload, status, updated_at)
+        VALUES (?, ?, ?, ?, 'queued', datetime('now'))
+        """,
+        (lang_id, "create_lang_words", json.dumps(identifier), json.dumps(payload)),
+    )
+    db.commit()
+
+    return jsonify(ok=True, task_id=cur.lastrowid), 202
+
+
+@app.get("/api/write/tasks/<int:task_id>")
+def get_task(task_id: int):
+    require_admin_key()
+    db = get_db()
+    r = db.execute(
+        """
+        SELECT id, lang_id, task_type, identifier, payload, status, error, result_writing_id, created_at, updated_at
+        FROM llm_tasks
+        WHERE id=?
+        """,
+        (task_id,),
+    ).fetchone()
+    if r is None:
+        abort(404, description="Task not found.")
+
+    return jsonify({
+        "id": int(r["id"]),
+        "lang_id": int(r["lang_id"]) if r["lang_id"] is not None else None,
+        "task_type": r["task_type"],
+        "identifier": json.loads(r["identifier"]),
+        "payload": json.loads(r["payload"]),
+        "status": r["status"],
+        "error": r["error"] or "",
+        "result_writing_id": r["result_writing_id"],
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+    })
+
+
+@app.get("/api/temporary_writings")
+def list_temporary_writings():
+    require_admin_key()
+    db = get_db()
+
+    lang_id = request.args.get("lang_id", "").strip()
+    if not lang_id:
+        abort(400, description="Missing lang_id.")
+    try:
+        lang_id_int = int(lang_id)
+    except Exception:
+        abort(400, description="Invalid lang_id.")
+
+    ident = json.dumps({"lang_id": lang_id_int})
+
+    rows = db.execute(
+        """
+        SELECT id, lang_id, identifier, prompt_type, text, model, modifier, task_id, created_at, updated_at
+        FROM temporary_writings
+        WHERE lang_id = ? AND prompt_type = 'create_lang_words'
+        ORDER BY id DESC
+        LIMIT 50
+        """,
+        (lang_id_int,),
+    ).fetchall()
+
+    out = []
+    for r in rows:
+        try:
+            text_json = json.loads(r["text"])
+        except Exception:
+            text_json = r["text"]
+        out.append({
+            "id": int(r["id"]),
+            "lang_id": int(r["lang_id"]) if r["lang_id"] is not None else None,
+            "identifier": json.loads(r["identifier"]),
+            "prompt_type": r["prompt_type"],
+            "text": text_json,
+            "model": r["model"] or "",
+            "modifier": r["modifier"] or "",
+            "task_id": r["task_id"],
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"],
+        })
+
+    return jsonify(writings=out)
+
+
+@app.post("/api/temporary_writings/<int:writing_id>/apply_create_lang_words")
+def apply_temporary_writing_create_lang_words(writing_id: int):
+    require_admin_key()
+    db = get_db()
+
+    # Load temporary writing
+    tw = db.execute(
+        """
+        SELECT id, lang_id, prompt_type, text
+        FROM temporary_writings
+        WHERE id = ?
+        """,
+        (writing_id,),
+    ).fetchone()
+    if tw is None:
+        abort(404, description="Temporary writing not found.")
+
+    if tw["prompt_type"] != "create_lang_words":
+        abort(400, description="Unsupported prompt_type for apply.")
+
+    lang_id = int(tw["lang_id"])
+
+    # Ensure lang exists and load current ids
+    lr = db.execute("SELECT id, name, lang_word_ids FROM langs WHERE id = ?", (lang_id,)).fetchone()
+    if lr is None:
+        abort(404, description="Lang not found.")
+
+    try:
+        plan = json.loads(tw["text"])
+    except Exception:
+        abort(400, description="Temporary writing text is not valid JSON.")
+
+    themes = plan.get("themes") if isinstance(plan, dict) else None
+    if not isinstance(themes, list) or not themes:
+        abort(400, description="No themes found in temporary writing.")
+
+    # Parse existing lang_word_ids
+    try:
+        current_ids = json.loads(lr["lang_word_ids"])
+        if not isinstance(current_ids, list):
+            current_ids = []
+        current_ids = [int(x) for x in current_ids if isinstance(x, int) or (isinstance(x, str) and str(x).isdigit())]
+    except Exception:
+        current_ids = []
+
+    created_ids = []
+
+    try:
+        # Create lang_words for each theme
+        for t in themes:
+            if not isinstance(t, dict):
+                continue
+            theme_name = (t.get("name") or "").strip()
+            orbit = t.get("orbiting_phrases") or []
+            if not isinstance(orbit, list):
+                orbit = []
+
+            new_id = _create_lang_word_with_children(db, theme_name, orbit)
+            created_ids.append(new_id)
+
+        # Add created ids to lang (append, dedupe)
+        merged = current_ids[:]
+        s = set(merged)
+        for nid in created_ids:
+            if nid not in s:
+                merged.append(nid)
+                s.add(nid)
+
+        db.execute(
+            "UPDATE langs SET lang_word_ids = ?, updated_at = datetime('now') WHERE id = ?",
+            (json.dumps(merged), lang_id),
+        )
+
+        # Delete the temporary writing after successful creation
+        db.execute("DELETE FROM temporary_writings WHERE id = ?", (writing_id,))
+
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        abort(500, description=f"Failed to apply writing: {e}")
+
+    return jsonify(ok=True, lang_id=lang_id, created_lang_word_ids=created_ids)
+
+
+_start_background_services()
 
 if __name__ == "__main__":
-    ensure_db_dir()
-    # Ensure schema on startup
-    conn = sqlite3.connect(LANG_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
-    conn.execute("PRAGMA journal_mode = WAL;")
-    ensure_schema(conn)
-    conn.close()
-
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5000")), debug=True)
+    # Dev server
+    app.run(host="0.0.0.0", port=5000, debug=True)
