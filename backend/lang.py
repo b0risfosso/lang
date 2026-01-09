@@ -25,6 +25,8 @@ import time
 import traceback
 from typing import Any, Optional
 
+from functools import wraps
+
 from flask import Flask, abort, g, jsonify, request
 
 # Optional: OpenAI for the built-in LLM worker.
@@ -200,6 +202,16 @@ def require_admin_key() -> None:
     got = request.headers.get("X-Admin-Key", "")
     if not got or got != expected:
         abort(401, description="Missing/invalid admin key.")
+
+def require_admin(fn):
+    """Decorator for admin-only endpoints using X-Admin-Key header."""
+    @wraps(fn)
+    def _wrapped(*args, **kwargs):
+        require_admin_key()
+        return fn(*args, **kwargs)
+    return _wrapped
+
+
 
 
 def _json_loads_safe(s: Any, default: Any) -> Any:
