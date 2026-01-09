@@ -655,9 +655,9 @@
         const wordIds = [];
         const wordsMap = new Map();
         for (const w of wordsArr) {
-          if (!w || typeof w.id !== "number") continue;
-          wordIds.push(w.id);
-          wordsMap.set(w.id, w.word || `word ${w.id}`);
+          if (!w || typeof w.lang_word_id !== "number") continue;
+          wordIds.push(w.lang_word_id);
+          wordsMap.set(w.lang_word_id, w.word || `word ${w.lang_word_id}`);
         }
         sentenceLangIndex.set(L.id, {
           id: L.id,
