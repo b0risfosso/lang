@@ -55,6 +55,113 @@ LLM_MODEL_CREATE_LANG_WORDS = os.environ.get("LLM_MODEL_CREATE_LANG_WORDS", "gpt
 
 app = Flask(__name__)
 
+# -------------------------------------
+# Star Stuff prompts (PHRASE is the child word; CONTEXT is lang_name + " / " + lang_word)
+# -------------------------------------
+STAR_STUFF_PROMPTS = {
+    "create_star_stuff_words": """Role:
+You are an expert technical writer and domain specialist.
+Task:
+Build a clear, accurate, and well-structured description of the following Phrase, using the provided Context to frame its domain, purpose, and relevance. If a Modifier is provided, use it to guide emphasis, scope, or perspective.
+Inputs
+Phrase:
+{PHRASE}
+Context:
+{CONTEXT}
+Modifier (optional):
+{MODIFIER}
+Instructions
+Define and situate the phrase
+Clearly explain what the phrase refers to
+Place it within the scientific, technical, organizational, or conceptual domain implied by the context
+Explain structure, function, or mechanism
+Describe how the system/entity/idea works
+Highlight key components, processes, or relationships
+Use domain-appropriate terminology with clarity
+Describe role and significance
+Explain why it matters within the given context
+Connect it to broader workflows, lifecycles, or ecosystems where applicable
+Apply the modifier (if provided)
+Adjust tone, depth, and emphasis according to the modifier
+Examples: technical, conceptual, user-focused, regulatory, educational, comparative, computational
+Maintain clarity and structure
+Use short sections with informative headings
+Avoid unnecessary jargon unless the modifier specifies an expert audience
+Output Requirements
+Length: ~200–400 words
+Style: Clear, professional, and explanatory
+Structure:
+Title or opening definition
+2–4 short thematic sections
+Do not ask follow-up questions
+Do not reference this prompt or the input format
+""",
+    "create_star_stuff_images": """Role
+You are an expert research assistant skilled in visual curation for education, analysis, and conceptual communication.
+Inputs
+Phase:
+{PHRASE}
+Context:
+{CONTEXT}
+Optional Modifier (if provided):
+{MODIFIER}
+Task
+Collect and curate representative images that visually explain and contextualize the Phase, interpreted within the provided Context and guided by the Optional Modifier.
+Output Format
+Use the following structure:
+## [Conceptual Group Name]
+
+Image 1:
+- Title:
+- Description:
+- Relevance:
+- Source:
+""",
+    "create_star_stuff_data": """You are an expert analyst and technical explainer.
+
+TASK:
+Describe the DATA associated with the following phase, focusing on:
+- What data exist
+- How the data are generated or measured
+- How the data are structured and used
+- Where the data come from (data sources)
+- What assumptions or limitations apply
+
+PHASE:
+"{PHRASE}"
+
+CONTEXT:
+{CONTEXT}
+
+OPTIONAL MODIFIER:
+{MODIFIER}
+""",
+    "create_star_stuff_synthetic_data": """SYSTEM / ROLE
+You are an expert synthetic data architect and domain modeler.
+You generate fictional but internally consistent datasets suitable for analysis, simulation, ML, and education.
+
+TASK INSTRUCTION
+Build a synthetic dataset describing the following:
+Phase: {PHRASE}
+Context: {CONTEXT}
+Modifier (if provided): {MODIFIER}
+""",
+    "create_star_stuff_code": """You are a senior software engineer and technical educator.
+
+PHRASE:
+{PHRASE}
+
+CONTEXT:
+{CONTEXT}
+
+OPTIONAL MODIFIER:
+{MODIFIER}
+
+DELIVERABLE:
+Output ONLY the code in a single fenced code block with the language specified.
+""",
+}
+
 _worker_started = False
 _worker_lock = threading.Lock()
 
@@ -350,7 +457,31 @@ def ensure_schema(db: sqlite3.Connection) -> None:
         """
     )
 
-    db.commit()
+    
+    # -------------------------------------
+    # star_stuff: LLM outputs for a child_word
+    # -------------------------------------
+    db.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS star_stuff (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          child_word_id INTEGER NOT NULL,
+          prompt_type TEXT NOT NULL,
+          text TEXT NOT NULL,
+          model TEXT,
+          modifier TEXT,
+          task_id INTEGER,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (child_word_id) REFERENCES child_words(id) ON DELETE CASCADE
+        );
+        '''
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_child_word_id ON star_stuff(child_word_id);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_prompt_type ON star_stuff(prompt_type);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_created_at ON star_stuff(created_at);")
+
+db.commit()
 
 
 @app.before_request
@@ -371,6 +502,141 @@ def admin_ping():
     """
     require_admin_key()
     return jsonify(ok=True)
+
+
+def _resolve_star_context(db: sqlite3.Connection, child_word_id: int) -> dict:
+    row = db.execute(
+        """
+        SELECT
+          cw.id AS child_word_id,
+          cw.word AS child_word,
+          cw.link AS child_link,
+          v.id AS version_id,
+          v.version AS version,
+          lw.id AS lang_word_id,
+          lw.word AS lang_word
+        FROM child_words cw
+        JOIN lang_word_versions v ON v.id = cw.lang_word_version_id
+        JOIN lang_words lw ON lw.id = v.lang_word_id
+        WHERE cw.id = ?
+        """,
+        (child_word_id,),
+    ).fetchone()
+    if row is None:
+        raise NotFound(f"child_word_id {child_word_id} not found")
+
+    parent = db.execute(
+        """
+        SELECT plw.id AS parent_lang_word_id, plw.word AS parent_lang_word
+        FROM lang_word_children lwc
+        JOIN lang_word_versions pv ON pv.id = lwc.parent_lang_word_version_id
+        JOIN lang_words plw ON plw.id = pv.lang_word_id
+        WHERE lwc.child_lang_word_id = ?
+        ORDER BY pv.created_at DESC
+        LIMIT 1
+        """,
+        (int(row["lang_word_id"]),),
+    ).fetchone()
+
+    return {
+        "child_word": {"id": int(row["child_word_id"]), "word": row["child_word"], "link": row["child_link"]},
+        "lang_word": {
+            "id": int(row["lang_word_id"]),
+            "word": row["lang_word"],
+            "version_id": int(row["version_id"]),
+            "version": int(row["version"]),
+        },
+        "lang_name": (
+            {"id": int(parent["parent_lang_word_id"]), "word": parent["parent_lang_word"]}
+            if parent is not None
+            else {"id": None, "word": None}
+        ),
+    }
+
+
+@app.get("/api/stars")
+def api_stars():
+    child_word_id = request.args.get("child_word_id", type=int)
+    if not child_word_id:
+        abort(400, description="child_word_id is required")
+
+    db = get_db()
+    ctx = _resolve_star_context(db, child_word_id)
+
+    stuff = db.execute(
+        """
+        SELECT id, child_word_id, prompt_type, text, model, modifier, task_id, created_at, updated_at
+        FROM star_stuff
+        WHERE child_word_id=?
+        ORDER BY created_at DESC
+        """,
+        (child_word_id,),
+    ).fetchall()
+
+    return jsonify(
+        {
+            **ctx,
+            "star_stuff": [
+                {
+                    "id": int(r["id"]),
+                    "child_word_id": int(r["child_word_id"]),
+                    "prompt_type": r["prompt_type"],
+                    "text": r["text"],
+                    "model": r["model"],
+                    "modifier": r["modifier"],
+                    "task_id": r["task_id"],
+                    "created_at": r["created_at"],
+                    "updated_at": r["updated_at"],
+                }
+                for r in stuff
+            ],
+        }
+    )
+
+
+@app.post("/api/star_stuff/tasks")
+@require_admin
+def api_star_stuff_tasks():
+    data = request.get_json(force=True) or {}
+    child_word_id = int(data.get("child_word_id") or 0)
+    prompts = data.get("prompts") or []
+    modifier = (data.get("modifier") or "").strip()
+
+    if not child_word_id:
+        abort(400, description="child_word_id is required")
+    if not isinstance(prompts, list) or not prompts:
+        abort(400, description="prompts must be a non-empty list")
+
+    allowed = set(STAR_STUFF_PROMPTS.keys())
+    for p in prompts:
+        if p not in allowed:
+            abort(400, description=f"invalid prompt: {p}")
+
+    db = get_db()
+    ctx = _resolve_star_context(db, child_word_id)
+    parent_id = ctx["lang_name"]["id"] or ctx["lang_word"]["id"]
+
+    task_ids = []
+    for p in prompts:
+        identifier = json.dumps(
+            {
+                "child_word_id": child_word_id,
+                "lang_word_id": ctx["lang_word"]["id"],
+                "lang_name_id": ctx["lang_name"]["id"],
+            }
+        )
+        payload = json.dumps({"modifier": modifier})
+        cur = db.execute(
+            """
+            INSERT INTO llm_tasks (parent_lang_word_id, task_type, identifier, payload, status)
+            VALUES (?, ?, ?, ?, 'queued')
+            """,
+            (int(parent_id), p, identifier, payload),
+        )
+        task_ids.append(int(cur.lastrowid))
+
+    db.commit()
+    return jsonify({"task_ids": task_ids})
 
 
 # ---------------------------------------------------------------------
@@ -1014,6 +1280,35 @@ def enqueue_create_lang_words():
     return jsonify(ok=True, task_id=int(cur.lastrowid)), 202
 
 
+
+@app.get("/api/tasks/<int:task_id>")
+def api_task_status(task_id: int):
+    db = get_db()
+    t = db.execute(
+        """
+        SELECT id, parent_lang_word_id, task_type, identifier, payload, status, error, result_writing_id, created_at, updated_at
+        FROM llm_tasks
+        WHERE id=?
+        """,
+        (task_id,),
+    ).fetchone()
+    if t is None:
+        raise NotFound(f"task {task_id} not found")
+    return jsonify(
+        {
+            "id": int(t["id"]),
+            "parent_lang_word_id": int(t["parent_lang_word_id"]),
+            "task_type": t["task_type"],
+            "identifier": t["identifier"],
+            "payload": t["payload"],
+            "status": t["status"],
+            "error": t["error"],
+            "result_writing_id": t["result_writing_id"],
+            "created_at": t["created_at"],
+            "updated_at": t["updated_at"],
+        }
+    )
+
 @app.get("/api/write/tasks/<int:task_id>")
 def get_write_task(task_id: int):
     db = get_db()
@@ -1243,7 +1538,46 @@ def _process_one_task() -> None:
 
         modifier = (payload.get("modifier") or "").strip() or None
 
-        pr = db.execute("SELECT word FROM lang_words WHERE id=?", (parent_id,)).fetchone()
+        
+        if task_type in STAR_STUFF_PROMPTS:
+            ident = _json_loads_safe(task["identifier"], {})
+            child_word_id = int(ident.get("child_word_id") or 0)
+            if not child_word_id:
+                raise ValueError("child_word_id missing in identifier for star task")
+
+            ctx = _resolve_star_context(db, child_word_id)
+            phrase = ctx["child_word"]["word"]
+            context = ""
+            if ctx["lang_name"]["word"]:
+                context += str(ctx["lang_name"]["word"]).strip()
+            if ctx["lang_word"]["word"]:
+                if context:
+                    context += " / "
+                context += str(ctx["lang_word"]["word"]).strip()
+
+            prompt = STAR_STUFF_PROMPTS[task_type].format(
+                PHRASE=phrase,
+                CONTEXT=context,
+                MODIFIER=modifier or "none",
+            )
+
+            result_text, used_model = call_openai_text(prompt)
+
+            db.execute(
+                """
+                INSERT INTO star_stuff (child_word_id, prompt_type, text, model, modifier, task_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (child_word_id, task_type, result_text, used_model, modifier or "", task_id),
+            )
+            db.execute("UPDATE llm_tasks SET status='done', error=NULL, updated_at=datetime('now') WHERE id=?", (task_id,))
+            db.commit()
+            return
+
+        if task_type != "create_lang_words":
+            raise ValueError(f"Unknown task_type: {task_type}")
+
+pr = db.execute("SELECT word FROM lang_words WHERE id=?", (parent_id,)).fetchone()
         if pr is None:
             raise ValueError("Parent lang word not found.")
         primary_phrase = pr["word"]

@@ -2,283 +2,271 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>stars</title>
   <style>
     :root { color-scheme: light dark; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; line-height: 1.5; }
-    main { max-width: 56rem; margin: 10vh auto; }
+    body { font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; margin: 0; line-height: 1.4; }
+    header { padding: 14px 16px; border-bottom: 1px solid color-mix(in oklab, currentColor 22%, transparent); display:flex; gap:12px; align-items:baseline; justify-content:space-between; }
+    header h1 { font-size: 18px; margin: 0; }
+    header nav a { margin-right: 10px; }
     a { text-decoration: none; border-bottom: 1px solid currentColor; }
-    .panel { border: 1px solid currentColor; border-radius: 1rem; padding: 1rem; margin-top: 1rem; }
-    .panel h2 { font-size: 1rem; margin: 0 0 .75rem; }
+    main { max-width: 76rem; margin: 0 auto; padding: 16px; }
+    .grid { display:grid; grid-template-columns: 1fr 1.2fr; gap: 14px; }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+    .card { border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 14px; padding: 12px; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
     .muted { opacity: .75; }
-    .big { font-size: 2rem; margin: .25rem 0 .35rem; }
-    .row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
-    .pill { border: 1px solid currentColor; border-radius: 999px; padding: .15rem .55rem; font-size: .85rem; }
-    button, input, textarea, select { font: inherit; }
-    button { cursor: pointer; border: 1px solid currentColor; background: transparent; border-radius: .6rem; padding: .35rem .6rem; }
-    button:disabled { opacity: .6; cursor: not-allowed; }
-    textarea { width: 100%; min-height: 4.25rem; border-radius: .6rem; border: 1px solid currentColor; background: transparent; padding: .5rem .6rem; }
-    .grid { display:grid; gap:.75rem; }
-    .checks { display:grid; gap:.4rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
-    .card { border: 1px solid currentColor; border-radius: .9rem; padding: .85rem; }
-    pre { white-space: pre-wrap; word-break: break-word; margin: .6rem 0 0; }
-    .hr { height: 1px; background: currentColor; opacity: .25; margin: .75rem 0; }
+    .pill { display:inline-block; border: 1px solid color-mix(in oklab, currentColor 60%, transparent); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+    button { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    textarea { width: 100%; min-height: 90px; resize: vertical; font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; }
+    .tiny { font-size: 12px; }
+    details { border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 14px; padding: 10px 12px; margin: 10px 0; }
+    summary { cursor: pointer; user-select: none; }
+    pre { white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; font-size: 12px; opacity: .95; }
+    .danger { border-color: color-mix(in oklab, red 55%, currentColor 18%); }
+    code.inline { padding: 2px 6px; border-radius: 8px; border: 1px solid color-mix(in oklab, currentColor 18%, transparent); }
+    .checkboxes label { display:flex; gap:10px; align-items:center; margin: 6px 0; }
   </style>
 </head>
 <body>
-  <main>
-    <p style="margin:0 0 .5rem;"><a href="javascript:history.back()">← back</a></p>
+<header>
+  <div class="row">
+    <h1>stars</h1>
+    <span class="pill" id="childPill">child_word_id: …</span>
+  </div>
+  <nav class="tiny">
+    <a href="./">home</a>
+    <a href="write.html">write</a>
+    <a href="lang.html">sentences</a>
+  </nav>
+</header>
 
-    <div class="panel">
-      <h2>star</h2>
-
+<main>
+  <div class="grid">
+    <section class="card">
       <div class="row" style="justify-content:space-between;">
-        <div class="muted" id="meta">…</div>
+        <strong>context</strong>
+        <span class="muted tiny" id="adminStatus">admin: unknown</span>
+      </div>
 
+      <div style="margin-top:10px;">
+        <div class="muted tiny">lang name</div>
+        <div><strong id="langName">—</strong></div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <div class="muted tiny">lang word</div>
+        <div><strong id="langWord">—</strong> <span class="muted tiny" id="langWordMeta"></span></div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <div class="muted tiny">child word</div>
         <div class="row">
-          <span class="pill" id="mode-pill">view</span>
-          <button id="admin-btn" type="button">enter admin key</button>
-          <button id="clear-admin-btn" type="button" style="display:none;">clear key</button>
+          <strong id="childWord">—</strong>
+          <a id="childLink" class="muted tiny" target="_blank" rel="noopener noreferrer" style="display:none;">source</a>
         </div>
       </div>
 
-      <div class="big" id="child">—</div>
+      <details style="margin-top:14px;" open>
+        <summary><strong>star stuff</strong> <span class="muted tiny">generate LLM artifacts into the queue</span></summary>
 
-      <div class="row" style="margin-top:.25rem;">
-        <span class="pill" id="langName">—</span>
-        <a id="langWordLink" class="pill" href="#" target="_blank" rel="noopener">—</a>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>star stuff</h2>
-
-      <div class="grid" style="margin-bottom:.75rem;">
-        <label class="muted" for="modifier">modifier (optional)</label>
-        <textarea id="modifier" placeholder="e.g., technical, conceptual, comparative, UX-focused…"></textarea>
-
-        <div class="checks" id="prompt-checks">
-          <label><input type="checkbox" value="create_star_stuff_words" checked /> words (description)</label>
-          <label><input type="checkbox" value="create_star_stuff_images" /> images (curation)</label>
-          <label><input type="checkbox" value="create_star_stuff_data" /> data (real-world)</label>
-          <label><input type="checkbox" value="create_star_stuff_synthetic_data" /> synthetic data</label>
-          <label><input type="checkbox" value="create_star_stuff_code" /> code</label>
+        <div style="margin-top:10px;">
+          <div class="muted tiny">optional modifier</div>
+          <textarea id="modifierInput" placeholder="optional modifier…"></textarea>
         </div>
 
-        <div class="row">
-          <button id="queue-btn" type="button">queue selected</button>
-          <span class="muted" id="queue-status"></span>
+        <div class="checkboxes" style="margin-top:10px;">
+          <div class="muted tiny">select prompts</div>
+          <label><input type="checkbox" value="create_star_stuff_words" checked /> create_star_stuff_words</label>
+          <label><input type="checkbox" value="create_star_stuff_images" /> create_star_stuff_images</label>
+          <label><input type="checkbox" value="create_star_stuff_data" /> create_star_stuff_data</label>
+          <label><input type="checkbox" value="create_star_stuff_synthetic_data" /> create_star_stuff_synthetic_data</label>
+          <label><input type="checkbox" value="create_star_stuff_code" /> create_star_stuff_code</label>
         </div>
+
+        <div class="row" style="margin-top:12px;">
+          <button id="runBtn" type="button" disabled>enqueue selected</button>
+          <button id="refreshBtn" type="button">refresh</button>
+          <span class="pill" id="taskPill">idle</span>
+        </div>
+
+        <div class="muted tiny" style="margin-top:6px;">
+          Requires admin key in localStorage <code class="inline">lang_admin_key</code>.
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;">
+        <strong>existing star stuff</strong>
+        <span class="muted tiny" id="meta">…</span>
       </div>
+      <div id="stuff" style="margin-top:10px;"></div>
+    </section>
+  </div>
+</main>
 
-      <div class="hr"></div>
+<script>
+  const $ = (id) => document.getElementById(id);
 
-      <div class="grid" style="gap:1rem;">
-        <div>
-          <div class="row" style="justify-content:space-between; align-items:baseline;">
-            <div class="muted">tasks</div>
-            <button id="refresh-btn" type="button">refresh</button>
+  function getAdminKey() { return localStorage.getItem("lang_admin_key") || ""; }
+  function withAdminHeaders(h = {}) { const k = getAdminKey(); if (k) h["X-Admin-Key"] = k; return h; }
+
+  async function apiGet(url, { admin = false } = {}) {
+    const headers = { "Accept": "application/json" };
+    if (admin) Object.assign(headers, withAdminHeaders());
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`GET ${url} failed (${res.status})`);
+    return await res.json();
+  }
+
+  async function apiPost(url, body, { admin = false } = {}) {
+    const headers = { "Content-Type": "application/json", "Accept": "application/json" };
+    if (admin) Object.assign(headers, withAdminHeaders());
+    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body || {}) });
+    const txt = await res.text();
+    let data = null;
+    try { data = txt ? JSON.parse(txt) : null; } catch { data = null; }
+    if (!res.ok) throw new Error((data && (data.description || data.error)) || `POST ${url} failed (${res.status})`);
+    return data;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+  }
+
+  function getChildWordId() {
+    const u = new URL(location.href);
+    const v = u.searchParams.get("child_word_id");
+    return v ? Number(v) : 0;
+  }
+
+  async function refreshAdminStatus() {
+    const k = getAdminKey();
+    if (!k) { $("adminStatus").textContent = "admin: no key"; return false; }
+    try { await apiGet("/api/admin/ping", { admin: true }); $("adminStatus").textContent = "admin: ok"; return true; }
+    catch { $("adminStatus").textContent = "admin: invalid"; return false; }
+  }
+
+  function selectedPrompts() {
+    return Array.from(document.querySelectorAll('input[type="checkbox"]')).filter(x => x.checked).map(x => x.value);
+  }
+
+  async function pollTask(taskId) {
+    $("taskPill").textContent = "running";
+    while (true) {
+      const t = await apiGet(`/api/tasks/${taskId}`);
+      if (t.status === "done") return t;
+      if (t.status === "error") throw new Error(t.error || "task failed");
+      await new Promise(r => setTimeout(r, 1200));
+    }
+  }
+
+  async function loadPage() {
+    const childId = getChildWordId();
+    if (!childId) {
+      $("stuff").innerHTML = `<div class="card danger">Missing child_word_id in URL (expected ?child_word_id=...)</div>`;
+      $("runBtn").disabled = true;
+      return;
+    }
+
+    $("childPill").textContent = `child_word_id: ${childId}`;
+    const data = await apiGet(`/api/stars?child_word_id=${encodeURIComponent(childId)}`);
+
+    $("langName").textContent = data.lang_name && data.lang_name.word ? data.lang_name.word : "—";
+    $("langWord").textContent = data.lang_word.word || "—";
+    $("langWordMeta").textContent = data.lang_word.version ? `(v${data.lang_word.version})` : "";
+    $("childWord").textContent = data.child_word.word || "—";
+
+    if (data.child_word.link) {
+      $("childLink").style.display = "";
+      $("childLink").href = data.child_word.link;
+      $("childLink").textContent = "source";
+    } else {
+      $("childLink").style.display = "none";
+    }
+
+    renderStuff(data.star_stuff || []);
+  }
+
+  function renderStuff(items) {
+    $("meta").textContent = `${items.length} item(s)`;
+    const host = $("stuff");
+    host.innerHTML = "";
+    if (!items.length) { host.innerHTML = `<div class="muted tiny">No star stuff yet for this child word.</div>`; return; }
+
+    const groups = {};
+    for (const it of items) {
+      groups[it.prompt_type] = groups[it.prompt_type] || [];
+      groups[it.prompt_type].push(it);
+    }
+
+    for (const [ptype, arr] of Object.entries(groups)) {
+      const d = document.createElement("details");
+      d.open = false;
+      const s = document.createElement("summary");
+      s.innerHTML = `<strong>${escapeHtml(ptype)}</strong> <span class="muted tiny">(${arr.length})</span>`;
+      d.appendChild(s);
+
+      for (const it of arr) {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.style.marginTop = "10px";
+        card.innerHTML = `
+          <div class="row" style="justify-content:space-between;">
+            <div><strong>#${it.id}</strong> <span class="muted tiny">task ${it.task_id ?? "—"} • ${escapeHtml(it.created_at || "")}</span></div>
+            ${it.modifier ? `<span class="pill">modifier</span>` : `<span class="pill muted">no modifier</span>`}
           </div>
-          <div id="tasks"></div>
-        </div>
-
-        <div>
-          <div class="muted">existing star stuff</div>
-          <div id="items" style="margin-top:.5rem;"></div>
-        </div>
-      </div>
-    </div>
-  </main>
-
-  <script>
-    const ADMIN_KEY_STORAGE = "lang_admin_key";
-
-    const params = new URLSearchParams(location.search);
-    const childWordId = params.get("child_word_id");
-
-    const metaEl = document.getElementById("meta");
-    const childEl = document.getElementById("child");
-    const langNameEl = document.getElementById("langName");
-    const langWordLink = document.getElementById("langWordLink");
-    const modePill = document.getElementById("mode-pill");
-
-    const modifierEl = document.getElementById("modifier");
-    const queueBtn = document.getElementById("queue-btn");
-    const queueStatusEl = document.getElementById("queue-status");
-    const itemsEl = document.getElementById("items");
-    const tasksEl = document.getElementById("tasks");
-    const refreshBtn = document.getElementById("refresh-btn");
-
-    const adminBtn = document.getElementById("admin-btn");
-    const clearAdminBtn = document.getElementById("clear-admin-btn");
-
-    function getAdminKey() {
-      return localStorage.getItem(ADMIN_KEY_STORAGE) || "";
-    }
-
-    function setAdminUI() {
-      const has = !!getAdminKey();
-      modePill.textContent = has ? "edit" : "view";
-      clearAdminBtn.style.display = has ? "" : "none";
-    }
-
-    adminBtn.addEventListener("click", () => {
-      const current = getAdminKey();
-      const key = prompt("Admin key:", current || "");
-      if (key === null) return;
-      if (!key.trim()) return alert("No key provided.");
-      localStorage.setItem(ADMIN_KEY_STORAGE, key.trim());
-      setAdminUI();
-    });
-
-    clearAdminBtn.addEventListener("click", () => {
-      localStorage.removeItem(ADMIN_KEY_STORAGE);
-      setAdminUI();
-    });
-
-    function esc(s) {
-      return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[c]));
-    }
-
-    async function loadStar() {
-      if (!childWordId) {
-        metaEl.textContent = "missing child_word_id";
-        return;
-      }
-
-      const r = await fetch(`/api/stars?child_word_id=${encodeURIComponent(childWordId)}`, {
-        headers: { "Accept": "application/json" }
-      });
-
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        metaEl.textContent = err.error || `not found (${r.status})`;
-        return;
-      }
-
-      const data = await r.json();
-      metaEl.textContent = `child_word_id ${data.child_word_id} • lang_word_id ${data.lang_word_id} • lang ${data.lang_id}`;
-      childEl.textContent = data.child_word || "—";
-      langNameEl.textContent = data.lang_name || "—";
-
-      if (data.lang_word_version_id) {
-        langWordLink.textContent = data.lang_word || "—";
-        langWordLink.href = `lang_word.html?id=${encodeURIComponent(data.lang_word_version_id)}`;
-      } else {
-        langWordLink.textContent = data.lang_word || "—";
-        langWordLink.removeAttribute("href");
-      }
-    }
-
-    function renderTasks(tasks) {
-      if (!tasks || !tasks.length) {
-        tasksEl.innerHTML = '<div class="muted">none</div>';
-        return;
-      }
-      tasksEl.innerHTML = tasks.map(t => {
-        const err = t.error ? `<div class="muted" style="margin-top:.35rem;">error: ${esc(t.error)}</div>` : "";
-        return `
-          <div class="card">
-            <div class="row" style="justify-content:space-between;">
-              <div><strong>${esc(t.task_type)}</strong></div>
-              <div class="muted">${esc(t.status)} • #${esc(t.id)}</div>
-            </div>
-            <div class="muted">updated ${esc(t.updated_at || "")}</div>
-            ${err}
-          </div>
+          ${it.modifier ? `<div class="muted tiny" style="margin-top:6px;">${escapeHtml(it.modifier)}</div>` : ""}
+          <pre>${escapeHtml(it.text || "")}</pre>
         `;
-      }).join("");
-    }
-
-    function renderItems(items) {
-      if (!items || !items.length) {
-        itemsEl.innerHTML = '<div class="muted">none</div>';
-        return;
+        d.appendChild(card);
       }
-      itemsEl.innerHTML = items.map(it => {
-        const mod = (it.modifier || "").trim();
-        return `
-          <div class="card">
-            <div class="row" style="justify-content:space-between;">
-              <div><strong>${esc(it.prompt_type)}</strong></div>
-              <div class="muted">#${esc(it.id)} • ${esc(it.updated_at || it.created_at || "")}</div>
-            </div>
-            <div class="muted">${mod ? "modifier: " + esc(mod) : "modifier: —"}${it.model ? " • model: " + esc(it.model) : ""}${it.task_id ? " • task: #" + esc(it.task_id) : ""}</div>
-            <pre>${esc(it.text || "")}</pre>
-          </div>
-        `;
-      }).join("");
+      host.appendChild(d);
     }
+  }
 
-    async function loadStarStuff() {
-      if (!childWordId) return;
+  $("refreshBtn").onclick = () => loadPage();
 
-      const r = await fetch(`/api/star_stuff?child_word_id=${encodeURIComponent(childWordId)}`, {
-        headers: { "Accept": "application/json" }
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        tasksEl.innerHTML = "";
-        itemsEl.innerHTML = `<div class="muted">${esc(err.error || "failed to load")}</div>`;
-        return;
-      }
-      const data = await r.json();
-      renderTasks(data.tasks || []);
-      renderItems(data.items || []);
+  $("runBtn").onclick = async () => {
+    const childId = getChildWordId();
+    const prompts = selectedPrompts();
+    if (!prompts.length) { alert("Select at least one prompt."); return; }
+
+    try {
+      $("runBtn").disabled = true;
+      $("taskPill").textContent = "queued";
+      const res = await apiPost("/api/star_stuff/tasks", {
+        child_word_id: childId,
+        prompts,
+        modifier: ($("modifierInput").value || "").trim()
+      }, { admin: true });
+
+      const ids = res.task_ids || [];
+      for (const id of ids) await pollTask(id);
+      $("taskPill").textContent = "done";
+      await loadPage();
+    } catch (e) {
+      $("taskPill").textContent = "error";
+      alert(String(e.message || e));
+    } finally {
+      $("runBtn").disabled = !(getAdminKey());
     }
+  };
 
-    function selectedPrompts() {
-      return Array.from(document.querySelectorAll('#prompt-checks input[type="checkbox"]'))
-        .filter(cb => cb.checked)
-        .map(cb => cb.value);
-    }
+  async function boot() {
+    await refreshAdminStatus();
+    $("runBtn").disabled = !(getAdminKey());
+    await loadPage();
+  }
 
-    queueBtn.addEventListener("click", async () => {
-      const prompts = selectedPrompts();
-      if (!prompts.length) return alert("Select at least one prompt.");
-
-      const key = getAdminKey();
-      if (!key) return alert("Enter admin key first.");
-
-      queueBtn.disabled = true;
-      queueStatusEl.textContent = "queueing…";
-
-      try {
-        const r = await fetch("/api/star_stuff/create", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "X-Admin-Key": key
-          },
-          body: JSON.stringify({
-            child_word_id: Number(childWordId),
-            prompts,
-            modifier: modifierEl.value || ""
-          })
-        });
-
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(data.error || `request failed (${r.status})`);
-
-        queueStatusEl.textContent = `queued ${data.task_ids?.length || 0}`;
-        await loadStarStuff();
-      } catch (e) {
-        queueStatusEl.textContent = "";
-        alert(e.message || String(e));
-      } finally {
-        queueBtn.disabled = false;
-      }
-    });
-
-    refreshBtn.addEventListener("click", async () => {
-      await loadStarStuff();
-    });
-
-    // init
-    setAdminUI();
-    loadStar().then(loadStarStuff);
-  </script>
+  boot().catch(err => {
+    console.error(err);
+    $("stuff").innerHTML = `<div class="card danger">${escapeHtml(String(err.message || err))}</div>`;
+  });
+</script>
 </body>
 </html>
