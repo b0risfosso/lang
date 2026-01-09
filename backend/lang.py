@@ -1577,7 +1577,7 @@ def _process_one_task() -> None:
         if task_type != "create_lang_words":
             raise ValueError(f"Unknown task_type: {task_type}")
 
-pr = db.execute("SELECT word FROM lang_words WHERE id=?", (parent_id,)).fetchone()
+        pr = db.execute("SELECT word FROM lang_words WHERE id=?", (parent_id,)).fetchone()
         if pr is None:
             raise ValueError("Parent lang word not found.")
         primary_phrase = pr["word"]
