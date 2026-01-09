@@ -1704,6 +1704,29 @@ def _run_create_lang_words_llm(primary_phrase: str, optional_modifier: Optional[
     return plan
 
 
+def call_openai_text(prompt: str) -> tuple[str, str]:
+    """
+    Call OpenAI to generate text from a prompt.
+    Returns (text, model_used)
+    """
+    if OpenAI is None:
+        raise RuntimeError("openai package not installed in this environment.")
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY is not set.")
+
+    client = OpenAI()
+    resp = client.responses.create(
+        model=LLM_MODEL_CREATE_LANG_WORDS,
+        input=[{"role": "user", "content": prompt}],
+    )
+
+    text_out = getattr(resp, "output_text", "").strip()
+    if not text_out:
+        raise RuntimeError("LLM returned no text output.")
+
+    return text_out, LLM_MODEL_CREATE_LANG_WORDS
+
+
 # ---------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------
