@@ -59,6 +59,7 @@
         <span class="muted tiny" id="readMeta">…</span>
       </div>
       <div class="row">
+        <input id="searchInput" placeholder="search words…" style="min-width: 150px;" />
         <button id="refreshBtn" type="button">refresh</button>
       </div>
     </div>
@@ -155,6 +156,12 @@
           <button id="createSentenceBtn" type="button" disabled>create sentence</button>
         </div>
         <div class="muted tiny">creating requires admin key and at least 1 selected word</div>
+
+        <div class="spacer"></div>
+
+        <div class="row">
+          <button id="clearWordsBtn" type="button">clear all selections</button>
+        </div>
       </div>
 
       <div class="card">
@@ -326,9 +333,31 @@
 
     if (!Array.isArray(roots)) roots = [];
 
-    $("readMeta").textContent = `${roots.length} parent word(s)`;
+    let visibleCount = 0;
+    for (const R of roots) {
+      if (searchTerm && !R.word.toLowerCase().includes(searchTerm)) continue;
+      visibleCount++;
+    }
+
+    $("readMeta").textContent = searchTerm ? `${visibleCount} of ${roots.length} parent word(s)` : `${roots.length} parent word(s)`;
 
     for (const R of roots) {
+      if (searchTerm && !R.word.toLowerCase().includes(searchTerm)) continue;
+      if (searchTerm && !R.word.toLowerCase().includes(searchTerm)) continue;
+
+      // Select button outside details
+      const selectRow = document.createElement("div");
+      selectRow.className = "row";
+      selectRow.style.marginBottom = "4px";
+
+      const selectBtn = document.createElement("button");
+      selectBtn.type = "button";
+      selectBtn.textContent = "select parent";
+      selectBtn.onclick = () => setSelectedParent(R.lang_word_id, R.word);
+      selectRow.appendChild(selectBtn);
+
+      host.appendChild(selectRow);
+
       const d = document.createElement("details");
       d.open = false;
 
@@ -339,12 +368,6 @@
       const btnRow = document.createElement("div");
       btnRow.className = "row";
       btnRow.style.marginTop = "8px";
-
-      const selectBtn = document.createElement("button");
-      selectBtn.type = "button";
-      selectBtn.textContent = "select parent";
-      selectBtn.onclick = () => setSelectedParent(R.lang_word_id, R.word);
-      btnRow.appendChild(selectBtn);
 
       if (mode === "sentence") {
         const toggleBtn = document.createElement("button");
@@ -765,6 +788,25 @@
     $("runBtn").disabled = true;
     $("createSentenceBtn").disabled = true;
   };
+
+  // -------------------------
+  // Sentence mode clear
+  // -------------------------
+  $("clearWordsBtn").onclick = () => {
+    selectedSentenceWordIds.clear();
+    updateSelectedWordsPill();
+    renderReadTree();
+    renderSentences();
+  };
+
+  // -------------------------
+  // Search
+  // -------------------------
+  let searchTerm = "";
+  $("searchInput").addEventListener("input", (e) => {
+    searchTerm = (e.target.value || "").trim().toLowerCase();
+    renderReadTree();
+  });
 
   // -------------------------
   // Boot
