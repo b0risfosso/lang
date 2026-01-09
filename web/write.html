@@ -101,6 +101,9 @@
         <strong>write</strong>
       </div>
       <div class="row">
+        <span class="pill" id="mode-pill">word</span>
+        <button id="mode-word" type="button">word</button>
+        <button id="mode-sentence" type="button">sentence</button>
         <span class="pill" id="auth-pill">auth…</span>
         <button id="refresh-read" type="button" disabled>refresh read</button>
         <button id="refresh-write" type="button" disabled>refresh write</button>
@@ -118,6 +121,16 @@
         </div>
         <div class="muted" id="read-status" style="margin-top:.5rem;">loading…</div>
         <div id="read-root"></div>
+      </div>
+
+      <!-- SENTENCE MODE: LANGS -->
+      <div class="panel" id="sentence-langs-panel" style="display:none;">
+        <div class="row" style="justify-content:space-between;">
+          <strong>langs</strong>
+          <span class="muted" id="sentence-langs-meta">…</span>
+        </div>
+        <div class="muted" id="sentence-langs-status" style="margin-top:.5rem;">loading…</div>
+        <div id="sentence-langs-root"></div>
       </div>
     </div>
 
@@ -153,6 +166,16 @@
           <span class="muted" id="writings-meta">…</span>
         </div>
         <div id="writings-root" class="muted" style="margin-top:.5rem;">select a lang</div>
+      </div>
+
+      <!-- SENTENCE MODE: SENTENCES -->
+      <div class="panel" id="sentence-sentences-panel" style="display:none;">
+        <div class="row" style="justify-content:space-between;">
+          <strong>lang sentences</strong>
+          <span class="muted" id="sentence-sent-meta">…</span>
+        </div>
+        <div class="muted" id="sentence-sent-status" style="margin-top:.5rem;">loading…</div>
+        <div id="sentence-sentences-root"></div>
       </div>
     </div>
   </div>
@@ -194,6 +217,23 @@
     const writingsMeta = document.getElementById("writings-meta");
     const writingsRoot = document.getElementById("writings-root");
 
+    const modePill = document.getElementById("mode-pill");
+    const modeWordBtn = document.getElementById("mode-word");
+    const modeSentenceBtn = document.getElementById("mode-sentence");
+
+    const sentenceLangsPanel = document.getElementById("sentence-langs-panel");
+    const sentenceLangsMeta = document.getElementById("sentence-langs-meta");
+    const sentenceLangsStatus = document.getElementById("sentence-langs-status");
+    const sentenceLangsRoot = document.getElementById("sentence-langs-root");
+
+    const sentenceSentPanel = document.getElementById("sentence-sentences-panel");
+    const sentenceSentMeta = document.getElementById("sentence-sent-meta");
+    const sentenceSentStatus = document.getElementById("sentence-sent-status");
+    const sentenceSentRoot = document.getElementById("sentence-sentences-root");
+
+    let mode = "word"; // "word" | "sentence"
+
+
     let adminKey = "";
     let readData = null;
     let selectedLangId = null;
@@ -226,15 +266,12 @@
 
     // ===== READ: render tree from /api/write (same structure as earlier) =====
     function childWordNode(c) {
-      if (c.link && String(c.link).trim()) {
-        const a = document.createElement("a");
-        a.href = c.link;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.textContent = c.word;
-        return a;
-      }
-      return document.createTextNode(c.word);
+      const a = document.createElement("a");
+      a.href = `stars.html?child_word_id=${encodeURIComponent(c.id)}`;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = c.word;
+      return a;
     }
 
     function setSelectedLang(langId, langName) {
@@ -526,7 +563,100 @@
       }
     }
 
-    // ===== Boot (admin-only) =====
+    
+    // ===== MODE: word vs sentence =====
+    function setMode(next) {
+      mode = next === "sentence" ? "sentence" : "word";
+      modePill.textContent = mode;
+
+      // toggle panels
+      const showWord = (mode === "word");
+      // Left
+      document.querySelectorAll(".pane")[0].querySelector(".panel").style.display = showWord ? "" : "none";
+      sentenceLangsPanel.style.display = showWord ? "none" : "";
+      // Right: there are two panels in word mode (write + temporary writings)
+      const rightPane = document.querySelectorAll(".pane")[1];
+      const rightPanels = rightPane.querySelectorAll(".panel");
+      // rightPanels[0] = write; rightPanels[1] = temporary writings; rightPanels[2] = sentence panel
+      if (rightPanels[0]) rightPanels[0].style.display = showWord ? "" : "none";
+      if (rightPanels[1]) rightPanels[1].style.display = showWord ? "" : "none";
+      sentenceSentPanel.style.display = showWord ? "none" : "";
+
+      // disable write interactions in sentence mode
+      runBtn.disabled = !showWord || !selectedLangId;
+      refreshWriteBtn.disabled = !showWord || !selectedLangId;
+
+      if (!showWord) {
+        loadSentenceMode();
+      }
+    }
+
+    async function loadSentenceMode() {
+      // LHS: langs list
+      sentenceLangsStatus.textContent = "loading…";
+      sentenceLangsRoot.innerHTML = "";
+      sentenceLangsMeta.textContent = "…";
+
+      // RHS: sentences list
+      sentenceSentStatus.textContent = "loading…";
+      sentenceSentRoot.innerHTML = "";
+      sentenceSentMeta.textContent = "…";
+
+      try {
+        const [langsData, sentData] = await Promise.all([
+          apiGet("/api/langs"),
+          apiGet("/api/lang_sentences")
+        ]);
+
+        const langs = Array.isArray(langsData.langs) ? langsData.langs : [];
+        sentenceLangsMeta.textContent = `${langs.length} lang(s)`;
+        sentenceLangsStatus.textContent = langs.length ? "" : "no langs.";
+
+        sentenceLangsRoot.innerHTML = "";
+        const ulL = document.createElement("ul");
+        for (const L of langs.sort((a,b) => String(a.name).localeCompare(String(b.name)))) {
+          const li = document.createElement("li");
+          const a = document.createElement("a");
+          a.href = `lang.html?id=${encodeURIComponent(L.id)}`;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.textContent = `${L.name} (id ${L.id})`;
+          li.appendChild(a);
+          ulL.appendChild(li);
+        }
+        sentenceLangsRoot.appendChild(ulL);
+
+        const sentences = Array.isArray(sentData.sentences) ? sentData.sentences : [];
+        sentenceSentMeta.textContent = `${sentences.length} sentence(s)`;
+        sentenceSentStatus.textContent = sentences.length ? "" : "no sentences.";
+
+        sentenceSentRoot.innerHTML = "";
+        const ulS = document.createElement("ul");
+        for (const s of sentences) {
+          const li = document.createElement("li");
+          const a = document.createElement("a");
+          a.href = `lang_sentence.html?id=${encodeURIComponent(s.id)}`;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.textContent = s.sentence || `(sentence ${s.id})`;
+          li.appendChild(a);
+
+          const meta = document.createElement("span");
+          meta.className = "muted";
+          const ids = Array.isArray(s.lang_word_ids) ? s.lang_word_ids.join(", ") : "";
+          meta.textContent = ids ? ` — words: ${ids}` : "";
+          li.appendChild(meta);
+
+          ulS.appendChild(li);
+        }
+        sentenceSentRoot.appendChild(ulS);
+      } catch (e) {
+        sentenceLangsStatus.textContent = e.message || String(e);
+        sentenceSentStatus.textContent = e.message || String(e);
+      }
+    }
+
+// ===== Boot (admin-only) =====
     (async () => {
       let key = (getAdminKey() || "").trim();
       if (!key) {
@@ -554,7 +684,11 @@
       refreshWriteBtn.addEventListener("click", loadWritings);
       runBtn.addEventListener("click", enqueue);
 
+      modeWordBtn.addEventListener("click", () => setMode("word"));
+      modeSentenceBtn.addEventListener("click", () => setMode("sentence"));
+
       await loadRead();
+      setMode("word");
       // writings panel stays idle until a lang is selected
     })();
   </script>

@@ -1441,6 +1441,88 @@ def delete_child_word(child_id: int):
     return jsonify(ok=True, id=child_id)
 
 
+
+
+@app.get("/api/stars")
+def get_star():
+    """
+    Resolve a child_word to its parent lang_word + a best-effort lang membership.
+
+    Query params:
+      - child_word_id (required)
+      - lang_id (optional) : if provided, we will prefer that lang (and verify membership)
+    """
+    db = get_db()
+
+    child_word_id = (request.args.get("child_word_id") or "").strip()
+    if not child_word_id:
+        abort(400, description="Missing child_word_id.")
+    try:
+        child_word_id_int = int(child_word_id)
+    except Exception:
+        abort(400, description="Invalid child_word_id.")
+
+    row = db.execute(
+        """
+        SELECT cw.id AS child_word_id, cw.word AS child_word,
+               v.id AS version_id, v.version,
+               w.id AS lang_word_id, w.word AS lang_word
+        FROM child_words cw
+        JOIN lang_word_versions v ON v.id = cw.lang_word_version_id
+        JOIN lang_words w ON w.id = v.lang_word_id
+        WHERE cw.id = ?
+        """,
+        (child_word_id_int,)
+    ).fetchone()
+    if row is None:
+        abort(404, description="Child word not found.")
+
+    lang_word_id = int(row["lang_word_id"])
+
+    # Prefer an explicit lang_id, otherwise pick the first lang that contains this lang_word_id.
+    lang_id_val = (request.args.get("lang_id") or "").strip()
+    lang_row = None
+
+    if lang_id_val:
+        try:
+            lang_id_int = int(lang_id_val)
+        except Exception:
+            abort(400, description="Invalid lang_id.")
+        # Verify membership using json_each (SQLite JSON1)
+        lang_row = db.execute(
+            """
+            SELECT id, name
+            FROM langs
+            WHERE id = ?
+              AND EXISTS (SELECT 1 FROM json_each(langs.lang_word_ids) WHERE value = ?)
+            """,
+            (lang_id_int, lang_word_id)
+        ).fetchone()
+        if lang_row is None:
+            abort(404, description="Lang not found (or does not include this word).")
+    else:
+        lang_row = db.execute(
+            """
+            SELECT id, name
+            FROM langs
+            WHERE EXISTS (SELECT 1 FROM json_each(langs.lang_word_ids) WHERE value = ?)
+            ORDER BY name ASC, id ASC
+            LIMIT 1
+            """,
+            (lang_word_id,)
+        ).fetchone()
+
+    return jsonify({
+        "child_word_id": int(row["child_word_id"]),
+        "child_word": row["child_word"],
+        "lang_word_id": int(row["lang_word_id"]),
+        "lang_word": row["lang_word"],
+        "version_id": int(row["version_id"]),
+        "version": int(row["version"]),
+        "lang_id": int(lang_row["id"]) if lang_row is not None else None,
+        "lang_name": lang_row["name"] if lang_row is not None else None,
+    })
+
 @app.get("/api/admin/ping")
 def admin_ping():
     require_admin_key()

@@ -128,11 +128,9 @@
           <input id="new-child" type="text" placeholder="new child word (⌘/Ctrl + Enter)" />
         </div>
         <div class="row">
-          <input id="new-child-link" type="text" placeholder="optional link (opens in new tab)" />
           <button id="add-child" type="button">add</button>
         </div>
-
-        <div class="row">
+<div class="row">
           <textarea id="bulk-children" rows="7" placeholder="bulk child words (one per line)"></textarea>
         </div>
         <div class="row">
@@ -219,8 +217,7 @@
 
     const addToVersionSelect = document.getElementById("add-to-version");
     const newChildInput = document.getElementById("new-child");
-    const newChildLinkInput = document.getElementById("new-child-link");
-    const addChildBtn = document.getElementById("add-child");
+const addChildBtn = document.getElementById("add-child");
 
     const bulkChildrenTextarea = document.getElementById("bulk-children");
     const bulkAddBtn = document.getElementById("add-children-bulk");
@@ -374,16 +371,12 @@
     }
 
     function renderChildWordViewItem(c) {
-      // View mode: if link exists, make it clickable and open in new tab
-      if (c.link && String(c.link).trim()) {
-        const a = document.createElement("a");
-        a.href = c.link;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.textContent = c.word;
-        return a;
-      }
-      return document.createTextNode(c.word);
+      const a = document.createElement("a");
+      a.href = `stars.html?child_word_id=${encodeURIComponent(c.id)}`;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = c.word;
+      return a;
     }
 
     function renderVersions(data) {
@@ -530,19 +523,9 @@
             line1.appendChild(save);
             line1.appendChild(del);
 
-            const line2 = document.createElement("div");
-            line2.className = "line";
-
-            const inputLink = document.createElement("input");
-            inputLink.type = "text";
-            inputLink.placeholder = "optional link (opens in new tab)";
-            inputLink.value = c.link || "";
-
-            line2.appendChild(inputLink);
-
             save.addEventListener("click", async () => {
               const nextWord = inputWord.value.trim();
-              const nextLink = inputLink.value.trim();
+              const nextLink = "";
               if (!nextWord) return;
 
               const key = getAdminKey();
@@ -582,8 +565,7 @@
             });
 
             row.appendChild(line1);
-            row.appendChild(line2);
-            editWrap.appendChild(row);
+                        editWrap.appendChild(row);
           }
 
           panel.appendChild(editWrap);
@@ -635,7 +617,7 @@
       if (!key) return;
 
       const word = newChildInput.value.trim();
-      const link = newChildLinkInput.value.trim();
+      const link = "";
       if (!word) return;
 
       const versionId = Number(addToVersionSelect.value);
@@ -658,8 +640,7 @@
       }
 
       newChildInput.value = "";
-      newChildLinkInput.value = "";
-      await refresh();
+            await refresh();
     });
 
     // Bulk add children
