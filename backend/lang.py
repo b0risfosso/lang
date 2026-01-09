@@ -119,7 +119,7 @@ def _parse_int_list_json(s: str) -> list[int]:
 def ensure_word_has_v1(db: sqlite3.Connection, lang_word_id: int) -> int:
     """
     Ensure there is at least version 1 for this lang_word.
-    Returns the newest version_id (typically v1 if newly created).
+    Returns the newest version_id (v1 if newly created).
     """
     v = db.execute(
         "SELECT id, version FROM lang_word_versions WHERE lang_word_id=? ORDER BY version DESC LIMIT 1",
@@ -128,10 +128,17 @@ def ensure_word_has_v1(db: sqlite3.Connection, lang_word_id: int) -> int:
     if v is not None:
         return int(v["id"])
 
+    cur = db.execute(
+        "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, 1)",
+        (lang_word_id,),
+    )
+    return int(cur.lastrowid)
+
 
 def create_next_version(db: sqlite3.Connection, lang_word_id: int) -> int:
     """
-    Create and return a new version row for a lang_word (v+1). If no versions exist, creates v1.
+    Create and return a new version row for a lang_word (v+1).
+    If no versions exist yet, creates v1.
     """
     last = db.execute(
         "SELECT version FROM lang_word_versions WHERE lang_word_id=? ORDER BY version DESC LIMIT 1",
@@ -143,6 +150,7 @@ def create_next_version(db: sqlite3.Connection, lang_word_id: int) -> int:
         (lang_word_id, next_version),
     )
     return int(cur.lastrowid)
+
 
     cur = db.execute(
         "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, 1)",
@@ -1133,18 +1141,8 @@ def apply_create_lang_words(writing_id: int):
             cur = db.execute("INSERT INTO lang_words (word) VALUES (?)", (theme_word,))
             child_lang_word_id = int(cur.lastrowid)
 
-        # Ensure the theme word has at least v1, then:
-        # - if theme already existed, create a NEW version for this apply
-        # - if it's new, use v1
-        base_version_id = ensure_word_has_v1(db, child_lang_word_id)
-
-        if existing is not None:
-            child_version_id = create_next_version(db, child_lang_word_id)
-        else:
-            child_version_id = base_version_id
-
-        if child_version_id is None:
-            raise RuntimeError(f"child_version_id is NULL for theme '{theme_word}' (lang_word_id={child_lang_word_id})")
+        # Create a NEW version for an existing theme word so orbiting phrases don't mutate old versions
+        child_version_id = create_next_version(db, child_lang_word_id) if existing is not None else ensure_word_has_v1(db, child_lang_word_id)
 
         # Link parent version -> child lang word
         db.execute(
