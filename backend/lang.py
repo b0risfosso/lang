@@ -1596,6 +1596,29 @@ def _parse_ids(value):
             ids.append(n)
     return ids
 
+def _parse_json_int_array(value):
+    """
+    Parse a DB TEXT column that is expected to be a JSON array of ints.
+    Returns list[int] (deduped, order preserved).
+    """
+    try:
+        arr = json.loads(value or "[]")
+        if not isinstance(arr, list):
+            arr = []
+        out = []
+        seen = set()
+        for x in arr:
+            try:
+                n = int(x)
+            except Exception:
+                continue
+            if n > 0 and n not in seen:
+                seen.add(n)
+                out.append(n)
+        return out
+    except Exception:
+        return []
+
 @app.get("/api/lang_sentences")
 def list_lang_sentences():
     db = get_db()
@@ -1644,29 +1667,83 @@ def create_lang_sentence():
 
     data = request.get_json(silent=True) or {}
     sentence = (data.get("sentence") or "").strip()
-    ids = _parse_ids(data.get("lang_word_ids"))
+
+    # NEW: accept langs and/or words
+    word_ids = _parse_ids(data.get("lang_word_ids"))
+    lang_ids = _parse_ids(data.get("lang_ids"))
 
     if not sentence:
         abort(400, description="Missing 'sentence'.")
     if len(sentence) > 4000:
         abort(400, description="Sentence too long (max 4000 chars).")
-    if not ids:
-        abort(400, description="Select at least one lang_word_id.")
+
+    if not word_ids and not lang_ids:
+        abort(400, description="Select at least one lang_id and/or lang_word_id.")
+
+    # ---- expand lang_ids -> lang_word_ids ----
+    expanded_from_langs = []
+    if lang_ids:
+        qmarks = ",".join("?" for _ in lang_ids)
+        lang_rows = db.execute(
+            f"SELECT id, lang_word_ids FROM langs WHERE id IN ({qmarks})",
+            lang_ids
+        ).fetchall()
+
+        found_lang_ids = {int(r["id"]) for r in lang_rows}
+        missing_langs = [i for i in lang_ids if i not in found_lang_ids]
+        if missing_langs:
+            abort(400, description=f"Unknown lang_id(s): {', '.join(map(str, missing_langs))}")
+
+        # Preserve selection order: iterate in the same order as lang_ids
+        by_id = {int(r["id"]): r for r in lang_rows}
+        for lid in lang_ids:
+            r = by_id.get(lid)
+            if not r:
+                continue
+            expanded_from_langs.extend(_parse_json_int_array(r["lang_word_ids"]))
+
+    # ---- merge (order: explicit words first, then expanded langs) ----
+    merged = []
+    seen = set()
+
+    for wid in word_ids:
+        if wid not in seen:
+            seen.add(wid)
+            merged.append(wid)
+
+    for wid in expanded_from_langs:
+        if wid not in seen:
+            seen.add(wid)
+            merged.append(wid)
+
+    if not merged:
+        abort(400, description="No lang words resolved from the selected inputs.")
 
     # Ensure referenced words exist
-    qmarks = ",".join("?" for _ in ids)
-    found = db.execute(f"SELECT id FROM lang_words WHERE id IN ({qmarks})", ids).fetchall()
+    qmarks = ",".join("?" for _ in merged)
+    found = db.execute(
+        f"SELECT id FROM lang_words WHERE id IN ({qmarks})",
+        merged
+    ).fetchall()
     found_ids = {int(r["id"]) for r in found}
-    missing = [i for i in ids if i not in found_ids]
-    if missing:
-        abort(400, description=f"Unknown lang_word_id(s): {', '.join(map(str, missing))}")
+    missing_words = [i for i in merged if i not in found_ids]
+    if missing_words:
+        abort(400, description=f"Unknown lang_word_id(s): {', '.join(map(str, missing_words))}")
 
     cur = db.execute(
         "INSERT INTO lang_sentences (lang_word_ids, sentence) VALUES (?, ?)",
-        (json.dumps(ids), sentence)
+        (json.dumps(merged), sentence)
     )
     db.commit()
-    return jsonify(ok=True, id=cur.lastrowid, lang_word_ids=ids, sentence=sentence), 201
+
+    # Optional: include lang_ids back in response for UI clarity
+    return jsonify(
+        ok=True,
+        id=cur.lastrowid,
+        lang_word_ids=merged,
+        lang_ids=lang_ids,
+        sentence=sentence
+    ), 201
 
 
 @app.get("/api/lang_sentences/<int:sentence_id>")
