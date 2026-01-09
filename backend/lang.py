@@ -1133,8 +1133,18 @@ def apply_create_lang_words(writing_id: int):
             cur = db.execute("INSERT INTO lang_words (word) VALUES (?)", (theme_word,))
             child_lang_word_id = int(cur.lastrowid)
 
-        # Create a NEW version for an existing theme word so orbiting phrases don't mutate old versions
-        child_version_id = create_next_version(db, child_lang_word_id) if existing is not None else ensure_word_has_v1(db, child_lang_word_id)
+        # Ensure the theme word has at least v1, then:
+        # - if theme already existed, create a NEW version for this apply
+        # - if it's new, use v1
+        base_version_id = ensure_word_has_v1(db, child_lang_word_id)
+
+        if existing is not None:
+            child_version_id = create_next_version(db, child_lang_word_id)
+        else:
+            child_version_id = base_version_id
+
+        if child_version_id is None:
+            raise RuntimeError(f"child_version_id is NULL for theme '{theme_word}' (lang_word_id={child_lang_word_id})")
 
         # Link parent version -> child lang word
         db.execute(
