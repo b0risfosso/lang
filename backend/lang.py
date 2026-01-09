@@ -128,6 +128,22 @@ def ensure_word_has_v1(db: sqlite3.Connection, lang_word_id: int) -> int:
     if v is not None:
         return int(v["id"])
 
+
+def create_next_version(db: sqlite3.Connection, lang_word_id: int) -> int:
+    """
+    Create and return a new version row for a lang_word (v+1). If no versions exist, creates v1.
+    """
+    last = db.execute(
+        "SELECT version FROM lang_word_versions WHERE lang_word_id=? ORDER BY version DESC LIMIT 1",
+        (lang_word_id,),
+    ).fetchone()
+    next_version = int(last["version"]) + 1 if last else 1
+    cur = db.execute(
+        "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, ?)",
+        (lang_word_id, next_version),
+    )
+    return int(cur.lastrowid)
+
     cur = db.execute(
         "INSERT INTO lang_word_versions (lang_word_id, version) VALUES (?, 1)",
         (lang_word_id,),
@@ -1066,7 +1082,7 @@ def list_temporary_writings():
 def apply_create_lang_words(writing_id: int):
     """
     Apply a temporary writing:
-      - create child lang words (themes) under the selected parent word's *latest* version (or v1).
+      - create a NEW version of the selected parent word and link ONLY the newly generated themes to that new parent version.
       - create child_words (orbiting phrases) under each created theme's version (v1).
 
     Expected writing JSON:
@@ -1085,7 +1101,7 @@ def apply_create_lang_words(writing_id: int):
         abort(400, description="Wrong prompt_type for this apply endpoint.")
 
     parent_lang_word_id = int(wr["parent_lang_word_id"])
-    parent_version_id = ensure_word_has_v1(db, parent_lang_word_id)
+    parent_version_id = create_next_version(db, parent_lang_word_id)
 
     try:
         payload = json.loads(wr["text"] or "{}")
@@ -1105,10 +1121,20 @@ def apply_create_lang_words(writing_id: int):
         if not theme_word:
             continue
 
-        # Create child lang word
-        cur = db.execute("INSERT INTO lang_words (word) VALUES (?)", (theme_word,))
-        child_lang_word_id = int(cur.lastrowid)
-        child_version_id = ensure_word_has_v1(db, child_lang_word_id)
+        # Create or reuse child lang word (lang_words.word is UNIQUE)
+        existing = db.execute(
+            "SELECT id FROM lang_words WHERE word=?",
+            (theme_word,),
+        ).fetchone()
+
+        if existing is not None:
+            child_lang_word_id = int(existing["id"])
+        else:
+            cur = db.execute("INSERT INTO lang_words (word) VALUES (?)", (theme_word,))
+            child_lang_word_id = int(cur.lastrowid)
+
+        # Create a NEW version for an existing theme word so orbiting phrases don't mutate old versions
+        child_version_id = create_next_version(db, child_lang_word_id) if existing is not None else ensure_word_has_v1(db, child_lang_word_id)
 
         # Link parent version -> child lang word
         db.execute(
