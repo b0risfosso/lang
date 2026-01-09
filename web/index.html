@@ -124,24 +124,24 @@
 
     /* When list is visible, stop animation words from showing/clicking */
     body.list-mode #word-layer { display: none; }
+
+    .nav {
+  display: flex;
+  gap: 1.5rem; /* adjust spacing */
+}
+
   </style>
 </head>
 <body>
-  <div id="word-layer" aria-hidden="true"></div>
-
-  <!-- Static list container -->
-  <section id="word-list" aria-label="Lang list">
-    <h2>langs</h2>
-    <div class="grid" id="word-list-grid"></div>
-    <div class="muted" id="word-list-meta"></div>
-  </section>
-
-  <button id="list-toggle-btn" type="button" aria-label="Toggle word list">☰</button>
-  <button id="sentences-btn" type="button" aria-label="Open sentences">ls</button>
-  <button id="add-word-btn" type="button" aria-label="Add lang word">＋</button>
-
   <main>
-    <p><a href="lang.html">lang</a> <a href="write.html">write</a> <a href="https://github.com/b0risfosso/lang" target="_blank" rel="noopener noreferrer">by boris</a></p>
+    <p class="nav">
+      <a href="lang.html">lang</a>
+      <a href="write.html">write</a>
+      <a href="https://github.com/b0risfosso/lang" target="_blank" rel="noopener noreferrer">
+        by boris
+      </a>
+    </p>
+
   </main>
 </body>
 </html>
