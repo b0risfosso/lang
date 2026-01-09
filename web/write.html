@@ -635,7 +635,7 @@
 
     async function loadSentenceMode() {
       sentenceLangsRoot.innerHTML = "";
-      sentenceSentencesRoot.innerHTML = "";
+      sentenceSentRoot.innerHTML = "";
       sentenceCreateStatus.textContent = "";
 
       sentenceLangsStatus.textContent = "loading…";
@@ -794,7 +794,7 @@
     }
 
     function renderSentenceList() {
-      sentenceSentencesRoot.innerHTML = "";
+      sentenceSentRoot.innerHTML = "";
 
       const selected = effectiveSelectedWordIds();
       const hasFilter = selected.size > 0;
@@ -837,7 +837,7 @@
 
         item.appendChild(a);
         item.appendChild(meta);
-        sentenceSentencesRoot.appendChild(item);
+        sentenceSentRoot.appendChild(item);
       }
     }
 
