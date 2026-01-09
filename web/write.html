@@ -45,6 +45,11 @@
     button:disabled { opacity:.5; cursor:not-allowed; }
     button:focus, input:focus, textarea:focus { outline: 2px solid currentColor; outline-offset: 2px; }
 
+    .small-btn {
+      font-size: .9rem;
+      padding: .25rem .5rem;
+    }
+
     .row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
     .pill { border:1px solid currentColor; border-radius:999px; padding:.15rem .6rem; font-size:.9rem; }
 
@@ -130,6 +135,13 @@
           <span class="muted" id="sentence-langs-meta">…</span>
         </div>
         <div class="muted" id="sentence-langs-status" style="margin-top:.5rem;">loading…</div>
+
+        <div class="row" style="margin-top:.5rem; gap:.5rem; flex-wrap:wrap;">
+          <span class="muted">selected:</span>
+          <span class="muted" id="sentence-selected-summary">none</span>
+          <button id="sentence-clear-selection" type="button" class="small-btn">clear</button>
+        </div>
+
         <div id="sentence-langs-root"></div>
       </div>
     </div>
@@ -175,7 +187,19 @@
           <span class="muted" id="sentence-sent-meta">…</span>
         </div>
         <div class="muted" id="sentence-sent-status" style="margin-top:.5rem;">loading…</div>
-        <div id="sentence-sentences-root"></div>
+
+        <!-- create sentence -->
+        <div class="panel" style="margin-top:.75rem;">
+          <div class="muted">create sentence (uses selected langs/words)</div>
+          <textarea id="sentence-new-text" rows="3" style="width:100%; margin-top:.35rem;"></textarea>
+          <div class="row" style="justify-content:space-between; margin-top:.5rem;">
+            <div class="muted" id="sentence-create-hint">select langs/words on the left (optional)</div>
+            <button id="sentence-create-btn" type="button">create</button>
+          </div>
+          <div class="muted" id="sentence-create-status" style="margin-top:.35rem;"></div>
+        </div>
+
+        <div id="sentence-sentences-root" style="margin-top:.75rem;"></div>
       </div>
     </div>
   </div>
@@ -230,6 +254,24 @@
     const sentenceSentMeta = document.getElementById("sentence-sent-meta");
     const sentenceSentStatus = document.getElementById("sentence-sent-status");
     const sentenceSentRoot = document.getElementById("sentence-sentences-root");
+
+    // ===== SENTENCE MODE STATE =====
+    const selectedSentenceLangIds = new Set();
+    const selectedSentenceWordIds = new Set();
+
+    // lang_id -> { id, name, wordIds: number[], words: Map(wordId -> wordText) }
+    let sentenceLangIndex = new Map();
+
+    // all sentences cached (raw objects from /api/lang_sentences)
+    let allLangSentences = [];
+
+    const sentenceSelectedSummary = document.getElementById("sentence-selected-summary");
+    const sentenceClearSelectionBtn = document.getElementById("sentence-clear-selection");
+
+    const sentenceNewText = document.getElementById("sentence-new-text");
+    const sentenceCreateBtn = document.getElementById("sentence-create-btn");
+    const sentenceCreateStatus = document.getElementById("sentence-create-status");
+    const sentenceCreateHint = document.getElementById("sentence-create-hint");
 
     let mode = "word"; // "word" | "sentence"
 
@@ -592,67 +634,210 @@
     }
 
     async function loadSentenceMode() {
-      // LHS: langs list
-      sentenceLangsStatus.textContent = "loading…";
       sentenceLangsRoot.innerHTML = "";
-      sentenceLangsMeta.textContent = "…";
+      sentenceSentencesRoot.innerHTML = "";
+      sentenceCreateStatus.textContent = "";
 
-      // RHS: sentences list
+      sentenceLangsStatus.textContent = "loading…";
       sentenceSentStatus.textContent = "loading…";
-      sentenceSentRoot.innerHTML = "";
-      sentenceSentMeta.textContent = "…";
 
-      try {
-        const [langsData, sentData] = await Promise.all([
-          apiGet("/api/langs"),
-          apiGet("/api/lang_sentences")
-        ]);
+      // 1) Load /api/write so left panel can show langs expandable to words
+      // (this is the same data you already use in word mode)
+      const writeData = await apiGet("/api/write");
 
-        const langs = Array.isArray(langsData.langs) ? langsData.langs : [];
-        sentenceLangsMeta.textContent = `${langs.length} lang(s)`;
-        sentenceLangsStatus.textContent = langs.length ? "" : "no langs.";
+      // Build index for sentence mode
+      sentenceLangIndex = new Map();
+      const langs = Array.isArray(writeData.langs) ? writeData.langs : [];
 
-        sentenceLangsRoot.innerHTML = "";
-        const ulL = document.createElement("ul");
-        for (const L of langs.sort((a,b) => String(a.name).localeCompare(String(b.name)))) {
-          const li = document.createElement("li");
-          const a = document.createElement("a");
-          a.href = `lang.html?id=${encodeURIComponent(L.id)}`;
-          a.target = "_blank";
-          a.rel = "noopener noreferrer";
-          a.textContent = `${L.name} (id ${L.id})`;
-          li.appendChild(a);
-          ulL.appendChild(li);
+      for (const L of langs) {
+        // L.lang_words is already present in /api/write response
+        const wordsArr = Array.isArray(L.lang_words) ? L.lang_words : [];
+        const wordIds = [];
+        const wordsMap = new Map();
+        for (const w of wordsArr) {
+          if (!w || typeof w.id !== "number") continue;
+          wordIds.push(w.id);
+          wordsMap.set(w.id, w.word || `word ${w.id}`);
         }
-        sentenceLangsRoot.appendChild(ulL);
+        sentenceLangIndex.set(L.id, {
+          id: L.id,
+          name: L.name,
+          wordIds,
+          words: wordsMap
+        });
+      }
 
-        const sentences = Array.isArray(sentData.sentences) ? sentData.sentences : [];
-        sentenceSentMeta.textContent = `${sentences.length} sentence(s)`;
-        sentenceSentStatus.textContent = sentences.length ? "" : "no sentences.";
+      sentenceLangsMeta.textContent = `${langs.length} lang(s)`;
+      sentenceLangsStatus.textContent = langs.length ? "" : "no langs.";
+      renderSentenceSelectionSummary();
+      renderSentenceLangTree();
 
-        sentenceSentRoot.innerHTML = "";
-        const ulS = document.createElement("ul");
-        for (const s of sentences) {
-          const li = document.createElement("li");
-          const a = document.createElement("a");
-          a.href = `lang_sentence.html?id=${encodeURIComponent(s.id)}`;
-          a.target = "_blank";
-          a.rel = "noopener noreferrer";
-          a.textContent = s.sentence || `(sentence ${s.id})`;
-          li.appendChild(a);
+      // 2) Load all sentences (right panel starts unfiltered)
+      const sdata = await apiGet("/api/lang_sentences"); // returns { sentences: [...] }
+      allLangSentences = Array.isArray(sdata.sentences) ? sdata.sentences : [];
 
-          const meta = document.createElement("span");
-          meta.className = "muted";
-          const ids = Array.isArray(s.lang_word_ids) ? s.lang_word_ids.join(", ") : "";
-          meta.textContent = ids ? ` — words: ${ids}` : "";
-          li.appendChild(meta);
+      sentenceSentMeta.textContent = `${allLangSentences.length} sentence(s)`;
+      sentenceSentStatus.textContent = allLangSentences.length ? "" : "no sentences.";
+      renderSentenceList();
+    }
 
-          ulS.appendChild(li);
+    function renderSentenceSelectionSummary() {
+      const a = selectedSentenceLangIds.size;
+      const b = selectedSentenceWordIds.size;
+      sentenceSelectedSummary.textContent =
+        (a || b) ? `${a} lang(s), ${b} word(s)` : "none";
+
+      // helpful hint on right panel
+      sentenceCreateHint.textContent =
+        (a || b) ? `will create using ${a} lang(s) and ${b} word(s)` : "select langs/words on the left (optional)";
+    }
+
+    function effectiveSelectedWordIds() {
+      // union of explicitly selected words + words from selected langs
+      const out = new Set([...selectedSentenceWordIds]);
+      for (const langId of selectedSentenceLangIds) {
+        const L = sentenceLangIndex.get(langId);
+        if (!L) continue;
+        for (const wid of L.wordIds) out.add(wid);
+      }
+      return out;
+    }
+
+    function renderSentenceLangTree() {
+      sentenceLangsRoot.innerHTML = "";
+
+      const langs = [...sentenceLangIndex.values()].sort((a, b) => {
+        return (a.name || "").localeCompare(b.name || "") || (a.id - b.id);
+      });
+
+      for (const L of langs) {
+        const wrap = document.createElement("details");
+        wrap.className = "item";
+
+        const summary = document.createElement("summary");
+        summary.className = "row";
+        summary.style.justifyContent = "space-between";
+
+        const left = document.createElement("div");
+        left.className = "row";
+        left.style.gap = ".5rem";
+
+        // lang checkbox
+        const langCb = document.createElement("input");
+        langCb.type = "checkbox";
+        langCb.checked = selectedSentenceLangIds.has(L.id);
+        langCb.addEventListener("click", (e) => e.stopPropagation());
+        langCb.addEventListener("change", () => {
+          if (langCb.checked) selectedSentenceLangIds.add(L.id);
+          else selectedSentenceLangIds.delete(L.id);
+          renderSentenceSelectionSummary();
+          renderSentenceList();
+        });
+
+        const title = document.createElement("strong");
+        title.textContent = L.name || `lang ${L.id}`;
+
+        const counts = document.createElement("span");
+        counts.className = "muted";
+        counts.textContent = `— ${L.wordIds.length} word(s)`;
+
+        left.appendChild(langCb);
+        left.appendChild(title);
+        left.appendChild(counts);
+
+        summary.appendChild(left);
+        wrap.appendChild(summary);
+
+        // words list (checkboxes)
+        const wordsBox = document.createElement("div");
+        wordsBox.style.marginTop = ".5rem";
+
+        for (const wid of L.wordIds) {
+          const row = document.createElement("div");
+          row.className = "row";
+          row.style.gap = ".5rem";
+          row.style.margin = ".15rem 0";
+
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.checked = selectedSentenceWordIds.has(wid);
+          cb.addEventListener("change", () => {
+            if (cb.checked) selectedSentenceWordIds.add(wid);
+            else selectedSentenceWordIds.delete(wid);
+            renderSentenceSelectionSummary();
+            renderSentenceList();
+          });
+
+          const label = document.createElement("span");
+          label.textContent = L.words.get(wid) || `word ${wid}`;
+
+          // optional: open the word details in new tab
+          const open = document.createElement("a");
+          open.href = `lang_word.html?id=${encodeURIComponent(wid)}`; // note: if your app expects version_id, remove this
+          open.target = "_blank";
+          open.rel = "noopener noreferrer";
+          open.className = "muted";
+          open.textContent = "open";
+          open.style.borderBottom = "none";
+          open.style.marginLeft = "auto";
+
+          row.appendChild(cb);
+          row.appendChild(label);
+          row.appendChild(open);
+
+          wordsBox.appendChild(row);
         }
-        sentenceSentRoot.appendChild(ulS);
-      } catch (e) {
-        sentenceLangsStatus.textContent = e.message || String(e);
-        sentenceSentStatus.textContent = e.message || String(e);
+
+        wrap.appendChild(wordsBox);
+        sentenceLangsRoot.appendChild(wrap);
+      }
+    }
+
+    function renderSentenceList() {
+      sentenceSentencesRoot.innerHTML = "";
+
+      const selected = effectiveSelectedWordIds();
+      const hasFilter = selected.size > 0;
+
+      let visible = allLangSentences;
+
+      if (hasFilter) {
+        visible = allLangSentences.filter(s => {
+          const ids = Array.isArray(s.lang_word_ids) ? s.lang_word_ids : [];
+          // filter rule: show sentences that contain ANY selected word id
+          for (const wid of ids) {
+            if (selected.has(wid)) return true;
+          }
+          return false;
+        });
+      }
+
+      sentenceSentMeta.textContent = `${visible.length} sentence(s)${hasFilter ? " (filtered)" : ""}`;
+
+      if (!visible.length) {
+        sentenceSentStatus.textContent = hasFilter ? "no matching sentences." : "no sentences.";
+        return;
+      }
+      sentenceSentStatus.textContent = "";
+
+      for (const s of visible) {
+        const item = document.createElement("div");
+        item.className = "item";
+
+        const a = document.createElement("a");
+        a.href = `lang_sentence.html?id=${encodeURIComponent(s.id)}`;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = s.sentence || `(sentence ${s.id})`;
+
+        const meta = document.createElement("div");
+        meta.className = "muted";
+        const n = Array.isArray(s.lang_word_ids) ? s.lang_word_ids.length : 0;
+        meta.textContent = `${n} word(s)`;
+
+        item.appendChild(a);
+        item.appendChild(meta);
+        sentenceSentencesRoot.appendChild(item);
       }
     }
 
@@ -686,6 +871,52 @@
 
       modeWordBtn.addEventListener("click", () => setMode("word"));
       modeSentenceBtn.addEventListener("click", () => setMode("sentence"));
+
+      sentenceClearSelectionBtn.addEventListener("click", () => {
+        selectedSentenceLangIds.clear();
+        selectedSentenceWordIds.clear();
+        renderSentenceSelectionSummary();
+        renderSentenceLangTree();   // re-render checkboxes
+        renderSentenceList();       // unfilter -> show all
+      });
+
+      sentenceCreateBtn.addEventListener("click", async () => {
+        sentenceCreateStatus.textContent = "";
+        const sentence = (sentenceNewText.value || "").trim();
+        if (!sentence) {
+          sentenceCreateStatus.textContent = "enter a sentence first.";
+          return;
+        }
+
+        const lang_ids = [...selectedSentenceLangIds];
+        const lang_word_ids = [...selectedSentenceWordIds];
+
+        try {
+          sentenceCreateBtn.disabled = true;
+          sentenceCreateStatus.textContent = "creating…";
+
+          // NOTE: this requires the backend change you asked for earlier:
+          // POST /api/lang_sentences accepts lang_ids and/or lang_word_ids.
+          const created = await apiPost("/api/lang_sentences", {
+            sentence,
+            lang_ids,
+            lang_word_ids
+          });
+
+          sentenceNewText.value = "";
+          sentenceCreateStatus.textContent = `created (#${created.id})`;
+
+          // refresh sentences and re-render (keep filter/selection intact)
+          const sdata = await apiGet("/api/lang_sentences");
+          allLangSentences = Array.isArray(sdata.sentences) ? sdata.sentences : [];
+          renderSentenceList();
+
+        } catch (e) {
+          sentenceCreateStatus.textContent = e.message || "failed to create";
+        } finally {
+          sentenceCreateBtn.disabled = false;
+        }
+      });
 
       await loadRead();
       setMode("word");
