@@ -122,7 +122,10 @@
       <div class="panel">
         <div class="row" style="justify-content:space-between;">
           <strong>langs</strong>
-          <span class="muted" id="read-meta">…</span>
+          <div class="row" style="gap:.5rem;">
+            <button id="create-lang-btn" type="button" class="small-btn">create lang</button>
+            <span class="muted" id="read-meta">…</span>
+          </div>
         </div>
         <div class="muted" id="read-status" style="margin-top:.5rem;">loading…</div>
         <div id="read-root"></div>
@@ -244,6 +247,8 @@
     const modePill = document.getElementById("mode-pill");
     const modeWordBtn = document.getElementById("mode-word");
     const modeSentenceBtn = document.getElementById("mode-sentence");
+
+    const createLangBtn = document.getElementById("create-lang-btn");
 
     const sentenceLangsPanel = document.getElementById("sentence-langs-panel");
     const sentenceLangsMeta = document.getElementById("sentence-langs-meta");
@@ -868,6 +873,27 @@
       refreshReadBtn.addEventListener("click", loadRead);
       refreshWriteBtn.addEventListener("click", loadWritings);
       runBtn.addEventListener("click", enqueue);
+
+      createLangBtn.addEventListener("click", async () => {
+        const name = prompt("Enter lang name:");
+        if (!name || !name.trim()) return;
+
+        try {
+          createLangBtn.disabled = true;
+          createLangBtn.textContent = "creating…";
+
+          await apiPost("/api/langs", { name: name.trim() });
+
+          // refresh the lang tree
+          await loadRead();
+
+        } catch (e) {
+          alert(`Failed to create lang: ${e.message || e}`);
+        } finally {
+          createLangBtn.disabled = false;
+          createLangBtn.textContent = "create lang";
+        }
+      });
 
       modeWordBtn.addEventListener("click", () => setMode("word"));
       modeSentenceBtn.addEventListener("click", () => setMode("sentence"));
