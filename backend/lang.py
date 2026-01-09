@@ -481,7 +481,7 @@ def ensure_schema(db: sqlite3.Connection) -> None:
     db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_prompt_type ON star_stuff(prompt_type);")
     db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_created_at ON star_stuff(created_at);")
 
-db.commit()
+    db.commit()
 
 
 @app.before_request
