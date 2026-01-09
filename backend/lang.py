@@ -1545,9 +1545,6 @@ def _process_one_task() -> None:
         parent_id = int(task["parent_lang_word_id"])
         payload = _json_loads_safe(task["payload"], {})
 
-        if task_type != "create_lang_words":
-            raise ValueError(f"Unknown task_type: {task_type}")
-
         modifier = (payload.get("modifier") or "").strip() or None
 
         
