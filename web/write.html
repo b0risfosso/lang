@@ -343,38 +343,23 @@
 
     for (const R of roots) {
       if (searchTerm && !R.word.toLowerCase().includes(searchTerm)) continue;
-      if (searchTerm && !R.word.toLowerCase().includes(searchTerm)) continue;
-
-      // Select button outside details
-      const selectRow = document.createElement("div");
-      selectRow.className = "row";
-      selectRow.style.marginBottom = "4px";
-
-      const selectBtn = document.createElement("button");
-      selectBtn.type = "button";
-      selectBtn.textContent = "select parent";
-      selectBtn.onclick = () => setSelectedParent(R.lang_word_id, R.word);
-      selectRow.appendChild(selectBtn);
-
-      host.appendChild(selectRow);
 
       const d = document.createElement("details");
       d.open = false;
 
       const s = document.createElement("summary");
       s.innerHTML = `<strong>${escapeHtml(R.word)}</strong> <span class="muted tiny">(id ${R.lang_word_id})</span>`;
-      d.appendChild(s);
 
-      const btnRow = document.createElement("div");
-      btnRow.className = "row";
-      btnRow.style.marginTop = "8px";
-
+      // Select word button on summary line for sentence mode
       if (mode === "sentence") {
         const toggleBtn = document.createElement("button");
         toggleBtn.type = "button";
         const key = R.lang_word_id;
         const isOn = selectedSentenceWordIds.has(key);
-        toggleBtn.textContent = isOn ? "unselect word" : "select word";
+        toggleBtn.textContent = isOn ? "✓" : "+";
+        toggleBtn.style.padding = "2px 8px";
+        toggleBtn.style.borderRadius = "999px";
+        toggleBtn.style.marginLeft = "8px";
         toggleBtn.onclick = () => {
           if (selectedSentenceWordIds.has(key)) selectedSentenceWordIds.delete(key);
           else selectedSentenceWordIds.add(key);
@@ -382,8 +367,14 @@
           renderReadTree();
           renderSentences();
         };
-        btnRow.appendChild(toggleBtn);
+        s.appendChild(toggleBtn);
       }
+
+      d.appendChild(s);
+
+      const btnRow = document.createElement("div");
+      btnRow.className = "row";
+      btnRow.style.marginTop = "8px";
 
       d.appendChild(btnRow);
 
