@@ -73,6 +73,52 @@ def log_llm_usage(ts: str, app: str, model: str, endpoint: str, email: Optional[
         """,
         (ts, app, model, endpoint, email, request_id, tokens_in, tokens_out, total_tokens, duration_ms, cost_usd, meta)
     )
+
+    # Update totals_by_model
+    db.execute(
+        """
+        INSERT INTO totals_by_model (model, tokens_in, tokens_out, total_tokens, calls, first_ts, last_ts)
+        VALUES (?, ?, ?, ?, 1, ?, ?)
+        ON CONFLICT(model) DO UPDATE SET
+            tokens_in = tokens_in + excluded.tokens_in,
+            tokens_out = tokens_out + excluded.tokens_out,
+            total_tokens = total_tokens + excluded.total_tokens,
+            calls = calls + 1,
+            last_ts = excluded.last_ts
+        """,
+        (model, tokens_in, tokens_out, total_tokens, ts, ts)
+    )
+
+    # Update totals_daily
+    day = ts.split('T')[0]  # YYYY-MM-DD
+    db.execute(
+        """
+        INSERT INTO totals_daily (day, model, tokens_in, tokens_out, total_tokens, calls)
+        VALUES (?, ?, ?, ?, ?, 1)
+        ON CONFLICT(day, model) DO UPDATE SET
+            tokens_in = tokens_in + excluded.tokens_in,
+            tokens_out = tokens_out + excluded.tokens_out,
+            total_tokens = total_tokens + excluded.total_tokens,
+            calls = calls + 1
+        """,
+        (day, model, tokens_in, tokens_out, total_tokens)
+    )
+
+    # Update totals_all_time
+    db.execute(
+        """
+        INSERT INTO totals_all_time (id, tokens_in, tokens_out, total_tokens, calls, last_ts)
+        VALUES (1, ?, ?, ?, 1, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            tokens_in = tokens_in + excluded.tokens_in,
+            tokens_out = tokens_out + excluded.tokens_out,
+            total_tokens = total_tokens + excluded.total_tokens,
+            calls = calls + 1,
+            last_ts = excluded.last_ts
+        """,
+        (tokens_in, tokens_out, total_tokens, ts)
+    )
+
     db.commit()
     db.close()
 
