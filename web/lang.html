@@ -240,7 +240,7 @@
       const ids = Array.isArray(s.lang_word_ids) ? s.lang_word_ids : [];
       card.innerHTML = `
         <div class="row" style="justify-content:space-between;">
-          <div><strong>#${s.id}</strong> <span class="muted tiny">updated ${escapeHtml(s.updated_at || "")}</span></div>
+          <div><strong><a href="sentence.html?sentence_id=${s.id}">#${s.id}</a></strong> <span class="muted tiny">updated ${escapeHtml(s.updated_at || "")}</span></div>
           <span class="pill">${ids.length} word(s)</span>
         </div>
         <div style="margin-top:8px;">${escapeHtml(s.sentence || "")}</div>
