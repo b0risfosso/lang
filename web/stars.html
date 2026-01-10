@@ -34,7 +34,7 @@
 <header>
   <div class="row">
     <h1>stars</h1>
-    <span class="pill" id="childPill">child_word_id: …</span>
+    <span class="pill" id="adminStatus">admin: unknown</span>
   </div>
   <nav class="tiny">
     <a href="./">home</a>
@@ -45,32 +45,26 @@
 
 <main>
   <div class="grid">
+    <!-- LEFT PANEL: Word Tree -->
     <section class="card">
       <div class="row" style="justify-content:space-between;">
-        <strong>context</strong>
-        <span class="muted tiny" id="adminStatus">admin: unknown</span>
+        <strong>word tree</strong>
+        <button id="refreshTreeBtn" type="button">refresh</button>
       </div>
+      <div id="wordTree" style="margin-top:10px;"></div>
+    </section>
 
-      <div style="margin-top:10px;">
-        <div class="muted tiny">lang name</div>
-        <div><strong id="langName">—</strong></div>
+    <!-- RIGHT PANEL: Selected Child Words -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between;">
+        <strong>selected child words</strong>
+        <span class="muted tiny" id="selectedCount">0 selected</span>
       </div>
+      <div id="selectedPanel" style="margin-top:10px;"></div>
 
-      <div style="margin-top:10px;">
-        <div class="muted tiny">lang word</div>
-        <div><strong id="langWord">—</strong> <span class="muted tiny" id="langWordMeta"></span></div>
-      </div>
-
-      <div style="margin-top:10px;">
-        <div class="muted tiny">child word</div>
-        <div class="row">
-          <strong id="childWord">—</strong>
-          <a id="childLink" class="muted tiny" target="_blank" rel="noopener noreferrer" style="display:none;">source</a>
-        </div>
-      </div>
-
+      <!-- Enqueue Section -->
       <details style="margin-top:14px;" open>
-        <summary><strong>star stuff</strong> <span class="muted tiny">generate LLM artifacts into the queue</span></summary>
+        <summary><strong>enqueue star stuff</strong> <span class="muted tiny">for selected child words</span></summary>
 
         <div style="margin-top:10px;">
           <div class="muted tiny">optional modifier</div>
@@ -87,8 +81,7 @@
         </div>
 
         <div class="row" style="margin-top:12px;">
-          <button id="runBtn" type="button" disabled>enqueue selected</button>
-          <button id="refreshBtn" type="button">refresh</button>
+          <button id="enqueueBtn" type="button" disabled>enqueue for selected</button>
           <span class="pill" id="taskPill">idle</span>
         </div>
 
@@ -97,19 +90,15 @@
         </div>
       </details>
     </section>
-
-    <section class="card">
-      <div class="row" style="justify-content:space-between;">
-        <strong>existing star stuff</strong>
-        <span class="muted tiny" id="meta">…</span>
-      </div>
-      <div id="stuff" style="margin-top:10px;"></div>
-    </section>
   </div>
 </main>
 
 <script>
   const $ = (id) => document.getElementById(id);
+
+  let roots = [];
+  let selectedChildWordIds = new Set();
+  let childWordData = new Map(); // id -> data from /api/stars
 
   function getAdminKey() { return localStorage.getItem("lang_admin_key") || ""; }
   function withAdminHeaders(h = {}) { const k = getAdminKey(); if (k) h["X-Admin-Key"] = k; return h; }
@@ -138,7 +127,7 @@
       .replaceAll('"',"&quot;").replaceAll("'","&#039;");
   }
 
-  function getChildWordId() {
+  function getUrlChildWordId() {
     const u = new URL(location.href);
     const v = u.searchParams.get("child_word_id");
     return v ? Number(v) : 0;
@@ -156,7 +145,6 @@
   }
 
   async function pollTask(taskId) {
-    $("taskPill").textContent = "running";
     while (true) {
       const t = await apiGet(`/api/tasks/${taskId}`);
       if (t.status === "done") return t;
@@ -165,38 +153,134 @@
     }
   }
 
-  async function loadPage() {
-    const childId = getChildWordId();
-    if (!childId) {
-      $("stuff").innerHTML = `<div class="card danger">Missing child_word_id in URL (expected ?child_word_id=...)</div>`;
-      $("runBtn").disabled = true;
+  async function loadRoots() {
+    roots = await apiGet("/api/write");
+    renderWordTree();
+  }
+
+  function renderWordTree() {
+    const host = $("wordTree");
+    host.innerHTML = "";
+
+    if (!Array.isArray(roots)) roots = [];
+
+    for (const R of roots) {
+      const d = document.createElement("details");
+      d.open = false;
+
+      const s = document.createElement("summary");
+      s.innerHTML = `<strong>${escapeHtml(R.word)}</strong> <span class="muted tiny">(parent id ${R.lang_word_id})</span>`;
+      d.appendChild(s);
+
+      // Child lang words
+      const childLangWords = Array.isArray(R.current_child_lang_words) ? R.current_child_lang_words : [];
+      if (childLangWords.length) {
+        const ul = document.createElement("ul");
+        for (const clw of childLangWords) {
+          const li = document.createElement("li");
+          li.innerHTML = `<strong>${escapeHtml(clw.word)}</strong> <span class="muted tiny">(id ${clw.lang_word_id})</span>`;
+          ul.appendChild(li);
+
+          // Now child words under this lang word
+          // I need to get child words for this lang word's latest version
+          // But /api/write gives child_lang_words, but not their child_words directly.
+          // The roots have versions, each version has child_words.
+          // For current, it's R.versions[0].child_words if exists.
+          const latest = R.versions && R.versions.length ? R.versions[0] : null;
+          if (latest && Array.isArray(latest.child_words)) {
+            const subUl = document.createElement("ul");
+            for (const cw of latest.child_words) {
+              const subLi = document.createElement("li");
+              const label = document.createElement("label");
+              label.style.display = "flex";
+              label.style.alignItems = "center";
+              label.style.gap = "8px";
+
+              const checkbox = document.createElement("input");
+              checkbox.type = "checkbox";
+              checkbox.value = cw.id;
+              checkbox.checked = selectedChildWordIds.has(cw.id);
+              checkbox.onchange = () => {
+                if (checkbox.checked) {
+                  selectedChildWordIds.add(cw.id);
+                } else {
+                  selectedChildWordIds.delete(cw.id);
+                }
+                updateSelectedCount();
+                renderSelectedPanel();
+              };
+
+              const span = document.createElement("span");
+              span.innerHTML = `<strong>${escapeHtml(cw.word)}</strong> <span class="muted tiny">(id ${cw.id})</span>`;
+
+              label.appendChild(checkbox);
+              label.appendChild(span);
+              subLi.appendChild(label);
+              subUl.appendChild(subLi);
+            }
+            li.appendChild(subUl);
+          }
+        }
+        d.appendChild(ul);
+      }
+
+      host.appendChild(d);
+    }
+  }
+
+  function updateSelectedCount() {
+    $("selectedCount").textContent = `${selectedChildWordIds.size} selected`;
+    $("enqueueBtn").disabled = selectedChildWordIds.size === 0 || !getAdminKey();
+  }
+
+  async function renderSelectedPanel() {
+    const host = $("selectedPanel");
+    host.innerHTML = "";
+
+    if (selectedChildWordIds.size === 0) {
+      host.innerHTML = `<div class="muted tiny">Select child words from the left panel.</div>`;
       return;
     }
 
-    $("childPill").textContent = `child_word_id: ${childId}`;
-    const data = await apiGet(`/api/stars?child_word_id=${encodeURIComponent(childId)}`);
+    for (const childId of selectedChildWordIds) {
+      if (!childWordData.has(childId)) {
+        try {
+          const data = await apiGet(`/api/stars?child_word_id=${encodeURIComponent(childId)}`);
+          childWordData.set(childId, data);
+        } catch (e) {
+          console.error(`Failed to load data for child_word ${childId}:`, e);
+          continue;
+        }
+      }
 
-    $("langName").textContent = data.lang_name && data.lang_name.word ? data.lang_name.word : "—";
-    $("langWord").textContent = data.lang_word.word || "—";
-    $("langWordMeta").textContent = data.lang_word.version ? `(v${data.lang_word.version})` : "";
-    $("childWord").textContent = data.child_word.word || "—";
+      const data = childWordData.get(childId);
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.marginBottom = "10px";
 
-    if (data.child_word.link) {
-      $("childLink").style.display = "";
-      $("childLink").href = data.child_word.link;
-      $("childLink").textContent = "source";
-    } else {
-      $("childLink").style.display = "none";
+      card.innerHTML = `
+        <div class="row" style="justify-content:space-between;">
+          <div>
+            <strong>${escapeHtml(data.child_word.word || "—")}</strong>
+            <span class="muted tiny">(id ${data.child_word.id})</span>
+            ${data.child_word.link ? `<a href="${escapeHtml(data.child_word.link)}" target="_blank" rel="noopener noreferrer" class="muted tiny">source</a>` : ""}
+          </div>
+          <div class="muted tiny">${escapeHtml(data.lang_name.word || "—")} / ${escapeHtml(data.lang_word.word || "—")}</div>
+        </div>
+        <div id="stuff-${childId}" style="margin-top:10px;"></div>
+      `;
+
+      renderStuffForChild(card.querySelector(`#stuff-${childId}`), data.star_stuff || []);
+      host.appendChild(card);
     }
-
-    renderStuff(data.star_stuff || []);
   }
 
-  function renderStuff(items) {
-    $("meta").textContent = `${items.length} item(s)`;
-    const host = $("stuff");
+  function renderStuffForChild(host, items) {
     host.innerHTML = "";
-    if (!items.length) { host.innerHTML = `<div class="muted tiny">No star stuff yet for this child word.</div>`; return; }
+    if (!items.length) {
+      host.innerHTML = `<div class="muted tiny">No star stuff yet.</div>`;
+      return;
+    }
 
     const groups = {};
     for (const it of items) {
@@ -212,10 +296,10 @@
       d.appendChild(s);
 
       for (const it of arr) {
-        const card = document.createElement("div");
-        card.className = "card";
-        card.style.marginTop = "10px";
-        card.innerHTML = `
+        const itemCard = document.createElement("div");
+        itemCard.className = "card";
+        itemCard.style.marginTop = "10px";
+        itemCard.innerHTML = `
           <div class="row" style="justify-content:space-between;">
             <div><strong>#${it.id}</strong> <span class="muted tiny">task ${it.task_id ?? "—"} • ${escapeHtml(it.created_at || "")}</span></div>
             ${it.modifier ? `<span class="pill">modifier</span>` : `<span class="pill muted">no modifier</span>`}
@@ -223,49 +307,69 @@
           ${it.modifier ? `<div class="muted tiny" style="margin-top:6px;">${escapeHtml(it.modifier)}</div>` : ""}
           <pre>${escapeHtml(it.text || "")}</pre>
         `;
-        d.appendChild(card);
+        d.appendChild(itemCard);
       }
       host.appendChild(d);
     }
   }
 
-  $("refreshBtn").onclick = () => loadPage();
-
-  $("runBtn").onclick = async () => {
-    const childId = getChildWordId();
+  async function enqueueForSelected() {
     const prompts = selectedPrompts();
     if (!prompts.length) { alert("Select at least one prompt."); return; }
+    if (selectedChildWordIds.size === 0) { alert("Select at least one child word."); return; }
+
+    const modifier = ($("modifierInput").value || "").trim();
 
     try {
-      $("runBtn").disabled = true;
-      $("taskPill").textContent = "queued";
-      const res = await apiPost("/api/star_stuff/tasks", {
-        child_word_id: childId,
-        prompts,
-        modifier: ($("modifierInput").value || "").trim()
-      }, { admin: true });
+      $("enqueueBtn").disabled = true;
+      $("taskPill").textContent = "enqueuing";
 
-      const ids = res.task_ids || [];
-      for (const id of ids) await pollTask(id);
+      const taskIds = [];
+      for (const childId of selectedChildWordIds) {
+        const res = await apiPost("/api/star_stuff/tasks", {
+          child_word_id: childId,
+          prompts,
+          modifier
+        }, { admin: true });
+        taskIds.push(...(res.task_ids || []));
+      }
+
+      for (const id of taskIds) await pollTask(id);
       $("taskPill").textContent = "done";
-      await loadPage();
+
+      // Refresh data for selected
+      for (const childId of selectedChildWordIds) {
+        childWordData.delete(childId);
+      }
+      await renderSelectedPanel();
     } catch (e) {
       $("taskPill").textContent = "error";
       alert(String(e.message || e));
     } finally {
-      $("runBtn").disabled = !(getAdminKey());
+      updateSelectedCount();
     }
-  };
+  }
 
   async function boot() {
     await refreshAdminStatus();
-    $("runBtn").disabled = !(getAdminKey());
-    await loadPage();
+    await loadRoots();
+
+    const urlChildId = getUrlChildWordId();
+    if (urlChildId) {
+      selectedChildWordIds.add(urlChildId);
+      updateSelectedCount();
+      await renderSelectedPanel();
+    }
+
+    updateSelectedCount();
   }
+
+  $("refreshTreeBtn").onclick = () => loadRoots();
+  $("enqueueBtn").onclick = () => enqueueForSelected();
 
   boot().catch(err => {
     console.error(err);
-    $("stuff").innerHTML = `<div class="card danger">${escapeHtml(String(err.message || err))}</div>`;
+    $("selectedPanel").innerHTML = `<div class="card danger">${escapeHtml(String(err.message || err))}</div>`;
   });
 </script>
 </body>
