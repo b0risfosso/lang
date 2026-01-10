@@ -23,6 +23,7 @@ import sqlite3
 import threading
 import time
 import traceback
+from datetime import datetime
 from typing import Any, Optional
 
 from functools import wraps
@@ -43,12 +44,34 @@ except Exception:
 
 DB_DIR = "/var/www/site/data"
 LANG_DB_PATH = os.path.join(DB_DIR, "lang.db")
+LLM_USAGE_DB_PATH = os.path.join(DB_DIR, "llm_usage.db")
 
 ADMIN_KEY_ENV = "LANG_ADMIN_KEY"
 ADMIN_KEY_DEFAULT = "your-secret"  # fallback if env not set
 
+def check_admin() -> bool:
+    key = request.headers.get("X-Admin-Key")
+    return key and key == getAdminKey()
+
 # LLM config
 LLM_MODEL_CREATE_LANG_WORDS = os.environ.get("LLM_MODEL_CREATE_LANG_WORDS", "gpt-5-mini-2025-08-07")
+
+
+# ---------------------------------------------------------------------
+# LLM Usage Logging
+# ---------------------------------------------------------------------
+
+def log_llm_usage(ts: str, app: str, model: str, endpoint: str, email: Optional[str], request_id: Optional[str], tokens_in: int, tokens_out: int, total_tokens: int, duration_ms: int, cost_usd: float, meta: Optional[str]) -> None:
+    db = sqlite3.connect(LLM_USAGE_DB_PATH)
+    db.execute(
+        """
+        INSERT INTO usage_events (ts, app, model, endpoint, email, request_id, tokens_in, tokens_out, total_tokens, duration_ms, cost_usd, meta)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (ts, app, model, endpoint, email, request_id, tokens_in, tokens_out, total_tokens, duration_ms, cost_usd, meta)
+    )
+    db.commit()
+    db.close()
 
 
 # ---------------------------------------------------------------------
@@ -1570,7 +1593,7 @@ def _process_one_task() -> None:
                 MODIFIER=modifier or "none",
             )
 
-            result_text, used_model = call_openai_text(prompt)
+            result_text, used_model, usage = call_openai_text(prompt)
 
             db.execute(
                 """
@@ -1581,6 +1604,22 @@ def _process_one_task() -> None:
             )
             db.execute("UPDATE llm_tasks SET status='done', error=NULL, updated_at=datetime('now') WHERE id=?", (task_id,))
             db.commit()
+
+            # Log LLM usage
+            log_llm_usage(
+                ts=datetime.now().isoformat(),
+                app="lang",
+                model=used_model,
+                endpoint="/star_stuff",
+                email=None,
+                request_id=str(task_id),
+                tokens_in=usage.input_tokens,
+                tokens_out=usage.output_tokens,
+                total_tokens=usage.total_tokens,
+                duration_ms=0,
+                cost_usd=0.0,
+                meta=json.dumps({"task": task_type, "child_word_id": child_word_id, "modifier": modifier})
+            )
             return
 
         if task_type != "create_lang_words":
@@ -1592,7 +1631,7 @@ def _process_one_task() -> None:
         primary_phrase = pr["word"]
 
         # Run LLM and store result
-        plan = _run_create_lang_words_llm(primary_phrase=primary_phrase, optional_modifier=modifier)
+        plan, usage = _run_create_lang_words_llm(primary_phrase=primary_phrase, optional_modifier=modifier)
 
         cur = db.execute(
             """
@@ -1616,9 +1655,24 @@ def _process_one_task() -> None:
             SET status='done', result_writing_id=?
             WHERE id=?
             """,
-            (writing_id, task_id),
         )
         db.commit()
+
+        # Log LLM usage
+        log_llm_usage(
+            ts=datetime.now().isoformat(),
+            app="lang",
+            model=LLM_MODEL_CREATE_LANG_WORDS,
+            endpoint="/create_lang_words",
+            email=None,
+            request_id=str(task_id),
+            tokens_in=usage.input_tokens,
+            tokens_out=usage.output_tokens,
+            total_tokens=usage.total_tokens,
+            duration_ms=0,
+            cost_usd=0.0,
+            meta=json.dumps({"task": "create_lang_words", "primary_phrase": primary_phrase, "modifier": modifier})
+        )
 
     except Exception as e:
         db.execute(
@@ -1630,13 +1684,14 @@ def _process_one_task() -> None:
         db.close()
 
 
-def _run_create_lang_words_llm(primary_phrase: str, optional_modifier: Optional[str]) -> dict[str, Any]:
+def _run_create_lang_words_llm(primary_phrase: str, optional_modifier: Optional[str]) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Produce a plan:
       { "themes": [ { "theme": "...", "orbiting_phrases": ["...", ...] }, ... ] }
 
     Uses OpenAI Responses API if openai package is installed and OPENAI_API_KEY is set.
     If not available, raises an error.
+    Returns (plan, usage)
     """
     if OpenAI is None:
         raise RuntimeError("openai package not installed in this environment.")
@@ -1701,13 +1756,13 @@ def _run_create_lang_words_llm(primary_phrase: str, optional_modifier: Optional[
     if not isinstance(plan.get("themes"), list):
         raise RuntimeError("LLM output 'themes' must be a list.")
 
-    return plan
+    return plan, resp.usage
 
 
-def call_openai_text(prompt: str) -> tuple[str, str]:
+def call_openai_text(prompt: str) -> tuple[str, str, dict[str, Any]]:
     """
     Call OpenAI to generate text from a prompt.
-    Returns (text, model_used)
+    Returns (text, model_used, usage_dict)
     """
     if OpenAI is None:
         raise RuntimeError("openai package not installed in this environment.")
@@ -1724,7 +1779,65 @@ def call_openai_text(prompt: str) -> tuple[str, str]:
     if not text_out:
         raise RuntimeError("LLM returned no text output.")
 
-    return text_out, LLM_MODEL_CREATE_LANG_WORDS
+    usage = resp.usage
+    return text_out, LLM_MODEL_CREATE_LANG_WORDS, usage
+
+
+@app.get("/api/admin/token_counts")
+def api_token_counts():
+    if not check_admin():
+        abort(403, description="Admin key required")
+
+    model = request.args.get("model")
+    if not model:
+        abort(400, description="Model parameter required")
+
+    db = sqlite3.connect(LLM_USAGE_DB_PATH)
+    db.row_factory = sqlite3.Row
+
+    # All time
+    total = db.execute("SELECT total_tokens, calls FROM totals_by_model WHERE model = ?", (model,)).fetchone()
+    all_time = {"total_tokens": total["total_tokens"] if total else 0, "calls": total["calls"] if total else 0}
+
+    # Daily
+    daily = db.execute("SELECT day, total_tokens, calls FROM totals_daily WHERE model = ? ORDER BY day DESC", (model,)).fetchall()
+    daily_list = [{"day": r["day"], "total_tokens": r["total_tokens"], "calls": r["calls"]} for r in daily]
+
+    db.close()
+    return jsonify({"model": model, "all_time": all_time, "daily": daily_list})
+
+
+@app.get("/api/admin/queue_state")
+def api_queue_state():
+    if not check_admin():
+        abort(403, description="Admin key required")
+
+    db = sqlite3.connect(LANG_DB_PATH)
+    db.row_factory = sqlite3.Row
+    counts = db.execute("SELECT status, COUNT(*) as count FROM llm_tasks GROUP BY status").fetchall()
+    queue = {r["status"]: r["count"] for r in counts}
+    db.close()
+    return jsonify(queue)
+
+
+@app.get("/api/admin/models")
+def api_models():
+    if not check_admin():
+        abort(403, description="Admin key required")
+
+    db = sqlite3.connect(LLM_USAGE_DB_PATH)
+    db.row_factory = sqlite3.Row
+    models = db.execute("SELECT DISTINCT model FROM totals_by_model ORDER BY model").fetchall()
+    model_list = [r["model"] for r in models]
+    db.close()
+    return jsonify(model_list)
+
+
+@app.get("/api/admin/ping")
+def api_admin_ping():
+    if not check_admin():
+        abort(403, description="Admin key required")
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------

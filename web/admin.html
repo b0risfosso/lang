@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>admin</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; line-height: 1.35; }
+    header { padding: 14px 16px; border-bottom: 1px solid color-mix(in oklab, currentColor 22%, transparent); display:flex; gap:12px; align-items:baseline; justify-content:space-between; }
+    header h1 { font-size: 18px; margin: 0; }
+    header nav a { margin-right: 10px; }
+    a { text-decoration: none; border-bottom: 1px solid currentColor; }
+
+    .wrap { padding: 16px; max-width: 1200px; margin: 0 auto; }
+    .panel { margin-bottom: 24px; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
+    .muted { opacity: .75; }
+    .pill { display:inline-block; border: 1px solid color-mix(in oklab, currentColor 60%, transparent); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+    button { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    input, select { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; }
+    details { border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 14px; padding: 10px 12px; margin: 10px 0; }
+    summary { cursor: pointer; user-select: none; }
+    ul { margin: 8px 0; padding-left: 18px; }
+    li { margin: 4px 0; }
+    .card { border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 14px; padding: 12px; margin: 10px 0; }
+    .danger { border-color: color-mix(in oklab, red 55%, currentColor 18%); }
+    pre { white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; font-size: 12px; opacity: .95; }
+    .tiny { font-size: 12px; }
+    code.inline { padding: 2px 6px; border-radius: 8px; border: 1px solid color-mix(in oklab, currentColor 18%, transparent); }
+
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+    th, td { padding: 8px; text-align: left; border-bottom: 1px solid color-mix(in oklab, currentColor 18%, transparent); }
+    th { font-weight: bold; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1>admin</h1>
+    <span class="pill" id="adminStatus">admin: unknown</span>
+  </div>
+  <nav class="tiny">
+    <a href="./">home</a>
+    <a href="write.html">write</a>
+    <a href="lang.html">sentences</a>
+    <a href="stars.html">stars</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <section class="panel">
+    <h2>Queue State</h2>
+    <div id="queueState">Loading...</div>
+  </section>
+
+  <section class="panel">
+    <h2>Token Counts</h2>
+    <div class="row">
+      <select id="modelSelect">
+        <option value="">Select model...</option>
+      </select>
+      <button id="loadTokensBtn">Load</button>
+    </div>
+    <div id="tokenCounts">Select a model to view token counts.</div>
+  </section>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  function getAdminKey() { return localStorage.getItem("lang_admin_key") || ""; }
+  function withAdminHeaders(h = {}) { const k = getAdminKey(); if (k) h["X-Admin-Key"] = k; return h; }
+
+  async function apiGet(url) {
+    const headers = { "Accept": "application/json" };
+    Object.assign(headers, withAdminHeaders());
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`GET ${url} failed (${res.status})`);
+    return await res.json();
+  }
+
+  async function refreshAdminStatus() {
+    const k = getAdminKey();
+    if (!k) { $("adminStatus").textContent = "admin: no key"; return false; }
+    try { await apiGet("/api/admin/ping"); $("adminStatus").textContent = "admin: ok"; return true; }
+    catch { $("adminStatus").textContent = "admin: invalid"; return false; }
+  }
+
+  async function loadQueueState() {
+    try {
+      const data = await apiGet("/api/admin/queue_state");
+      const html = Object.entries(data).map(([status, count]) => `<div class="pill">${status}: ${count}</div>`).join("");
+      $("queueState").innerHTML = html || "No tasks.";
+    } catch (e) {
+      $("queueState").innerHTML = `<div class="danger">${e.message}</div>`;
+    }
+  }
+
+  async function loadModels() {
+    // Assuming we can get models from totals_by_model
+    try {
+      const models = await apiGet("/api/admin/models");
+      const select = $("modelSelect");
+      select.innerHTML = '<option value="">Select model...</option>';
+      models.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m;
+        select.appendChild(opt);
+      });
+    } catch (e) {
+      console.error(e);
+      $("modelSelect").innerHTML = '<option value="">Error loading models</option>';
+    }
+  }
+
+  async function loadTokenCounts() {
+    const model = $("modelSelect").value;
+    if (!model) return;
+    try {
+      const data = await apiGet(`/api/admin/token_counts?model=${encodeURIComponent(model)}`);
+      let html = `<h3>All Time</h3><p>Total tokens: ${data.all_time.total_tokens}, Calls: ${data.all_time.calls}</p>`;
+      if (data.daily.length) {
+        html += `<h3>Daily</h3><table><thead><tr><th>Day</th><th>Total Tokens</th><th>Calls</th></tr></thead><tbody>`;
+        data.daily.forEach(d => {
+          html += `<tr><td>${d.day}</td><td>${d.total_tokens}</td><td>${d.calls}</td></tr>`;
+        });
+        html += `</tbody></table>`;
+      } else {
+        html += `<p>No daily data.</p>`;
+      }
+      $("tokenCounts").innerHTML = html;
+    } catch (e) {
+      $("tokenCounts").innerHTML = `<div class="danger">${e.message}</div>`;
+    }
+  }
+
+  // Init
+  refreshAdminStatus();
+  loadQueueState();
+  loadModels();
+
+  $("loadTokensBtn").onclick = loadTokenCounts;
+</script>
+</body>
+</html></content>
+<parameter name="filePath">/Users/b/fantasiagenesis/lang/web/admin.html
