@@ -6,35 +6,48 @@
   <title>stars</title>
   <style>
     :root { color-scheme: light dark; }
-    body { font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; margin: 0; line-height: 1.4; }
+    body { margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; line-height: 1.35; }
     header { padding: 14px 16px; border-bottom: 1px solid color-mix(in oklab, currentColor 22%, transparent); display:flex; gap:12px; align-items:baseline; justify-content:space-between; }
     header h1 { font-size: 18px; margin: 0; }
     header nav a { margin-right: 10px; }
     a { text-decoration: none; border-bottom: 1px solid currentColor; }
-    main { max-width: 76rem; margin: 0 auto; padding: 16px; }
-    .grid { display:grid; grid-template-columns: 1fr 1.2fr; gap: 14px; }
-    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
-    .card { border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 14px; padding: 12px; }
+
+    .wrap { display: grid; grid-template-columns: 1fr 1fr; min-height: calc(100vh - 60px); }
+    .panel { padding: 16px; overflow:auto; }
+    .panel + .panel { border-left: 1px solid color-mix(in oklab, currentColor 22%, transparent); }
+
     .row { display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
     .muted { opacity: .75; }
     .pill { display:inline-block; border: 1px solid color-mix(in oklab, currentColor 60%, transparent); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
     button { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; cursor: pointer; }
     button:disabled { opacity: .5; cursor: not-allowed; }
-    textarea { width: 100%; min-height: 90px; resize: vertical; font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; }
-    .tiny { font-size: 12px; }
+    input, textarea { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; }
+    textarea { width: 100%; min-height: 90px; resize: vertical; }
     details { border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 14px; padding: 10px 12px; margin: 10px 0; }
     summary { cursor: pointer; user-select: none; }
-    pre { white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; font-size: 12px; opacity: .95; }
+    ul { margin: 8px 0; padding-left: 18px; }
+    li { margin: 4px 0; }
+    .card { border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 14px; padding: 12px; margin: 10px 0; }
     .danger { border-color: color-mix(in oklab, red 55%, currentColor 18%); }
+    pre { white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; font-size: 12px; opacity: .95; }
+    .tiny { font-size: 12px; }
     code.inline { padding: 2px 6px; border-radius: 8px; border: 1px solid color-mix(in oklab, currentColor 18%, transparent); }
-    .checkboxes label { display:flex; gap:10px; align-items:center; margin: 6px 0; }
+
+    .indent { margin-left: 14px; border-left: 2px solid color-mix(in oklab, currentColor 12%, transparent); padding-left: 12px; }
+    .loading { opacity: .8; font-style: italic; }
+
+    .pickrow { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .pickbtn { padding: 2px 8px; border-radius: 999px; }
+    .picklink { border-bottom: 1px solid transparent; }
+    .picklink:hover { border-bottom-color: currentColor; }
   </style>
 </head>
 <body>
 <header>
   <div class="row">
     <h1>stars</h1>
-    <span class="pill" id="childPill">child_word_id: …</span>
+    <span class="pill" id="activePill">child_word_id: —</span>
+    <span class="pill" id="selectedPill">0 selected</span>
   </div>
   <nav class="tiny">
     <a href="./">home</a>
@@ -43,70 +56,102 @@
   </nav>
 </header>
 
-<main>
-  <div class="grid">
-    <section class="card">
-      <div class="row" style="justify-content:space-between;">
-        <strong>context</strong>
+<div class="wrap">
+  <section class="panel">
+    <div class="row" style="justify-content:space-between;">
+      <div class="row">
+        <strong>pick child words</strong>
+        <span class="muted tiny" id="treeMeta">…</span>
+      </div>
+      <div class="row">
+        <input id="searchInput" placeholder="search parent words…" style="min-width: 180px;" />
+        <button id="refreshTreeBtn" type="button">refresh</button>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
+      <button id="clearSelectionBtn" type="button">clear selections</button>
+      <span class="muted tiny">Tip: click a child word to focus it on the right; toggle ✓ to multi-select.</span>
+    </div>
+
+    <div id="readTree" style="margin-top:10px;"></div>
+  </section>
+
+  <section class="panel">
+    <div class="row" style="justify-content:space-between;">
+      <div class="row">
+        <strong>star stuff</strong>
         <span class="muted tiny" id="adminStatus">admin: unknown</span>
       </div>
-
-      <div style="margin-top:10px;">
-        <div class="muted tiny">lang name</div>
-        <div><strong id="langName">—</strong></div>
+      <div class="row">
+        <button id="refreshBtn" type="button">refresh</button>
+        <span class="pill" id="taskPill">idle</span>
       </div>
+    </div>
 
-      <div style="margin-top:10px;">
-        <div class="muted tiny">lang word</div>
-        <div><strong id="langWord">—</strong> <span class="muted tiny" id="langWordMeta"></span></div>
-      </div>
-
-      <div style="margin-top:10px;">
-        <div class="muted tiny">child word</div>
-        <div class="row">
-          <strong id="childWord">—</strong>
-          <a id="childLink" class="muted tiny" target="_blank" rel="noopener noreferrer" style="display:none;">source</a>
-        </div>
-      </div>
-
-      <details style="margin-top:14px;" open>
-        <summary><strong>star stuff</strong> <span class="muted tiny">generate LLM artifacts into the queue</span></summary>
-
-        <div style="margin-top:10px;">
-          <div class="muted tiny">optional modifier</div>
-          <textarea id="modifierInput" placeholder="optional modifier…"></textarea>
-        </div>
-
-        <div class="checkboxes" style="margin-top:10px;">
-          <div class="muted tiny">select prompts</div>
-          <label><input type="checkbox" value="create_star_stuff_words" checked /> create_star_stuff_words</label>
-          <label><input type="checkbox" value="create_star_stuff_images" /> create_star_stuff_images</label>
-          <label><input type="checkbox" value="create_star_stuff_data" /> create_star_stuff_data</label>
-          <label><input type="checkbox" value="create_star_stuff_synthetic_data" /> create_star_stuff_synthetic_data</label>
-          <label><input type="checkbox" value="create_star_stuff_code" /> create_star_stuff_code</label>
-        </div>
-
-        <div class="row" style="margin-top:12px;">
-          <button id="runBtn" type="button" disabled>enqueue selected</button>
-          <button id="refreshBtn" type="button">refresh</button>
-          <span class="pill" id="taskPill">idle</span>
-        </div>
-
-        <div class="muted tiny" style="margin-top:6px;">
-          Requires admin key in localStorage <code class="inline">lang_admin_key</code>.
-        </div>
-      </details>
-    </section>
-
-    <section class="card">
+    <div class="card">
       <div class="row" style="justify-content:space-between;">
-        <strong>existing star stuff</strong>
+        <div>
+          <div class="muted tiny">active child word</div>
+          <div class="row" style="margin-top:4px; align-items:baseline;">
+            <strong id="childWord">—</strong>
+            <a id="childLink" class="muted tiny" target="_blank" rel="noopener noreferrer" style="display:none;">source</a>
+          </div>
+        </div>
+        <div class="muted tiny" id="ctxMeta">—</div>
+      </div>
+
+      <div style="margin-top:12px;" class="row">
+        <div style="min-width: 180px;">
+          <div class="muted tiny">lang name</div>
+          <div><strong id="langName">—</strong></div>
+        </div>
+        <div style="min-width: 180px;">
+          <div class="muted tiny">lang word</div>
+          <div><strong id="langWord">—</strong> <span class="muted tiny" id="langWordMeta"></span></div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <div class="muted tiny">selected child words (batched runs apply to all)</div>
+        <div id="selectedList" class="row" style="margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <details open>
+      <summary><strong>enqueue star stuff</strong> <span class="muted tiny">runs on all selected child words</span></summary>
+
+      <div style="margin-top:10px;">
+        <div class="muted tiny">optional modifier</div>
+        <textarea id="modifierInput" placeholder="optional modifier…"></textarea>
+      </div>
+
+      <div style="margin-top:10px;">
+        <div class="muted tiny">select prompts</div>
+        <div class="row" style="margin-top:6px;">
+          <label class="row" style="gap:8px;"><input type="checkbox" value="create_star_stuff_words" checked /> <span class="tiny">create_star_stuff_words</span></label>
+          <label class="row" style="gap:8px;"><input type="checkbox" value="create_star_stuff_images" /> <span class="tiny">create_star_stuff_images</span></label>
+          <label class="row" style="gap:8px;"><input type="checkbox" value="create_star_stuff_data" /> <span class="tiny">create_star_stuff_data</span></label>
+          <label class="row" style="gap:8px;"><input type="checkbox" value="create_star_stuff_synthetic_data" /> <span class="tiny">create_star_stuff_synthetic_data</span></label>
+          <label class="row" style="gap:8px;"><input type="checkbox" value="create_star_stuff_code" /> <span class="tiny">create_star_stuff_code</span></label>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="runBtn" type="button" disabled>enqueue selected</button>
+        <span class="muted tiny">Requires admin key in localStorage <code class="inline">lang_admin_key</code>.</span>
+      </div>
+    </details>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <strong>existing star stuff (active child)</strong>
         <span class="muted tiny" id="meta">…</span>
       </div>
       <div id="stuff" style="margin-top:10px;"></div>
-    </section>
-  </div>
-</main>
+    </div>
+  </section>
+</div>
 
 <script>
   const $ = (id) => document.getElementById(id);
@@ -134,14 +179,32 @@
   }
 
   function escapeHtml(s) {
-    return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+    return String(s ?? "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
   }
 
-  function getChildWordId() {
+  function selectedPrompts() {
+    return Array.from(document.querySelectorAll('input[type="checkbox"]'))
+      .filter(x => x.checked)
+      .map(x => x.value);
+  }
+
+  function getChildWordIdFromUrl() {
     const u = new URL(location.href);
     const v = u.searchParams.get("child_word_id");
     return v ? Number(v) : 0;
+  }
+
+  function setUrlChildWordId(childId, { replace = false } = {}) {
+    const u = new URL(location.href);
+    if (childId) u.searchParams.set("child_word_id", String(childId));
+    else u.searchParams.delete("child_word_id");
+    if (replace) history.replaceState({}, "", u.toString());
+    else history.pushState({}, "", u.toString());
   }
 
   async function refreshAdminStatus() {
@@ -151,12 +214,7 @@
     catch { $("adminStatus").textContent = "admin: invalid"; return false; }
   }
 
-  function selectedPrompts() {
-    return Array.from(document.querySelectorAll('input[type="checkbox"]')).filter(x => x.checked).map(x => x.value);
-  }
-
   async function pollTask(taskId) {
-    $("taskPill").textContent = "running";
     while (true) {
       const t = await apiGet(`/api/tasks/${taskId}`);
       if (t.status === "done") return t;
@@ -165,23 +223,342 @@
     }
   }
 
-  async function loadPage() {
-    const childId = getChildWordId();
+  // ---- Tree state (adapted from write.html recursion)
+  let roots = [];
+  let searchTerm = "";
+  const latestVersionByWordId = new Map();
+  const nodeCache = new Map();
+
+  const selectedChildWordIds = new Set();
+  const selectedChildWordLabels = new Map();
+  let activeChildWordId = null;
+
+  function updateSelectionUI() {
+    $("selectedPill").textContent = `${selectedChildWordIds.size} selected`;
+    $("runBtn").disabled = !(getAdminKey() && selectedChildWordIds.size > 0);
+    renderSelectedList();
+  }
+
+  function renderSelectedList() {
+    const host = $("selectedList");
+    host.innerHTML = "";
+    if (!selectedChildWordIds.size) {
+      host.innerHTML = `<span class="muted tiny">none</span>`;
+      return;
+    }
+    for (const id of Array.from(selectedChildWordIds)) {
+      const label = selectedChildWordLabels.get(id) || `child_word_id ${id}`;
+      const pill = document.createElement("button");
+      pill.type = "button";
+      pill.className = "pill";
+      pill.textContent = (id === activeChildWordId ? "★ " : "") + label + " ✕";
+      pill.onclick = (ev) => {
+        if (ev.altKey || ev.metaKey || ev.ctrlKey) {
+          selectedChildWordIds.delete(id);
+          if (activeChildWordId === id) {
+            activeChildWordId = selectedChildWordIds.size ? Array.from(selectedChildWordIds)[0] : null;
+            if (activeChildWordId) setUrlChildWordId(activeChildWordId);
+          }
+          updateSelectionUI();
+          loadActiveChild();
+          renderReadTree();
+        } else {
+          setActiveChild(id, { ensureSelected: true, pushUrl: true });
+        }
+      };
+      pill.title = "Click to focus. Alt/Ctrl/⌘-click to remove from selection.";
+      host.appendChild(pill);
+    }
+  }
+
+  async function refreshWordIndex() {
+    const data = await apiGet("/api/lang_words");
+    const words = Array.isArray(data.words) ? data.words : [];
+    latestVersionByWordId.clear();
+    for (const w of words) {
+      if (w && w.lang_word_id && w.latest_version_id) {
+        latestVersionByWordId.set(Number(w.lang_word_id), Number(w.latest_version_id));
+      }
+    }
+  }
+
+  async function loadNodeLatest(langWordId) {
+    if (nodeCache.has(langWordId)) return nodeCache.get(langWordId);
+
+    if (!latestVersionByWordId.has(langWordId)) {
+      await refreshWordIndex();
+    }
+    const versionId = latestVersionByWordId.get(langWordId);
+    if (!versionId) {
+      const empty = { version_id: null, version: null, child_words: [], child_lang_words: [] };
+      nodeCache.set(langWordId, empty);
+      return empty;
+    }
+
+    const v = await apiGet(`/api/lang_words/${versionId}`);
+    const node = {
+      version_id: v.version_id,
+      version: v.version,
+      child_words: Array.isArray(v.child_words) ? v.child_words : [],
+      child_lang_words: Array.isArray(v.child_lang_words) ? v.child_lang_words : [],
+    };
+    nodeCache.set(langWordId, node);
+    return node;
+  }
+
+  function toggleChildSelection(childId, label) {
+    if (selectedChildWordIds.has(childId)) selectedChildWordIds.delete(childId);
+    else selectedChildWordIds.add(childId);
+
+    if (label) selectedChildWordLabels.set(childId, label);
+    if (!activeChildWordId && selectedChildWordIds.has(childId)) {
+      activeChildWordId = childId;
+      setUrlChildWordId(childId, { replace: true });
+    }
+    updateSelectionUI();
+  }
+
+  function setActiveChild(childId, { ensureSelected = false, pushUrl = false } = {}) {
+    if (!childId) return;
+    activeChildWordId = childId;
+    if (ensureSelected) selectedChildWordIds.add(childId);
+    updateSelectionUI();
+    if (pushUrl) setUrlChildWordId(childId);
+    $("activePill").textContent = `child_word_id: ${childId}`;
+    loadActiveChild().catch(e => {
+      console.error(e);
+      $("stuff").innerHTML = `<div class="card danger">${escapeHtml(String(e.message || e))}</div>`;
+    });
+    renderReadTree();
+  }
+
+  function renderReadTree() {
+    const host = $("readTree");
+    host.innerHTML = "";
+
+    const q = (searchTerm || "").toLowerCase().trim();
+    const filteredRoots = roots.filter(r => !q || String(r.word || "").toLowerCase().includes(q));
+    $("treeMeta").textContent = q ? `${filteredRoots.length} of ${roots.length} parent(s)` : `${roots.length} parent(s)`;
+
+    for (const R of filteredRoots) {
+      const d = document.createElement("details");
+      d.open = false;
+
+      const s = document.createElement("summary");
+      s.innerHTML = `<strong>${escapeHtml(R.word)}</strong> <span class="muted tiny">(id ${R.lang_word_id})</span>`;
+      d.appendChild(s);
+
+      const versions = Array.isArray(R.versions) ? R.versions : [];
+      const latest = versions.length ? versions[0] : null;
+
+      const meta = document.createElement("div");
+      meta.className = "muted tiny";
+      meta.style.marginTop = "8px";
+      meta.textContent = latest ? `latest version: v${latest.version} (version_id ${latest.version_id})` : "no versions yet";
+      d.appendChild(meta);
+
+      if (latest) {
+        if (!nodeCache.has(R.lang_word_id)) {
+          nodeCache.set(R.lang_word_id, {
+            version_id: latest.version_id,
+            version: latest.version,
+            child_words: Array.isArray(latest.child_words) ? latest.child_words : [],
+            child_lang_words: Array.isArray(latest.child_lang_words) ? latest.child_lang_words : [],
+          });
+          latestVersionByWordId.set(R.lang_word_id, latest.version_id);
+        }
+
+        const indent = document.createElement("div");
+        indent.className = "indent";
+        d.appendChild(indent);
+        renderNodeRecursive(R.lang_word_id, R.word, indent);
+      }
+
+      host.appendChild(d);
+    }
+  }
+
+  function renderNodeRecursive(langWordId, wordText, hostEl) {
+    const nodeDetails = document.createElement("details");
+    nodeDetails.open = false;
+
+    const nodeSummary = document.createElement("summary");
+    nodeSummary.innerHTML = `<span>${escapeHtml(wordText)}</span> <span class="muted tiny">(id ${langWordId})</span>`;
+    nodeDetails.appendChild(nodeSummary);
+
+    const body = document.createElement("div");
+    body.className = "indent";
+    body.innerHTML = `<div class="muted tiny loading">expand to load…</div>`;
+    nodeDetails.appendChild(body);
+
+    let loaded = false;
+
+    nodeDetails.addEventListener("toggle", async () => {
+      if (!nodeDetails.open) return;
+      if (loaded) return;
+      loaded = true;
+
+      body.innerHTML = `<div class="muted tiny loading">loading…</div>`;
+      try {
+        const node = await loadNodeLatest(langWordId);
+        body.innerHTML = "";
+
+        const vMeta = document.createElement("div");
+        vMeta.className = "muted tiny";
+        if (node.version) vMeta.textContent = `latest v${node.version} (version_id ${node.version_id})`;
+        else vMeta.textContent = "no versions yet";
+        body.appendChild(vMeta);
+
+        const kids = Array.isArray(node.child_lang_words) ? node.child_lang_words : [];
+        const orb = Array.isArray(node.child_words) ? node.child_words : [];
+
+        if (kids.length) {
+          const label = document.createElement("div");
+          label.className = "muted tiny";
+          label.style.marginTop = "8px";
+          label.textContent = "child lang words:";
+          body.appendChild(label);
+
+          for (const k of kids) {
+            renderNodeRecursive(Number(k.lang_word_id), k.word, body);
+          }
+        }
+
+        if (orb.length) {
+          const label = document.createElement("div");
+          label.className = "muted tiny";
+          label.style.marginTop = "8px";
+          label.textContent = "child words (select for stars):";
+          body.appendChild(label);
+
+          const ul = document.createElement("ul");
+          for (const c of orb) {
+            const li = document.createElement("li");
+            const childId = Number(c.id);
+            const on = selectedChildWordIds.has(childId);
+
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "pickbtn";
+            b.textContent = on ? "✓" : "+";
+            b.onclick = (ev) => {
+              ev.stopPropagation();
+              toggleChildSelection(childId, String(c.word || ""));
+              if (!activeChildWordId || selectedChildWordIds.has(childId)) {
+                setActiveChild(childId, { ensureSelected: true, pushUrl: true });
+              }
+            };
+
+            const a = document.createElement("a");
+            a.href = `stars.html?child_word_id=${encodeURIComponent(c.id)}`;
+            a.className = "picklink";
+            a.textContent = String(c.word || "");
+            a.onclick = (ev) => {
+              ev.preventDefault();
+              selectedChildWordLabels.set(childId, String(c.word || ""));
+              setActiveChild(childId, { ensureSelected: true, pushUrl: true });
+            };
+
+            let src = null;
+            if (c.link) {
+              src = document.createElement("a");
+              src.href = c.link;
+              src.target = "_blank";
+              src.rel = "noopener noreferrer";
+              src.className = "muted tiny";
+              src.textContent = "source";
+            }
+
+            const row = document.createElement("span");
+            row.className = "pickrow";
+            row.appendChild(b);
+            row.appendChild(a);
+            if (src) {
+              const dot = document.createElement("span");
+              dot.className = "muted tiny";
+              dot.textContent = "·";
+              row.appendChild(dot);
+              row.appendChild(src);
+            }
+
+            li.appendChild(row);
+            ul.appendChild(li);
+          }
+          body.appendChild(ul);
+        }
+
+        if (!kids.length && !orb.length) {
+          const p = document.createElement("div");
+          p.className = "muted tiny";
+          p.style.marginTop = "8px";
+          p.textContent = "no children";
+          body.appendChild(p);
+        }
+      } catch (e) {
+        body.innerHTML = `<div class="card danger">${escapeHtml(String(e.message || e))}</div>`;
+      }
+    });
+
+    hostEl.appendChild(nodeDetails);
+  }
+
+  async function loadWriteTree() {
+    $("treeMeta").textContent = "loading…";
+    const data = await apiGet("/api/write");
+    roots = Array.isArray(data.roots) ? data.roots : [];
+
+    nodeCache.clear();
+    await refreshWordIndex();
+
+    for (const R of roots) {
+      const versions = Array.isArray(R.versions) ? R.versions : [];
+      const latest = versions.length ? versions[0] : null;
+      if (latest) {
+        latestVersionByWordId.set(R.lang_word_id, latest.version_id);
+        nodeCache.set(R.lang_word_id, {
+          version_id: latest.version_id,
+          version: latest.version,
+          child_words: Array.isArray(latest.child_words) ? latest.child_words : [],
+          child_lang_words: Array.isArray(latest.child_lang_words) ? latest.child_lang_words : [],
+        });
+      }
+    }
+
+    renderReadTree();
+  }
+
+  async function loadActiveChild() {
+    const childId = activeChildWordId;
     if (!childId) {
-      $("stuff").innerHTML = `<div class="card danger">Missing child_word_id in URL (expected ?child_word_id=...)</div>`;
-      $("runBtn").disabled = true;
+      $("activePill").textContent = "child_word_id: —";
+      $("childWord").textContent = "—";
+      $("childLink").style.display = "none";
+      $("langName").textContent = "—";
+      $("langWord").textContent = "—";
+      $("langWordMeta").textContent = "";
+      $("ctxMeta").textContent = "pick a child word on the left";
+      $("stuff").innerHTML = `<div class="muted tiny">No active child word.</div>`;
+      $("meta").textContent = "—";
       return;
     }
 
-    $("childPill").textContent = `child_word_id: ${childId}`;
+    $("activePill").textContent = `child_word_id: ${childId}`;
     const data = await apiGet(`/api/stars?child_word_id=${encodeURIComponent(childId)}`);
 
-    $("langName").textContent = data.lang_name && data.lang_name.word ? data.lang_name.word : "—";
-    $("langWord").textContent = data.lang_word.word || "—";
-    $("langWordMeta").textContent = data.lang_word.version ? `(v${data.lang_word.version})` : "";
-    $("childWord").textContent = data.child_word.word || "—";
+    const langName = data.lang_name && data.lang_name.word ? data.lang_name.word : "—";
+    const langWord = data.lang_word && data.lang_word.word ? data.lang_word.word : "—";
+    const langWordId = data.lang_word && data.lang_word.id ? data.lang_word.id : "—";
+    const version = data.lang_word && data.lang_word.version ? data.lang_word.version : null;
 
-    if (data.child_word.link) {
+    $("langName").textContent = langName;
+    $("langWord").textContent = langWord;
+    $("langWordMeta").textContent = version ? `(v${version} • id ${langWordId})` : (langWordId !== "—" ? `(id ${langWordId})` : "");
+    $("childWord").textContent = (data.child_word && data.child_word.word) ? data.child_word.word : "—";
+    $("ctxMeta").textContent = `lang_word_id ${langWordId}`;
+
+    if (data.child_word && data.child_word.word) selectedChildWordLabels.set(childId, data.child_word.word);
+
+    if (data.child_word && data.child_word.link) {
       $("childLink").style.display = "";
       $("childLink").href = data.child_word.link;
       $("childLink").textContent = "source";
@@ -214,7 +591,6 @@
       for (const it of arr) {
         const card = document.createElement("div");
         card.className = "card";
-        card.style.marginTop = "10px";
         card.innerHTML = `
           <div class="row" style="justify-content:space-between;">
             <div><strong>#${it.id}</strong> <span class="muted tiny">task ${it.task_id ?? "—"} • ${escapeHtml(it.created_at || "")}</span></div>
@@ -229,38 +605,96 @@
     }
   }
 
-  $("refreshBtn").onclick = () => loadPage();
+  // ---- Events
+  $("searchInput").addEventListener("input", (e) => {
+    searchTerm = (e.target.value || "").toLowerCase();
+    renderReadTree();
+  });
+
+  $("refreshTreeBtn").onclick = () => loadWriteTree();
+
+  $("clearSelectionBtn").onclick = () => {
+    selectedChildWordIds.clear();
+    selectedChildWordLabels.clear();
+    if (activeChildWordId) selectedChildWordIds.add(activeChildWordId);
+    updateSelectionUI();
+    renderReadTree();
+  };
+
+  $("refreshBtn").onclick = async () => {
+    await refreshAdminStatus();
+    await loadActiveChild();
+  };
 
   $("runBtn").onclick = async () => {
-    const childId = getChildWordId();
     const prompts = selectedPrompts();
     if (!prompts.length) { alert("Select at least one prompt."); return; }
 
+    const ids = Array.from(selectedChildWordIds);
+    if (!ids.length) { alert("Select at least one child word."); return; }
+
     try {
       $("runBtn").disabled = true;
-      $("taskPill").textContent = "queued";
-      const res = await apiPost("/api/star_stuff/tasks", {
-        child_word_id: childId,
-        prompts,
-        modifier: ($("modifierInput").value || "").trim()
-      }, { admin: true });
+      $("taskPill").textContent = `queued (${ids.length} child word${ids.length === 1 ? "" : "s"})`;
 
-      const ids = res.task_ids || [];
-      for (const id of ids) await pollTask(id);
-      $("taskPill").textContent = "done";
-      await loadPage();
+      const modifier = ($("modifierInput").value || "").trim();
+
+      const allTaskIds = [];
+      let idx = 0;
+      for (const childId of ids) {
+        idx += 1;
+        $("taskPill").textContent = `queueing ${idx}/${ids.length}`;
+        const res = await apiPost("/api/star_stuff/tasks", { child_word_id: childId, prompts, modifier }, { admin: true });
+        const taskIds = (res && res.task_ids) ? res.task_ids : [];
+        for (const t of taskIds) allTaskIds.push(t);
+      }
+
+      if (!allTaskIds.length) {
+        $("taskPill").textContent = "done (no tasks?)";
+      } else {
+        let j = 0;
+        for (const t of allTaskIds) {
+          j += 1;
+          $("taskPill").textContent = `running ${j}/${allTaskIds.length}`;
+          await pollTask(t);
+        }
+        $("taskPill").textContent = "done";
+      }
+
+      await loadActiveChild();
     } catch (e) {
       $("taskPill").textContent = "error";
       alert(String(e.message || e));
     } finally {
-      $("runBtn").disabled = !(getAdminKey());
+      $("runBtn").disabled = !(getAdminKey() && selectedChildWordIds.size > 0);
     }
   };
 
+  window.addEventListener("popstate", () => {
+    const childId = getChildWordIdFromUrl();
+    if (childId) setActiveChild(childId, { ensureSelected: true, pushUrl: false });
+    else {
+      activeChildWordId = null;
+      updateSelectionUI();
+      loadActiveChild();
+    }
+  });
+
   async function boot() {
     await refreshAdminStatus();
-    $("runBtn").disabled = !(getAdminKey());
-    await loadPage();
+    await loadWriteTree();
+
+    const urlChildId = getChildWordIdFromUrl();
+    if (urlChildId) {
+      selectedChildWordIds.add(urlChildId);
+      activeChildWordId = urlChildId;
+      setUrlChildWordId(urlChildId, { replace: true });
+      updateSelectionUI();
+      await loadActiveChild();
+    } else {
+      updateSelectionUI();
+      await loadActiveChild();
+    }
   }
 
   boot().catch(err => {
