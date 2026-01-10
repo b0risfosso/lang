@@ -82,10 +82,22 @@
   }
 
   async function refreshAdminStatus() {
-    const k = getAdminKey();
-    if (!k) { $("adminStatus").textContent = "admin: no key"; return false; }
+    let k = getAdminKey();
+    if (!k) {
+      k = window.prompt("Enter admin key:");
+      if (k) {
+        localStorage.setItem("lang_admin_key", k);
+      } else {
+        $("adminStatus").textContent = "admin: no key";
+        return false;
+      }
+    }
     try { await apiGet("/api/admin/ping"); $("adminStatus").textContent = "admin: ok"; return true; }
-    catch { $("adminStatus").textContent = "admin: invalid"; return false; }
+    catch { 
+      localStorage.removeItem("lang_admin_key"); // Invalid key, remove it
+      $("adminStatus").textContent = "admin: invalid"; 
+      return false; 
+    }
   }
 
   async function loadQueueState() {
