@@ -49,6 +49,9 @@ LLM_USAGE_DB_PATH = os.path.join(DB_DIR, "llm_usage.db")
 ADMIN_KEY_ENV = "LANG_ADMIN_KEY"
 ADMIN_KEY_DEFAULT = "your-secret"  # fallback if env not set
 
+def getAdminKey():
+    return os.environ.get(ADMIN_KEY_ENV, ADMIN_KEY_DEFAULT)
+
 def check_admin() -> bool:
     key = request.headers.get("X-Admin-Key")
     return key and key == getAdminKey()
