@@ -232,6 +232,7 @@
   const selectedChildWordIds = new Set();
   const selectedChildWordLabels = new Map();
   let activeChildWordId = null;
+  const openDetailsIds = new Set();
 
   function updateSelectionUI() {
     $("selectedPill").textContent = `${selectedChildWordIds.size} selected`;
@@ -334,6 +335,14 @@
 
   function renderReadTree() {
     const host = $("readTree");
+
+    // Preserve open states
+    openDetailsIds.clear();
+    for (const d of host.querySelectorAll('details[open]')) {
+      const id = d.getAttribute('data-lang-word-id');
+      if (id) openDetailsIds.add(Number(id));
+    }
+
     host.innerHTML = "";
 
     const q = (searchTerm || "").toLowerCase().trim();
@@ -342,7 +351,8 @@
 
     for (const R of filteredRoots) {
       const d = document.createElement("details");
-      d.open = false;
+      d.setAttribute('data-lang-word-id', R.lang_word_id);
+      d.open = openDetailsIds.has(R.lang_word_id);
 
       const s = document.createElement("summary");
       s.innerHTML = `<strong>${escapeHtml(R.word)}</strong> <span class="muted tiny">(id ${R.lang_word_id})</span>`;
@@ -380,7 +390,8 @@
 
   function renderNodeRecursive(langWordId, wordText, hostEl) {
     const nodeDetails = document.createElement("details");
-    nodeDetails.open = false;
+    nodeDetails.setAttribute('data-lang-word-id', langWordId);
+    nodeDetails.open = openDetailsIds.has(langWordId);
 
     const nodeSummary = document.createElement("summary");
     nodeSummary.innerHTML = `<span>${escapeHtml(wordText)}</span> <span class="muted tiny">(id ${langWordId})</span>`;
@@ -394,6 +405,11 @@
     let loaded = false;
 
     nodeDetails.addEventListener("toggle", async () => {
+      if (nodeDetails.open) {
+        openDetailsIds.add(langWordId);
+      } else {
+        openDetailsIds.delete(langWordId);
+      }
       if (!nodeDetails.open) return;
       if (loaded) return;
       loaded = true;
@@ -430,6 +446,21 @@
           label.style.marginTop = "8px";
           label.textContent = "child words (select for stars):";
           body.appendChild(label);
+
+          const selectAllBtn = document.createElement("button");
+          selectAllBtn.type = "button";
+          selectAllBtn.className = "pickbtn";
+          selectAllBtn.textContent = "select all";
+          selectAllBtn.onclick = () => {
+            for (const c of orb) {
+              const childId = Number(c.id);
+              selectedChildWordIds.add(childId);
+              selectedChildWordLabels.set(childId, String(c.word || ""));
+            }
+            updateSelectionUI();
+            renderReadTree();
+          };
+          body.appendChild(selectAllBtn);
 
           const ul = document.createElement("ul");
           for (const c of orb) {
@@ -616,8 +647,10 @@
   $("clearSelectionBtn").onclick = () => {
     selectedChildWordIds.clear();
     selectedChildWordLabels.clear();
-    if (activeChildWordId) selectedChildWordIds.add(activeChildWordId);
+    activeChildWordId = null;
+    setUrlChildWordId(null);
     updateSelectionUI();
+    loadActiveChild();
     renderReadTree();
   };
 
