@@ -252,22 +252,32 @@
       const pill = document.createElement("button");
       pill.type = "button";
       pill.className = "pill";
-      pill.textContent = (id === activeChildWordId ? "★ " : "") + label + " ✕";
-      pill.onclick = (ev) => {
-        if (ev.altKey || ev.metaKey || ev.ctrlKey) {
-          selectedChildWordIds.delete(id);
-          if (activeChildWordId === id) {
-            activeChildWordId = selectedChildWordIds.size ? Array.from(selectedChildWordIds)[0] : null;
-            if (activeChildWordId) setUrlChildWordId(activeChildWordId);
-          }
-          updateSelectionUI();
-          loadActiveChild();
-          renderReadTree();
-        } else {
-          setActiveChild(id, { ensureSelected: true, pushUrl: true });
+      const star = id === activeChildWordId ? "★ " : "";
+      const labelSpan = document.createElement("span");
+      labelSpan.textContent = star + label;
+      pill.appendChild(labelSpan);
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "tiny";
+      removeBtn.style.border = "none";
+      removeBtn.style.background = "transparent";
+      removeBtn.style.cursor = "pointer";
+      removeBtn.textContent = " ✕";
+      removeBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        selectedChildWordIds.delete(id);
+        if (activeChildWordId === id) {
+          activeChildWordId = selectedChildWordIds.size ? Array.from(selectedChildWordIds)[0] : null;
+          if (activeChildWordId) setUrlChildWordId(activeChildWordId);
+          else setUrlChildWordId(null);
         }
+        updateSelectionUI();
+        loadActiveChild();
+        renderReadTree();
       };
-      pill.title = "Click to focus. Alt/Ctrl/⌘-click to remove from selection.";
+      pill.appendChild(removeBtn);
+      pill.onclick = () => setActiveChild(id, { ensureSelected: true, pushUrl: true });
+      pill.title = "Click label to focus. Click ✕ to remove from selection.";
       host.appendChild(pill);
     }
   }
