@@ -128,6 +128,52 @@
         <div class="muted tiny" id="runHint">needs a selected parent word + admin key</div>
       </div>
 
+      <div class="card" id="manualEditCard">
+        <div class="row" style="justify-content:space-between;">
+          <div>
+            <strong>manual edit selected parent</strong>
+            <div class="muted tiny">create versions, add child lang words, and add child words for a specific version</div>
+          </div>
+          <span class="pill" id="manualMetaPill">—</span>
+        </div>
+
+        <div class="spacer"></div>
+
+        <div class="row">
+          <select id="manualVersionSelect" style="flex:1; min-width:240px;"></select>
+          <button id="createVersionBtn" type="button" disabled>new version</button>
+        </div>
+        <div class="muted tiny">Pick a version to add items to. Creating a version requires admin key + selected parent.</div>
+
+        <div class="spacer"></div>
+
+        <details>
+          <summary><strong>add child lang word</strong> <span class="muted tiny">(links an existing lang_word_id)</span></summary>
+          <div style="margin-top:10px;" class="row">
+            <input id="addChildLangWordIdInput" placeholder="existing child lang_word_id…" style="flex:1; min-width:220px;" />
+            <button id="addChildLangWordBtn" type="button" disabled>add</button>
+          </div>
+          <div class="muted tiny">This creates a link in <code class="inline">lang_word_children</code> for the selected version.</div>
+
+          <div class="spacer"></div>
+
+          <div class="muted tiny">or create a new lang word + link it:</div>
+          <div style="margin-top:6px;" class="row">
+            <input id="createAndLinkLangWordInput" placeholder="new child lang word text…" style="flex:1; min-width:220px;" />
+            <button id="createAndLinkLangWordBtn" type="button" disabled>create + link</button>
+          </div>
+        </details>
+
+        <details style="margin-top:10px;">
+          <summary><strong>add child word</strong> <span class="muted tiny">(orbiting phrase)</span></summary>
+          <div style="margin-top:10px;" class="row">
+            <input id="addChildWordInput" placeholder="child word…" style="flex:1; min-width:220px;" />
+            <input id="addChildWordLinkInput" placeholder="optional link…" style="flex:1; min-width:220px;" />
+            <button id="addChildWordBtn" type="button" disabled>add</button>
+          </div>
+        </details>
+      </div>
+
       <div class="card">
         <div class="row" style="justify-content:space-between;">
           <strong>temporary writings</strong>
@@ -246,9 +292,14 @@
     try {
       await apiGet("/api/admin/ping", { admin: true });
       $("adminStatus").textContent = "admin: ok";
+      // enable admin-gated UI if a selection exists
+      $("runBtn").disabled = !(getAdminKey() && selectedParentWordId);
+      refreshManualEditUI();
       return true;
     } catch {
       $("adminStatus").textContent = "admin: invalid";
+      $("runBtn").disabled = true;
+      refreshManualEditUI();
       return false;
     }
   }
@@ -273,12 +324,55 @@
   // -------------------------
   // Parent selection
   // -------------------------
+  let selectedManualVersionId = null;
+
+  function getSelectedParentRoot() {
+    if (!selectedParentWordId) return null;
+    return (Array.isArray(roots) ? roots : []).find(r => Number(r.lang_word_id) === Number(selectedParentWordId)) || null;
+  }
+
+  function refreshManualEditUI({ preferVersionId = null } = {}) {
+    const root = getSelectedParentRoot();
+    const sel = $("manualVersionSelect");
+    if (!sel) return;
+
+    const versions = root && Array.isArray(root.versions) ? root.versions : [];
+    sel.innerHTML = "";
+
+    for (const v of versions) {
+      const opt = document.createElement("option");
+      opt.value = String(v.version_id);
+      const cw = Array.isArray(v.child_words) ? v.child_words.length : 0;
+      const clw = Array.isArray(v.child_lang_words) ? v.child_lang_words.length : 0;
+      opt.textContent = `v${v.version} • version_id ${v.version_id} • ${clw} child lang • ${cw} child words`;
+      sel.appendChild(opt);
+    }
+
+    // Choose selection
+    const desired = preferVersionId ? Number(preferVersionId) : (selectedManualVersionId ? Number(selectedManualVersionId) : null);
+    const hasDesired = desired && versions.some(v => Number(v.version_id) === desired);
+    if (hasDesired) sel.value = String(desired);
+    else if (versions.length) sel.value = String(versions[0].version_id);
+    else sel.value = "";
+
+    selectedManualVersionId = sel.value ? Number(sel.value) : null;
+
+    $("manualMetaPill").textContent = root ? `parent: ${root.word} (id ${root.lang_word_id})` : "—";
+
+    const adminOk = !!getAdminKey();
+    $("createVersionBtn").disabled = !(adminOk && selectedParentWordId);
+    $("addChildLangWordBtn").disabled = !(adminOk && selectedManualVersionId);
+    $("createAndLinkLangWordBtn").disabled = !(adminOk && selectedManualVersionId);
+    $("addChildWordBtn").disabled = !(adminOk && selectedManualVersionId);
+  }
+
   function setSelectedParent(wordId, wordText) {
     selectedParentWordId = wordId;
     selectedParentWordText = wordText;
     $("selectedParentPill").textContent = wordId ? `${wordText} (id ${wordId})` : "none";
     $("runBtn").disabled = !(getAdminKey() && selectedParentWordId);
     $("refreshWritingsBtn").disabled = !selectedParentWordId;
+    refreshManualEditUI();
     loadWritings();
   }
 
@@ -375,6 +469,18 @@
       const btnRow = document.createElement("div");
       btnRow.className = "row";
       btnRow.style.marginTop = "8px";
+
+      // Word mode: allow selecting this parent for the right-side panels
+      if (mode === "word") {
+        const selBtn = document.createElement("button");
+        selBtn.type = "button";
+        selBtn.textContent = (selectedParentWordId === R.lang_word_id) ? "selected" : "select";
+        selBtn.onclick = () => {
+          setSelectedParent(R.lang_word_id, R.word);
+          refreshManualEditUI();
+        };
+        btnRow.appendChild(selBtn);
+      }
 
       d.appendChild(btnRow);
 
@@ -561,6 +667,8 @@
     }
 
     renderReadTree();
+    // keep manual edit panel in sync if a parent is already selected
+    refreshManualEditUI();
   }
 
   $("refreshBtn").onclick = () => loadWriteTree();
@@ -578,6 +686,81 @@
       await loadWriteTree();
       const hit = roots.find(r => r.word === word);
       if (hit) setSelectedParent(hit.lang_word_id, hit.word);
+    } catch (e) {
+      alert(String(e.message || e));
+    }
+  };
+
+  // -------------------------
+  // Manual editing (word mode)
+  // -------------------------
+  $("manualVersionSelect").onchange = () => {
+    selectedManualVersionId = $("manualVersionSelect").value ? Number($("manualVersionSelect").value) : null;
+    refreshManualEditUI();
+  };
+
+  $("createVersionBtn").onclick = async () => {
+    if (!selectedParentWordId) return;
+    try {
+      const res = await apiPost(`/api/lang_words/${selectedParentWordId}/versions`, {}, { admin: true });
+      await loadWriteTree();
+      // keep selection and focus new version
+      const root = roots.find(r => Number(r.lang_word_id) === Number(selectedParentWordId));
+      if (root) setSelectedParent(root.lang_word_id, root.word);
+      refreshManualEditUI({ preferVersionId: res && res.version_id ? res.version_id : null });
+    } catch (e) {
+      alert(String(e.message || e));
+    }
+  };
+
+  $("addChildLangWordBtn").onclick = async () => {
+    const versionId = selectedManualVersionId;
+    if (!versionId) return;
+    const raw = ($("addChildLangWordIdInput").value || "").trim();
+    if (!raw) return;
+    const childId = Number(raw);
+    if (!childId) return alert("invalid child lang_word_id");
+    try {
+      await apiPost(`/api/lang_word_versions/${versionId}/child_lang_words`, { child_lang_word_id: childId }, { admin: true });
+      $("addChildLangWordIdInput").value = "";
+      await loadWriteTree();
+      refreshManualEditUI({ preferVersionId: versionId });
+      renderReadTree();
+    } catch (e) {
+      alert(String(e.message || e));
+    }
+  };
+
+  $("createAndLinkLangWordBtn").onclick = async () => {
+    const versionId = selectedManualVersionId;
+    if (!versionId) return;
+    const word = ($("createAndLinkLangWordInput").value || "").trim();
+    if (!word) return;
+    try {
+      const w = await apiPost(`/api/lang_words`, { word }, { admin: true });
+      await apiPost(`/api/lang_word_versions/${versionId}/child_lang_words`, { child_lang_word_id: w.lang_word_id }, { admin: true });
+      $("createAndLinkLangWordInput").value = "";
+      await loadWriteTree();
+      refreshManualEditUI({ preferVersionId: versionId });
+      renderReadTree();
+    } catch (e) {
+      alert(String(e.message || e));
+    }
+  };
+
+  $("addChildWordBtn").onclick = async () => {
+    const versionId = selectedManualVersionId;
+    if (!versionId) return;
+    const word = ($("addChildWordInput").value || "").trim();
+    const link = ($("addChildWordLinkInput").value || "").trim();
+    if (!word) return;
+    try {
+      await apiPost(`/api/lang_word_versions/${versionId}/child_words`, { word, link }, { admin: true });
+      $("addChildWordInput").value = "";
+      $("addChildWordLinkInput").value = "";
+      await loadWriteTree();
+      refreshManualEditUI({ preferVersionId: versionId });
+      renderReadTree();
     } catch (e) {
       alert(String(e.message || e));
     }
