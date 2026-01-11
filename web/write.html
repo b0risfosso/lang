@@ -663,7 +663,7 @@
             deleteBtn.onclick = async () => {
               if (!confirm(`Delete child lang word "${k.word}" from this version?`)) return;
               try {
-                await apiDelete(`/api/lang_word_versions/${node.version_id}/child_lang_words/${k.lang_word_id}`);
+                await apiDelete(`/api/lang_word_versions/${node.version_id}/child_lang_words/${k.lang_word_id}`, { admin: true });
                 nodeCache.delete(langWordId); // clear cache
                 await loadWriteTree();
               } catch (e) {
