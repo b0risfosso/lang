@@ -63,6 +63,21 @@
         <button id="refreshBtn" type="button">refresh</button>
       </div>
     </div>
+      <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:8px;">
+        <select id="rootFilterSelect" style="min-width: 260px;">
+          <option value="all">all parent words</option>
+          <option value="has_temp">has temporary writings</option>
+          <option value="needs_gen">no child lang words + no temporary writings</option>
+        </select>
+        <button id="selectAllFilteredBtn" type="button">select all (filtered)</button>
+        <button id="clearSelectedParentsBtn" type="button">clear selected</button>
+        <span class="pill" id="selectedParentsPill">0 selected</span>
+      </div>
+      <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:8px;">
+        <button id="applySelectedTempBtn" type="button" disabled>apply selected temporary writings</button>
+        <button id="createTempForSelectedBtn" type="button" disabled>create temporary writings (enqueue)</button>
+        <span class="muted tiny" id="batchHint">batch actions require admin key</span>
+      </div>
 
     <div class="spacer"></div>
 
@@ -327,6 +342,13 @@
   let selectedParentWordId = null;
   let selectedParentWordText = null;
 
+  // Batch actions / filters (word mode)
+  let rootFilterMode = "all"; // "all" | "has_temp" | "needs_gen"
+  const selectedParentIds = new Set(); // multi-select parent lang_word_id
+  const tempWritingCountByParentId = new Map(); // parent_id -> count (admin only)
+  let tempCountsLoaded = false;
+
+
   const selectedSentenceWordIds = new Set();
   let allSentences = [];
 
@@ -367,6 +389,7 @@
     $("tabSentence").setAttribute("aria-selected", next === "sentence" ? "true" : "false");
     $("wordMode").style.display = next === "word" ? "" : "none";
     $("sentenceMode").style.display = next === "sentence" ? "" : "none";
+    updateSelectedParentsUI();
     renderReadTree();
     if (next === "sentence") loadSentences();
   }
@@ -482,22 +505,67 @@
 
     if (!Array.isArray(roots)) roots = [];
 
-    let visibleCount = 0;
-    for (const R of roots) {
-      if (searchTerm && !R.word.toLowerCase().includes(searchTerm)) continue;
-      visibleCount++;
-    }
+    const q = (searchTerm || "").trim().toLowerCase();
 
-    $("readMeta").textContent = searchTerm ? `${visibleCount} of ${roots.length} parent word(s)` : `${roots.length} parent word(s)`;
+    const filteredRoots = roots.filter(r => {
+      if (q && !String(r.word || "").toLowerCase().includes(q)) return false;
 
-    for (const R of roots) {
-      if (searchTerm && !R.word.toLowerCase().includes(searchTerm)) continue;
+      if (mode !== "word") return true; // filters only apply to word mode
 
+      if (rootFilterMode === "has_temp") {
+        const n = Number(tempWritingCountByParentId.get(Number(r.lang_word_id)) || 0);
+        return n > 0;
+      }
+
+      if (rootFilterMode === "needs_gen") {
+        const versions = Array.isArray(r.versions) ? r.versions : [];
+        const latest = versions.length ? versions[0] : null;
+        const childLangCount = latest && Array.isArray(latest.child_lang_words) ? latest.child_lang_words.length : 0;
+        const tempCount = Number(tempWritingCountByParentId.get(Number(r.lang_word_id)) || 0);
+        return childLangCount === 0 && tempCount === 0;
+      }
+
+      return true; // "all"
+    });
+
+    $("readMeta").textContent = q ? `${filteredRoots.length} of ${roots.length} parent word(s)` : `${roots.length} parent word(s)`;
+
+    // keep selection pill in sync
+    updateSelectedParentsUI();
+
+    for (const R of filteredRoots) {
       const d = document.createElement("details");
       d.open = false;
 
       const s = document.createElement("summary");
       s.innerHTML = `<strong>${escapeHtml(R.word)}</strong> <span class="muted tiny">(id ${R.lang_word_id})</span>`;
+
+      // Parent multi-select toggle (word mode only)
+      if (mode === "word") {
+        const pid = Number(R.lang_word_id);
+        const pickBtn = document.createElement("button");
+        pickBtn.type = "button";
+        pickBtn.textContent = selectedParentIds.has(pid) ? "✓" : "+";
+        pickBtn.style.padding = "2px 8px";
+        pickBtn.style.borderRadius = "999px";
+        pickBtn.style.marginLeft = "8px";
+        pickBtn.onclick = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          toggleParentSelection(pid);
+        };
+        s.appendChild(pickBtn);
+
+        // Show temp writing count badge if we know it
+        const tempCount = Number(tempWritingCountByParentId.get(pid) || 0);
+        if (tempCountsLoaded) {
+          const badge = document.createElement("span");
+          badge.className = "pill";
+          badge.style.marginLeft = "8px";
+          badge.textContent = `${tempCount} tmp`;
+          s.appendChild(badge);
+        }
+      }
 
       // Select word button on summary line for sentence mode
       if (mode === "sentence") {
@@ -813,6 +881,7 @@
     }
 
     renderReadTree();
+    refreshTempWritingCounts().catch(() => {});
     // keep manual edit panel in sync if a parent is already selected
     refreshManualEditUI();
   }
@@ -1169,11 +1238,192 @@
     renderReadTree();
   });
 
+
+  // -------------------------
+  // Word-mode filters + batch actions
+  // -------------------------
+  function updateSelectedParentsUI() {
+    $("selectedParentsPill").textContent = `${selectedParentIds.size} selected`;
+
+    const hasAdmin = !!getAdminKey();
+    $("rootFilterSelect").disabled = !hasAdmin;
+    $("selectAllFilteredBtn").disabled = !hasAdmin;
+    $("clearSelectedParentsBtn").disabled = selectedParentIds.size === 0;
+
+    // Enable/disable batch buttons based on filter
+    const f = rootFilterMode || "all";
+    $("applySelectedTempBtn").style.display = (mode === "word" && f === "has_temp") ? "" : "none";
+    $("createTempForSelectedBtn").style.display = (mode === "word" && f === "needs_gen") ? "" : "none";
+
+    $("applySelectedTempBtn").disabled = !(hasAdmin && selectedParentIds.size > 0);
+    $("createTempForSelectedBtn").disabled = !(hasAdmin && selectedParentIds.size > 0);
+
+    $("batchHint").textContent = hasAdmin
+      ? (tempCountsLoaded ? "tmp counts loaded" : "loading tmp counts…")
+      : "batch actions require admin key";
+  }
+
+  function toggleParentSelection(parentId) {
+    const pid = Number(parentId);
+    if (!Number.isFinite(pid)) return;
+    if (selectedParentIds.has(pid)) selectedParentIds.delete(pid);
+    else selectedParentIds.add(pid);
+    updateSelectedParentsUI();
+    renderReadTree();
+  }
+
+  function clearSelectedParents() {
+    selectedParentIds.clear();
+    updateSelectedParentsUI();
+    renderReadTree();
+  }
+
+  function getFilteredRootsNow() {
+    const q = (searchTerm || "").trim().toLowerCase();
+    return (Array.isArray(roots) ? roots : []).filter(r => {
+      if (q && !String(r.word || "").toLowerCase().includes(q)) return false;
+
+      if (mode !== "word") return true;
+
+      if (rootFilterMode === "has_temp") {
+        const n = Number(tempWritingCountByParentId.get(Number(r.lang_word_id)) || 0);
+        return n > 0;
+      }
+      if (rootFilterMode === "needs_gen") {
+        const versions = Array.isArray(r.versions) ? r.versions : [];
+        const latest = versions.length ? versions[0] : null;
+        const childLangCount = latest && Array.isArray(latest.child_lang_words) ? latest.child_lang_words.length : 0;
+        const tempCount = Number(tempWritingCountByParentId.get(Number(r.lang_word_id)) || 0);
+        return childLangCount === 0 && tempCount === 0;
+      }
+      return true;
+    });
+  }
+
+  function selectAllFiltered() {
+    for (const r of getFilteredRootsNow()) {
+      selectedParentIds.add(Number(r.lang_word_id));
+    }
+    updateSelectedParentsUI();
+    renderReadTree();
+  }
+
+  async function refreshTempWritingCounts() {
+    // Only meaningful in word mode and with admin key.
+    if (!getAdminKey()) {
+      tempWritingCountByParentId.clear();
+      tempCountsLoaded = false;
+      updateSelectedParentsUI();
+      renderReadTree();
+      return;
+    }
+
+    tempCountsLoaded = false;
+    updateSelectedParentsUI();
+
+    const rs = Array.isArray(roots) ? roots : [];
+    const parentIds = rs.map(r => Number(r.lang_word_id)).filter(x => Number.isFinite(x));
+
+    // Small concurrency to avoid spamming the server
+    const concurrency = 6;
+    let i = 0;
+    async function worker() {
+      while (i < parentIds.length) {
+        const pid = parentIds[i++];
+        try {
+          const data = await apiGet(`/api/temporary_writings?parent_lang_word_id=${pid}`, { admin: true });
+          const arr = Array.isArray(data.writings) ? data.writings : [];
+          tempWritingCountByParentId.set(pid, arr.length);
+        } catch (e) {
+          // If this fails (e.g. admin key missing/invalid), stop trying to be clever.
+          tempWritingCountByParentId.set(pid, 0);
+        }
+      }
+    }
+
+    const workers = [];
+    for (let k = 0; k < concurrency; k++) workers.push(worker());
+    await Promise.all(workers);
+
+    tempCountsLoaded = true;
+    updateSelectedParentsUI();
+    renderReadTree();
+  }
+
+  async function applyAllTempForParents(parentIds) {
+    // For each selected parent, load its temp writings then apply them all.
+    for (const pid of parentIds) {
+      const data = await apiGet(`/api/temporary_writings?parent_lang_word_id=${pid}`, { admin: true });
+      const arr = Array.isArray(data.writings) ? data.writings : [];
+      for (const w of arr) {
+        await apiPost(`/api/temporary_writings/${w.id}/apply_create_lang_words`, {}, { admin: true });
+      }
+    }
+  }
+
+  async function enqueueTempForParents(parentIds) {
+    for (const pid of parentIds) {
+      await apiPost("/api/write/create_lang_words", { parent_lang_word_id: pid, modifier: "" }, { admin: true });
+    }
+  }
+
+  $("rootFilterSelect").onchange = () => {
+    rootFilterMode = $("rootFilterSelect").value || "all";
+    clearSelectedParents();
+    updateSelectedParentsUI();
+    renderReadTree();
+  };
+
+  $("selectAllFilteredBtn").onclick = () => selectAllFiltered();
+  $("clearSelectedParentsBtn").onclick = () => clearSelectedParents();
+
+  $("applySelectedTempBtn").onclick = async () => {
+    if (!getAdminKey()) return;
+    const ids = Array.from(selectedParentIds);
+    if (!ids.length) return;
+
+    if (!confirm(`Apply ALL temporary writings for ${ids.length} selected parent word(s)? This will create new versions + delete the temporary writings.`)) return;
+
+    $("applySelectedTempBtn").disabled = true;
+    try {
+      await applyAllTempForParents(ids);
+      clearSelectedParents();
+      await loadWriteTree();
+      await loadWritings();
+    } catch (e) {
+      alert(String(e.message || e));
+    } finally {
+      $("applySelectedTempBtn").disabled = false;
+    }
+  };
+
+  $("createTempForSelectedBtn").onclick = async () => {
+    if (!getAdminKey()) return;
+    const ids = Array.from(selectedParentIds);
+    if (!ids.length) return;
+
+    if (!confirm(`Enqueue theme-generation for ${ids.length} selected parent word(s)?`)) return;
+
+    $("createTempForSelectedBtn").disabled = true;
+    try {
+      await enqueueTempForParents(ids);
+      clearSelectedParents();
+      // Tasks run async; refresh tree to update badges (may still be 0 until tasks finish)
+      await loadWriteTree();
+    } catch (e) {
+      alert(String(e.message || e));
+    } finally {
+      $("createTempForSelectedBtn").disabled = false;
+    }
+  };
+
+
   // -------------------------
   // Boot
   // -------------------------
   async function boot() {
     await refreshAdminStatus();
+    updateSelectedParentsUI();
     updateSelectedWordsPill();
     await loadWriteTree();
   }
