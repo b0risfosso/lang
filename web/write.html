@@ -268,6 +268,37 @@
     return await res.json();
   }
 
+    async function apiPost(url, body = {}, { admin = false } = {}) {
+    const headers = {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+    };
+    if (admin) Object.assign(headers, withAdminHeaders());
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    const text = await res.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = null;
+    }
+
+    if (!res.ok) {
+      throw new Error(
+        (data && (data.description || data.error)) ||
+        `POST ${url} failed (${res.status})`
+      );
+    }
+
+    return data;
+  }
+
   async function apiDelete(url, { admin = false } = {}) {
     const headers = { "Accept": "application/json" };
     if (admin) Object.assign(headers, withAdminHeaders());
