@@ -1804,8 +1804,10 @@ def _process_one_task() -> None:
             SET status='done', result_writing_id=?
             WHERE id=?
             """,
+            (writing_id, task_id),
         )
         db.commit()
+
 
         # Log LLM usage
         log_llm_usage(
