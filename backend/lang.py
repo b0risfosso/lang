@@ -919,6 +919,44 @@ def create_child_word(version_id: int):
     return jsonify(ok=True, child_id=int(cur.lastrowid)), 201
 
 
+@app.post("/api/lang_word_versions/<int:version_id>/child_words/batch")
+def create_child_words_batch(version_id: int):
+    require_admin_key()
+    db = get_db()
+
+    vr = db.execute("SELECT id FROM lang_word_versions WHERE id=?", (version_id,)).fetchone()
+    if vr is None:
+        abort(404, description="Version not found.")
+
+    data = request.get_json(silent=True) or {}
+    words = data.get("words", [])
+    if not isinstance(words, list):
+        abort(400, description="'words' must be a list of strings or objects.")
+
+    added = []
+    for item in words:
+        if isinstance(item, str):
+            word = item.strip()
+            link = None
+        elif isinstance(item, dict):
+            word = (item.get("word") or "").strip()
+            link = (item.get("link") or "").strip() or None
+        else:
+            continue
+        
+        if not word:
+            continue
+
+        cur = db.execute(
+            "INSERT INTO child_words (lang_word_version_id, word, link) VALUES (?, ?, ?)",
+            (version_id, word, link),
+        )
+        added.append({"word": word, "link": link, "child_id": int(cur.lastrowid)})
+
+    db.commit()
+    return jsonify(ok=True, added=added), 201
+
+
 @app.post("/api/lang_word_versions/<int:version_id>/child_lang_words")
 def add_child_lang_word(version_id: int):
     require_admin_key()
@@ -943,6 +981,68 @@ def add_child_lang_word(version_id: int):
         """
         INSERT OR IGNORE INTO lang_word_children (parent_lang_word_version_id, child_lang_word_id)
         VALUES (?, ?)
+        """,
+        (version_id, child_lang_word_id),
+    )
+    db.commit()
+    return jsonify(ok=True, parent_version_id=version_id, child_lang_word_id=child_lang_word_id)
+
+
+@app.post("/api/lang_word_versions/<int:version_id>/child_lang_words/batch")
+def add_child_lang_words_batch(version_id: int):
+    require_admin_key()
+    db = get_db()
+
+    parent = db.execute("SELECT id FROM lang_word_versions WHERE id=?", (version_id,)).fetchone()
+    if parent is None:
+        abort(404, description="Version not found.")
+
+    data = request.get_json(silent=True) or {}
+    words = data.get("words", [])
+    if not isinstance(words, list):
+        abort(400, description="'words' must be a list of strings.")
+
+    added = []
+    for word_text in words:
+        word_text = (word_text or "").strip()
+        if not word_text:
+            continue
+        
+        # Check if word exists, create if not
+        existing = db.execute("SELECT id FROM lang_words WHERE word=?", (word_text,)).fetchone()
+        if existing:
+            child_id = existing["id"]
+        else:
+            cur = db.execute("INSERT INTO lang_words (word) VALUES (?)", (word_text,))
+            child_id = cur.lastrowid
+        
+        # Add link
+        db.execute(
+            """
+            INSERT OR IGNORE INTO lang_word_children (parent_lang_word_version_id, child_lang_word_id)
+            VALUES (?, ?)
+            """,
+            (version_id, child_id),
+        )
+        added.append({"word": word_text, "lang_word_id": child_id})
+
+    db.commit()
+    return jsonify(ok=True, parent_version_id=version_id, added=added)
+
+
+@app.delete("/api/lang_word_versions/<int:version_id>/child_lang_words/<int:child_lang_word_id>")
+def delete_child_lang_word(version_id: int, child_lang_word_id: int):
+    require_admin_key()
+    db = get_db()
+
+    parent = db.execute("SELECT id FROM lang_word_versions WHERE id=?", (version_id,)).fetchone()
+    if parent is None:
+        abort(404, description="Version not found.")
+
+    db.execute(
+        """
+        DELETE FROM lang_word_children 
+        WHERE parent_lang_word_version_id=? AND child_lang_word_id=?
         """,
         (version_id, child_lang_word_id),
     )

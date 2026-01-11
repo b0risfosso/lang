@@ -172,6 +172,28 @@
             <button id="addChildWordBtn" type="button" disabled>add</button>
           </div>
         </details>
+
+        <details style="margin-top:10px;">
+          <summary><strong>batch add child lang words</strong> <span class="muted tiny">(multiple lines, each a new word)</span></summary>
+          <div style="margin-top:10px;">
+            <textarea id="batchChildLangWordsTextarea" placeholder="word1\nword2\nword3" style="width:100%; min-height:80px;"></textarea>
+            <div style="margin-top:8px;" class="row">
+              <button id="batchAddChildLangWordsBtn" type="button" disabled>batch add</button>
+            </div>
+            <div class="muted tiny">Each line becomes a child lang word (created if doesn't exist).</div>
+          </div>
+        </details>
+
+        <details style="margin-top:10px;">
+          <summary><strong>batch add child words</strong> <span class="muted tiny">(multiple lines, each a new orbiting phrase)</span></summary>
+          <div style="margin-top:10px;">
+            <textarea id="batchChildWordsTextarea" placeholder="phrase1\nphrase2\nphrase3" style="width:100%; min-height:80px;"></textarea>
+            <div style="margin-top:8px;" class="row">
+              <button id="batchAddChildWordsBtn" type="button" disabled>batch add</button>
+            </div>
+            <div class="muted tiny">Each line becomes a child word (orbiting phrase).</div>
+          </div>
+        </details>
       </div>
 
       <div class="card">
@@ -246,14 +268,14 @@
     return await res.json();
   }
 
-  async function apiPost(url, body, { admin = false } = {}) {
-    const headers = { "Content-Type": "application/json", "Accept": "application/json" };
+  async function apiDelete(url, { admin = false } = {}) {
+    const headers = { "Accept": "application/json" };
     if (admin) Object.assign(headers, withAdminHeaders());
-    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body || {}) });
+    const res = await fetch(url, { method: "DELETE", headers });
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-    if (!res.ok) throw new Error((data && (data.description || data.error)) || `POST ${url} failed (${res.status})`);
+    if (!res.ok) throw new Error((data && (data.description || data.error)) || `DELETE ${url} failed (${res.status})`);
     return data;
   }
 
@@ -364,6 +386,8 @@
     $("addChildLangWordBtn").disabled = !(adminOk && selectedManualVersionId);
     $("createAndLinkLangWordBtn").disabled = !(adminOk && selectedManualVersionId);
     $("addChildWordBtn").disabled = !(adminOk && selectedManualVersionId);
+    $("batchAddChildLangWordsBtn").disabled = !(adminOk && selectedManualVersionId);
+    $("batchAddChildWordsBtn").disabled = !(adminOk && selectedManualVersionId);
   }
 
   function setSelectedParent(wordId, wordText) {
@@ -480,6 +504,26 @@
           refreshManualEditUI();
         };
         btnRow.appendChild(selBtn);
+
+        // Delete parent word button
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.textContent = "delete";
+        deleteBtn.style.marginLeft = "8px";
+        deleteBtn.onclick = async () => {
+          if (!confirm(`Delete parent lang word "${R.word}" and all its versions/children?`)) return;
+          try {
+            await apiDelete(`/api/lang_words/${R.lang_word_id}`, { admin: true });
+            nodeCache.clear(); // clear all cache
+            await loadWriteTree();
+            if (selectedParentWordId === R.lang_word_id) {
+              setSelectedParent(null, null);
+            }
+          } catch (e) {
+            alert(String(e.message || e));
+          }
+        };
+        btnRow.appendChild(deleteBtn);
       }
 
       d.appendChild(btnRow);
@@ -602,8 +646,35 @@
           body.appendChild(label);
 
           for (const k of kids) {
+            const childContainer = document.createElement("div");
+            childContainer.style.display = "flex";
+            childContainer.style.alignItems = "center";
+            childContainer.style.gap = "8px";
+            childContainer.style.marginTop = "4px";
+            
+            // Delete button
+            const deleteBtn = document.createElement("button");
+            deleteBtn.type = "button";
+            deleteBtn.textContent = "×";
+            deleteBtn.style.padding = "2px 6px";
+            deleteBtn.style.borderRadius = "999px";
+            deleteBtn.style.fontSize = "12px";
+            deleteBtn.title = "Delete child lang word link";
+            deleteBtn.onclick = async () => {
+              if (!confirm(`Delete child lang word "${k.word}" from this version?`)) return;
+              try {
+                await apiDelete(`/api/lang_word_versions/${node.version_id}/child_lang_words/${k.lang_word_id}`);
+                nodeCache.delete(langWordId); // clear cache
+                await loadWriteTree();
+              } catch (e) {
+                alert(String(e.message || e));
+              }
+            };
+            childContainer.appendChild(deleteBtn);
+            
             // recurse: render child node as expandable details
-            renderNodeRecursive(Number(k.lang_word_id), k.word, body, depth + 1);
+            renderNodeRecursive(Number(k.lang_word_id), k.word, childContainer, depth + 1);
+            body.appendChild(childContainer);
           }
         }
 
@@ -617,8 +688,52 @@
           const ul = document.createElement("ul");
           for (const c of orb) {
             const li = document.createElement("li");
+            li.style.display = "flex";
+            li.style.alignItems = "center";
+            li.style.gap = "8px";
+            
+            // Delete button
+            const deleteBtn = document.createElement("button");
+            deleteBtn.type = "button";
+            deleteBtn.textContent = "×";
+            deleteBtn.style.padding = "2px 6px";
+            deleteBtn.style.borderRadius = "999px";
+            deleteBtn.style.fontSize = "12px";
+            deleteBtn.title = "Delete child word";
+            deleteBtn.onclick = async () => {
+              if (!confirm(`Delete child word "${c.word}"?`)) return;
+              try {
+                await apiDelete(`/api/child_words/${c.id}`, { admin: true });
+                nodeCache.delete(langWordId); // clear cache
+                await loadWriteTree();
+              } catch (e) {
+                alert(String(e.message || e));
+              }
+            };
+            li.appendChild(deleteBtn);
+            
             const link = `stars.html?child_word_id=${encodeURIComponent(c.id)}`;
-            li.innerHTML = `<a href="${link}">${escapeHtml(c.word)}</a>` + (c.link ? ` <span class="muted tiny">·</span> <a class="muted tiny" href="${escapeHtml(c.link)}" target="_blank" rel="noopener noreferrer">source</a>` : "");
+            const linkEl = document.createElement("a");
+            linkEl.href = link;
+            linkEl.textContent = escapeHtml(c.word);
+            li.appendChild(linkEl);
+            
+            if (c.link) {
+              li.appendChild(document.createTextNode(" "));
+              const dot = document.createElement("span");
+              dot.className = "muted tiny";
+              dot.textContent = "·";
+              li.appendChild(dot);
+              li.appendChild(document.createTextNode(" "));
+              const sourceLink = document.createElement("a");
+              sourceLink.className = "muted tiny";
+              sourceLink.href = escapeHtml(c.link);
+              sourceLink.target = "_blank";
+              sourceLink.rel = "noopener noreferrer";
+              sourceLink.textContent = "source";
+              li.appendChild(sourceLink);
+            }
+            
             ul.appendChild(li);
           }
           body.appendChild(ul);
@@ -723,6 +838,7 @@
     try {
       await apiPost(`/api/lang_word_versions/${versionId}/child_lang_words`, { child_lang_word_id: childId }, { admin: true });
       $("addChildLangWordIdInput").value = "";
+      nodeCache.clear(); // clear cache
       await loadWriteTree();
       refreshManualEditUI({ preferVersionId: versionId });
       renderReadTree();
@@ -740,6 +856,7 @@
       const w = await apiPost(`/api/lang_words`, { word }, { admin: true });
       await apiPost(`/api/lang_word_versions/${versionId}/child_lang_words`, { child_lang_word_id: w.lang_word_id }, { admin: true });
       $("createAndLinkLangWordInput").value = "";
+      nodeCache.clear(); // clear cache
       await loadWriteTree();
       refreshManualEditUI({ preferVersionId: versionId });
       renderReadTree();
@@ -758,6 +875,45 @@
       await apiPost(`/api/lang_word_versions/${versionId}/child_words`, { word, link }, { admin: true });
       $("addChildWordInput").value = "";
       $("addChildWordLinkInput").value = "";
+      nodeCache.clear(); // clear cache
+      await loadWriteTree();
+      refreshManualEditUI({ preferVersionId: versionId });
+      renderReadTree();
+    } catch (e) {
+      alert(String(e.message || e));
+    }
+  };
+
+  $("batchAddChildLangWordsBtn").onclick = async () => {
+    const versionId = selectedManualVersionId;
+    if (!versionId) return;
+    const text = ($("batchChildLangWordsTextarea").value || "").trim();
+    if (!text) return;
+    const words = text.split('\n').map(w => w.trim()).filter(w => w);
+    if (!words.length) return;
+    try {
+      await apiPost(`/api/lang_word_versions/${versionId}/child_lang_words/batch`, { words }, { admin: true });
+      $("batchChildLangWordsTextarea").value = "";
+      nodeCache.clear(); // clear cache
+      await loadWriteTree();
+      refreshManualEditUI({ preferVersionId: versionId });
+      renderReadTree();
+    } catch (e) {
+      alert(String(e.message || e));
+    }
+  };
+
+  $("batchAddChildWordsBtn").onclick = async () => {
+    const versionId = selectedManualVersionId;
+    if (!versionId) return;
+    const text = ($("batchChildWordsTextarea").value || "").trim();
+    if (!text) return;
+    const words = text.split('\n').map(w => w.trim()).filter(w => w);
+    if (!words.length) return;
+    try {
+      await apiPost(`/api/lang_word_versions/${versionId}/child_words/batch`, { words }, { admin: true });
+      $("batchChildWordsTextarea").value = "";
+      nodeCache.clear(); // clear cache
       await loadWriteTree();
       refreshManualEditUI({ preferVersionId: versionId });
       renderReadTree();
