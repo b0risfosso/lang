@@ -9,7 +9,7 @@ New data model:
     * child_words (orbiting phrases) in `child_words`
     * child lang words (themes/subthemes) via `lang_word_children` edges from parent version -> child lang_word_id
 - Sentences live in `lang_sentences` (JSON list of lang_word_ids).
-- Optional child sentences live in `child_sentences` (JSON list of child_word_ids).
+- Optional child sentences live in `child_sentences` (JSON lists of child_word_ids + lang_word_ids).
 - LLM pipeline tables are keyed by `parent_lang_word_id` (a root/parent word), not `lang_id`.
 
 This file is intended to fully replace your previous lang.py.
@@ -434,6 +434,7 @@ def ensure_schema(db: sqlite3.Connection) -> None:
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           lang_sentence_id INTEGER NOT NULL,
           child_word_ids TEXT NOT NULL,     -- JSON array of ints (child_words.id)
+          lang_word_ids TEXT NOT NULL DEFAULT '[]', -- JSON array of ints (lang_words.id)
           sentence TEXT NOT NULL,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -443,6 +444,10 @@ def ensure_schema(db: sqlite3.Connection) -> None:
     )
     db.execute("CREATE INDEX IF NOT EXISTS idx_child_sentences_lang_sentence_id ON child_sentences(lang_sentence_id);")
     db.execute("CREATE INDEX IF NOT EXISTS idx_child_sentences_updated ON child_sentences(updated_at);")
+    # Migration: add lang_word_ids if upgrading from older schema.
+    cols = [r["name"] for r in db.execute("PRAGMA table_info(child_sentences);").fetchall()]
+    if "lang_word_ids" not in cols:
+        db.execute("ALTER TABLE child_sentences ADD COLUMN lang_word_ids TEXT NOT NULL DEFAULT '[]';")
 
     # LLM pipeline (keyed by parent_lang_word_id)
     db.execute(
@@ -1376,7 +1381,7 @@ def list_child_sentences(sentence_id: int):
 
     rows = db.execute(
         """
-        SELECT id, lang_sentence_id, child_word_ids, sentence, created_at, updated_at
+        SELECT id, lang_sentence_id, child_word_ids, lang_word_ids, sentence, created_at, updated_at
         FROM child_sentences
         WHERE lang_sentence_id=?
         ORDER BY updated_at DESC, id DESC
@@ -1390,6 +1395,7 @@ def list_child_sentences(sentence_id: int):
             "id": int(r["id"]),
             "lang_sentence_id": int(r["lang_sentence_id"]),
             "child_word_ids": _parse_int_list_json(r["child_word_ids"]),
+            "lang_word_ids": _parse_int_list_json(r["lang_word_ids"]),
             "sentence": r["sentence"],
             "created_at": r["created_at"],
             "updated_at": r["updated_at"],
@@ -1407,32 +1413,50 @@ def create_child_sentence(sentence_id: int):
         abort(404, description="Sentence not found.")
 
     data = request.get_json(silent=True) or {}
-    ids = data.get("child_word_ids", [])
+    child_ids = data.get("child_word_ids", [])
+    lang_ids = data.get("lang_word_ids", [])
     sentence = (data.get("sentence") or "").strip()
 
-    if not isinstance(ids, list):
+    if not isinstance(child_ids, list):
         abort(400, description="child_word_ids must be a list.")
-    ids_int: list[int] = []
-    for x in ids:
+    if not isinstance(lang_ids, list):
+        abort(400, description="lang_word_ids must be a list.")
+    child_ids_int: list[int] = []
+    for x in child_ids:
         try:
-            ids_int.append(int(x))
+            child_ids_int.append(int(x))
+        except Exception:
+            pass
+    lang_ids_int: list[int] = []
+    for x in lang_ids:
+        try:
+            lang_ids_int.append(int(x))
         except Exception:
             pass
 
     if not sentence:
         abort(400, description="Missing 'sentence'.")
-    if not ids_int:
-        abort(400, description="child_word_ids cannot be empty.")
+    if not child_ids_int and not lang_ids_int:
+        abort(400, description="child_word_ids or lang_word_ids cannot be empty.")
 
     # Ensure child_words exist
-    for cid in ids_int:
+    for cid in child_ids_int:
         w = db.execute("SELECT id FROM child_words WHERE id=?", (cid,)).fetchone()
         if w is None:
             abort(400, description=f"child_word_id {cid} does not exist.")
 
+    # Ensure lang_words exist
+    for wid in lang_ids_int:
+        w = db.execute("SELECT id FROM lang_words WHERE id=?", (wid,)).fetchone()
+        if w is None:
+            abort(400, description=f"lang_word_id {wid} does not exist.")
+
     cur = db.execute(
-        "INSERT INTO child_sentences (lang_sentence_id, child_word_ids, sentence) VALUES (?, ?, ?)",
-        (sentence_id, json.dumps(ids_int), sentence),
+        """
+        INSERT INTO child_sentences (lang_sentence_id, child_word_ids, lang_word_ids, sentence)
+        VALUES (?, ?, ?, ?)
+        """,
+        (sentence_id, json.dumps(child_ids_int), json.dumps(lang_ids_int), sentence),
     )
     db.commit()
     return jsonify(ok=True, id=int(cur.lastrowid)), 201
@@ -1443,7 +1467,7 @@ def get_child_sentence(child_sentence_id: int):
     db = get_db()
     r = db.execute(
         """
-        SELECT id, lang_sentence_id, child_word_ids, sentence, created_at, updated_at
+        SELECT id, lang_sentence_id, child_word_ids, lang_word_ids, sentence, created_at, updated_at
         FROM child_sentences
         WHERE id=?
         """,
@@ -1455,6 +1479,7 @@ def get_child_sentence(child_sentence_id: int):
         "id": int(r["id"]),
         "lang_sentence_id": int(r["lang_sentence_id"]),
         "child_word_ids": _parse_int_list_json(r["child_word_ids"]),
+        "lang_word_ids": _parse_int_list_json(r["lang_word_ids"]),
         "sentence": r["sentence"],
         "created_at": r["created_at"],
         "updated_at": r["updated_at"],
