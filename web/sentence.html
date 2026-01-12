@@ -97,7 +97,10 @@
       <div class="card" style="margin-top:10px;">
         <div class="row" style="justify-content:space-between;">
           <strong class="tiny">create child sentence</strong>
-          <button id="createChildSentenceBtn" type="button" disabled>create</button>
+          <div class="row">
+            <button id="clearChildSentenceBtn" type="button">clear</button>
+            <button id="createChildSentenceBtn" type="button" disabled>create</button>
+          </div>
         </div>
         <div class="muted tiny" id="childCreateHint">requires admin key; select ids and enter sentence text</div>
 
@@ -149,6 +152,23 @@
       <button id="wordPickerRefreshBtn" type="button">refresh</button>
     </div>
     <div class="list" id="wordPickerList"></div>
+  </div>
+</div>
+
+<div class="overlay" id="tempWritingsOverlay" role="dialog" aria-modal="true">
+  <div class="panel">
+    <div class="row" style="justify-content:space-between;">
+      <div>
+        <h2 style="margin:0;">temporary writings</h2>
+        <div class="muted tiny" id="tempWritingsTitle">—</div>
+      </div>
+      <div class="row">
+        <button id="refreshTempWritingsBtn" type="button">refresh</button>
+        <button id="closeTempWritingsBtn" type="button">close</button>
+      </div>
+    </div>
+    <div class="muted tiny" id="tempWritingsMeta">—</div>
+    <div class="list" id="tempWritingsList" style="margin-top:10px;"></div>
   </div>
 </div>
 
@@ -219,6 +239,7 @@
   const versionCache = new Map(); // version_id -> version payload
   let currentSentenceId = null;
   let currentLangWordIds = [];
+  let selectedTempLangWordId = null;
 
   // child sentence pick state
   let selectedParent = new Set();
@@ -309,10 +330,14 @@
     const rmBtnHtml = (getAdminKey() && currentSentenceId)
       ? `<button class="btn-sm danger" data-remove="1" type="button">remove</button>`
       : "";
+    const tempBtnsHtml = `
+      <button class="btn-sm" data-temp-create="1" type="button">create temp</button>
+      <button class="btn-sm" data-temp-open="1" type="button">temp writings</button>
+    `;
     sum.innerHTML = `
       <span class="row" style="justify-content:space-between; width:100%;">
         <span><strong>${esc(label)}</strong> <span class="muted tiny">${esc(latestVersionId ? `v_id ${latestVersionId}` : "no version")}</span></span>
-        <span class="row">${rmBtnHtml}</span>
+        <span class="row">${tempBtnsHtml}${rmBtnHtml}</span>
       </span>
     `;
     det.appendChild(sum);
@@ -323,6 +348,22 @@
         e.preventDefault();
         e.stopPropagation();
         removeLangWordFromSentence(langWordId).catch(err => alert(err.message || err));
+      });
+    }
+    const tempCreate = sum.querySelector('button[data-temp-create]');
+    if (tempCreate) {
+      tempCreate.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        createTempWriting(langWordId).catch(err => alert(err.message || err));
+      });
+    }
+    const tempOpen = sum.querySelector('button[data-temp-open]');
+    if (tempOpen) {
+      tempOpen.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openTempWritings(langWordId).catch(err => alert(err.message || err));
       });
     }
 
@@ -450,6 +491,86 @@
     if (!items.length) host.innerHTML = `<div class="muted tiny">no matches</div>`;
   }
 
+  // ---------- temporary writings ----------
+  async function createTempWriting(langWordId) {
+    if (!getAdminKey()) return alert("Admin key required.");
+    const w = wordsIndex.get(Number(langWordId));
+    const label = w ? `${w.word} (#${langWordId})` : `lang_word_id ${langWordId}`;
+    if (!confirm(`Enqueue temporary writings for ${label}?`)) return;
+    await apiPost("/api/write/create_lang_words", { parent_lang_word_id: Number(langWordId), modifier: "" });
+    alert("queued");
+  }
+
+  async function openTempWritings(langWordId) {
+    if (!getAdminKey()) return alert("Admin key required.");
+    selectedTempLangWordId = Number(langWordId);
+    const w = wordsIndex.get(Number(langWordId));
+    $("tempWritingsTitle").textContent = w ? `${w.word} (#${langWordId})` : `lang_word_id ${langWordId}`;
+    $("tempWritingsOverlay").style.display = "flex";
+    await loadTempWritings();
+  }
+  function closeTempWritings() {
+    $("tempWritingsOverlay").style.display = "none";
+  }
+  async function loadTempWritings() {
+    const host = $("tempWritingsList");
+    host.innerHTML = "";
+    if (!selectedTempLangWordId) return;
+    try {
+      const data = await apiGet(`/api/temporary_writings?parent_lang_word_id=${selectedTempLangWordId}`);
+      const arr = Array.isArray(data.writings) ? data.writings : [];
+      $("tempWritingsMeta").textContent = `${arr.length} writing(s)`;
+
+      for (const w of arr) {
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const top = document.createElement("div");
+        top.className = "row";
+        top.style.justifyContent = "space-between";
+        top.innerHTML = `<div><strong>writing #${w.id}</strong> <span class="muted tiny">task ${w.task_id ?? "—"} • ${esc(w.created_at || "")}</span></div>`;
+        card.appendChild(top);
+
+        const pre = document.createElement("pre");
+        pre.textContent = JSON.stringify(w.text, null, 2);
+        card.appendChild(pre);
+
+        const btnRow = document.createElement("div");
+        btnRow.className = "row";
+        btnRow.style.marginTop = "10px";
+
+        const applyBtn = document.createElement("button");
+        applyBtn.type = "button";
+        applyBtn.textContent = "create writing (apply)";
+        applyBtn.onclick = async () => {
+          if (!confirm("Apply this writing? This will create a NEW parent version and link ONLY the new themes.")) return;
+          try {
+            applyBtn.disabled = true;
+            await apiPost(`/api/temporary_writings/${w.id}/apply_create_lang_words`, {});
+            await loadTempWritings();
+            await loadSentence(currentSentenceId);
+          } catch (e) {
+            alert(String(e.message || e));
+          } finally {
+            applyBtn.disabled = false;
+          }
+        };
+
+        btnRow.appendChild(applyBtn);
+        card.appendChild(btnRow);
+        host.appendChild(card);
+      }
+
+      if (!arr.length) host.innerHTML = `<div class="muted tiny">no temporary writings yet</div>`;
+    } catch (e) {
+      $("tempWritingsMeta").textContent = "error";
+      const p = document.createElement("div");
+      p.className = "card danger";
+      p.textContent = String(e.message || e);
+      host.appendChild(p);
+    }
+  }
+
   // ---------- child sentence creation ----------
   function renderPick(hostId, items, selectedSet, onChange) {
     const host = $(hostId);
@@ -554,6 +675,15 @@
     $("createChildSentenceBtn").disabled = !(getAdminKey() && currentSentenceId && textOk && anyIds);
   }
 
+  async function clearChildSentenceDraft() {
+    selectedParent = new Set();
+    $("parentSelMeta").textContent = "0";
+    renderParentPick();
+    $("childSentenceText").value = "";
+    await refreshChildPicks();
+    updateCreateChildEnabled();
+  }
+
   async function loadChildSentences() {
     if (!currentSentenceId) return;
     $("childMeta").textContent = "loading…";
@@ -633,10 +763,16 @@
       await loadWordsIndex();
       renderWordPickerList();
     };
+    $("closeTempWritingsBtn").onclick = closeTempWritings;
+    $("refreshTempWritingsBtn").onclick = () => loadTempWritings();
+    $("tempWritingsOverlay").addEventListener("click", (e) => {
+      if (e.target === $("tempWritingsOverlay")) closeTempWritings();
+    });
 
     // child sentence create wiring
     $("childSentenceText").addEventListener("input", updateCreateChildEnabled);
     $("createChildSentenceBtn").onclick = () => createChildSentence().catch(e => alert(e.message || e));
+    $("clearChildSentenceBtn").onclick = () => clearChildSentenceDraft().catch(e => alert(e.message || e));
 
     // open sentence from query param or input
     const qid = getParam("sentence_id");
