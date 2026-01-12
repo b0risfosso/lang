@@ -476,7 +476,7 @@
   }
 
   function renderParentPick() {
-    selectedParent = new Set(currentLangWordIds.map(Number));
+    selectedParent = new Set(); // default: none selected
     $("parentSelMeta").textContent = String(selectedParent.size);
     const items = currentLangWordIds.map(id => {
       const w = wordsIndex.get(Number(id));
