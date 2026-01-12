@@ -98,11 +98,13 @@
         <div class="row" style="justify-content:space-between;">
           <strong class="tiny">create child sentence</strong>
           <div class="row">
+            <button id="autoChildSentenceBtn" type="button" disabled>auto-generate</button>
             <button id="clearChildSentenceBtn" type="button">clear</button>
             <button id="createChildSentenceBtn" type="button" disabled>create</button>
           </div>
         </div>
         <div class="muted tiny" id="childCreateHint">requires admin key; select ids and enter sentence text</div>
+        <div class="muted tiny" id="childAutoStatus"></div>
 
         <div class="grid3" style="margin-top:10px;">
           <div>
@@ -195,6 +197,7 @@
     $("adminStatus").textContent = has ? "admin: set" : "admin: not set";
     $("editWordsBtn").disabled = !(has && currentSentenceId);
     updateCreateChildEnabled();
+    updateAutoChildEnabled();
   }
 
   function getParam(name) {
@@ -240,6 +243,7 @@
   let currentSentenceId = null;
   let currentLangWordIds = [];
   let selectedTempLangWordId = null;
+  let autoChildRunning = false;
 
   // child sentence pick state
   let selectedParent = new Set();
@@ -283,6 +287,7 @@
     $("sentenceIds").textContent = "";
     $("wordsHost").innerHTML = "";
     $("childSentenceList").innerHTML = "";
+    $("childAutoStatus").textContent = "";
 
     const s = await apiGet(`/api/lang_sentences/${sentenceId}`);
     const ids = Array.isArray(s.lang_word_ids) ? s.lang_word_ids : [];
@@ -290,6 +295,7 @@
 
     currentSentenceId = Number(sentenceId);
     currentLangWordIds = idsInt;
+    autoChildRunning = false;
 
     $("sentenceMeta").textContent = `updated ${s.updated_at || ""}`;
     $("sentenceText").innerHTML = esc(s.sentence || "");
@@ -675,6 +681,10 @@
     $("createChildSentenceBtn").disabled = !(getAdminKey() && currentSentenceId && textOk && anyIds);
   }
 
+  function updateAutoChildEnabled() {
+    $("autoChildSentenceBtn").disabled = !(getAdminKey() && currentSentenceId && !autoChildRunning);
+  }
+
   async function clearChildSentenceDraft() {
     selectedParent = new Set();
     $("parentSelMeta").textContent = "0";
@@ -737,6 +747,44 @@
     updateCreateChildEnabled();
   }
 
+  async function waitForTask(taskId) {
+    for (let i = 0; i < 90; i++) {
+      const t = await apiGet(`/api/tasks/${taskId}`);
+      $("childAutoStatus").textContent = `task ${taskId}: ${t.status}`;
+      if (t.status === "done") return t;
+      if (t.status === "error") throw new Error(t.error || "task failed");
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    throw new Error("task timed out");
+  }
+
+  async function autoCreateChildSentences() {
+    if (!getAdminKey()) return alert("Admin key required.");
+    if (!currentSentenceId) return;
+    if (autoChildRunning) return;
+
+    autoChildRunning = true;
+    updateAutoChildEnabled();
+    $("childAutoStatus").textContent = "queueing…";
+
+    try {
+      const data = await apiPost(`/api/lang_sentences/${currentSentenceId}/child_sentences/auto`, {
+        lang_word_ids: currentLangWordIds
+      });
+      const taskId = data.task_id;
+      if (!taskId) throw new Error("No task id returned");
+      await waitForTask(taskId);
+      $("childAutoStatus").textContent = "done";
+      await loadChildSentences();
+    } catch (e) {
+      $("childAutoStatus").textContent = "error";
+      alert(String(e.message || e));
+    } finally {
+      autoChildRunning = false;
+      updateAutoChildEnabled();
+    }
+  }
+
   async function boot() {
     await loadWordsIndex();
 
@@ -773,6 +821,7 @@
     $("childSentenceText").addEventListener("input", updateCreateChildEnabled);
     $("createChildSentenceBtn").onclick = () => createChildSentence().catch(e => alert(e.message || e));
     $("clearChildSentenceBtn").onclick = () => clearChildSentenceDraft().catch(e => alert(e.message || e));
+    $("autoChildSentenceBtn").onclick = () => autoCreateChildSentences().catch(e => alert(e.message || e));
 
     // open sentence from query param or input
     const qid = getParam("sentence_id");

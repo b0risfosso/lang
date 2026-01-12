@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -58,6 +59,7 @@ def check_admin() -> bool:
 
 # LLM config
 LLM_MODEL_CREATE_LANG_WORDS = os.environ.get("LLM_MODEL_CREATE_LANG_WORDS", "gpt-5-mini-2025-08-07")
+LLM_MODEL_CREATE_CHILD_SENTENCES = os.environ.get("LLM_MODEL_CREATE_CHILD_SENTENCES", LLM_MODEL_CREATE_LANG_WORDS)
 
 
 # ---------------------------------------------------------------------
@@ -236,6 +238,42 @@ Output ONLY the code in a single fenced code block with the language specified.
 """,
 }
 
+CHILD_SENTENCE_PROMPT_TEMPLATE = """You are given an ontology snippet with:
+- LANG WORDS (top-level concepts), each with an (id) and v_id
+- CHILD LANG WORDS (subtopics) under each lang word, each with a (#ontology_id)
+- CHILD WORDS (optional), if present
+
+Your task:
+1) Generate phrases/sentences that combine ideas ACROSS the provided groups (i.e., mix concepts from different lang words and/or their child lang words).
+2) Do NOT focus on describing parent→child relationships. Instead, produce natural phrases that span multiple groups (cross-branch synthesis).
+3) Use the extended vocabulary (child lang words and child words) as primary building blocks. You may use paraphrases and near-synonyms; exact word-for-word matches are NOT required.
+4) Every phrase must include a mapping to relevant ontology IDs from the provided list. Mappings can be many-to-many, but must be justified by meaning (semantic activation), not just keyword overlap.
+5) Avoid inventing ontology IDs that are not present in the input. If a phrase seems to require an ID that isn’t provided, rewrite the phrase to stay within the given IDs.
+6) Output 10–20 phrases unless a different number is specified.
+
+Output format (strict):
+For each item, output:
+
+### <number>
+Phrase: <one sentence, 10–30 words, vivid and specific>
+Maps to IDs:
+- <Lang word name> (id <id>) [optional if you want] → <child lang word label> (#<id>)
+- <Lang word name> (id <id>) → <child lang word label> (#<id>)
+- ... (2–6 mappings per phrase typical)
+
+Guidelines for good phrases:
+- Blend different dimensions (e.g., sensory + operations + regulation; clinical + measurement + behavior; etc.) where possible.
+- Prefer concrete actions, mechanisms, or scenarios (e.g., “optimize checkout flow,” “diffusion gradients,” “small-batch labeling”).
+- Vary structure: causal (“X drives Y”), contrast (“Despite X, Y”), conditional (“When X, Y”), and experiential (“People perceive X as Y”).
+- Do not repeat the same template repeatedly; diversify verbs and contexts.
+
+Now process the following ontology snippet:
+
+<ONTOLOGY_INPUT>
+{ONTOLOGY_INPUT}
+</ONTOLOGY_INPUT>
+"""
+
 _worker_started = False
 _worker_lock = threading.Lock()
 
@@ -305,6 +343,110 @@ def _parse_int_list_json(s: str) -> list[int]:
         elif isinstance(x, str) and x.isdigit():
             out.append(int(x))
     return out
+
+
+def _get_latest_version_id(db: sqlite3.Connection, lang_word_id: int) -> Optional[int]:
+    row = db.execute(
+        "SELECT id FROM lang_word_versions WHERE lang_word_id=? ORDER BY version DESC LIMIT 1",
+        (lang_word_id,),
+    ).fetchone()
+    return int(row["id"]) if row is not None else None
+
+
+def _build_child_sentence_ontology(db: sqlite3.Connection, lang_word_ids: list[int]) -> str:
+    parts: list[str] = []
+    for lang_word_id in lang_word_ids:
+        w = db.execute(
+            "SELECT word FROM lang_words WHERE id=?",
+            (lang_word_id,),
+        ).fetchone()
+        if w is None:
+            continue
+        version_id = _get_latest_version_id(db, lang_word_id)
+        parts.append(f"LANG WORD: {w['word']} (id {lang_word_id}) v_id {version_id or 'none'}")
+
+        if version_id is None:
+            parts.append("CHILD LANG WORDS: none")
+            parts.append("CHILD WORDS: none")
+            parts.append("")
+            continue
+
+        cl_rows = db.execute(
+            """
+            SELECT w.id, w.word
+            FROM lang_word_children lwc
+            JOIN lang_words w ON w.id = lwc.child_lang_word_id
+            WHERE lwc.parent_lang_word_version_id=?
+            ORDER BY w.word ASC, w.id ASC
+            """,
+            (version_id,),
+        ).fetchall()
+        if cl_rows:
+            parts.append("CHILD LANG WORDS:")
+            for r in cl_rows:
+                parts.append(f"- {r['word']} (#{int(r['id'])})")
+        else:
+            parts.append("CHILD LANG WORDS: none")
+
+        cw_rows = db.execute(
+            """
+            SELECT id, word
+            FROM child_words
+            WHERE lang_word_version_id=?
+            ORDER BY word ASC, id ASC
+            """,
+            (version_id,),
+        ).fetchall()
+        if cw_rows:
+            parts.append("CHILD WORDS:")
+            for r in cw_rows:
+                parts.append(f"- {r['word']} (child_word_id {int(r['id'])})")
+        else:
+            parts.append("CHILD WORDS: none")
+
+        parts.append("")
+
+    return "\n".join(parts).strip()
+
+
+def _parse_child_sentence_output(text: str, fallback_lang_word_ids: list[int]) -> list[dict[str, Any]]:
+    if not text:
+        return []
+
+    blocks = re.split(r"(?m)^###\s+\d+\s*$", text)
+    items: list[dict[str, Any]] = []
+    for block in blocks:
+        if not block.strip():
+            continue
+
+        phrase = ""
+        lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
+        for idx, line in enumerate(lines):
+            if line.lower().startswith("phrase:"):
+                phrase = line.split(":", 1)[1].strip()
+                if not phrase and idx + 1 < len(lines):
+                    phrase = lines[idx + 1].strip()
+                break
+
+        if not phrase:
+            continue
+
+        lang_ids = set(int(x) for x in re.findall(r"\(id\s+(\d+)\)", block))
+        lang_ids.update(int(x) for x in re.findall(r"#(\d+)", block))
+
+        child_ids = set(int(x) for x in re.findall(r"child_word_id\s+(\d+)", block, flags=re.IGNORECASE))
+        child_ids.update(int(x) for x in re.findall(r"child word id\s+(\d+)", block, flags=re.IGNORECASE))
+
+        lang_ids_list = sorted(lang_ids) if lang_ids else list(fallback_lang_word_ids)
+        child_ids_list = sorted(child_ids)
+
+        items.append({
+            "sentence": phrase,
+            "lang_word_ids": lang_ids_list,
+            "child_word_ids": child_ids_list,
+        })
+
+    return items
 
 
 def ensure_word_has_v1(db: sqlite3.Connection, lang_word_id: int) -> int:
@@ -1462,6 +1604,59 @@ def create_child_sentence(sentence_id: int):
     return jsonify(ok=True, id=int(cur.lastrowid)), 201
 
 
+@app.post("/api/lang_sentences/<int:sentence_id>/child_sentences/auto")
+@require_admin
+def create_child_sentences_auto(sentence_id: int):
+    db = get_db()
+
+    sr = db.execute(
+        "SELECT id, lang_word_ids FROM lang_sentences WHERE id=?",
+        (sentence_id,),
+    ).fetchone()
+    if sr is None:
+        abort(404, description="Sentence not found.")
+
+    lang_ids = _parse_int_list_json(sr["lang_word_ids"])
+    if not lang_ids:
+        abort(400, description="Sentence has no lang_word_ids.")
+
+    data = request.get_json(silent=True) or {}
+    requested_ids = data.get("lang_word_ids", None)
+    if isinstance(requested_ids, list) and requested_ids:
+        requested_int: list[int] = []
+        for x in requested_ids:
+            try:
+                requested_int.append(int(x))
+            except Exception:
+                pass
+        if requested_int:
+            lang_ids = [x for x in lang_ids if x in set(requested_int)] or lang_ids
+
+    existing = db.execute(
+        """
+        SELECT id, status
+        FROM llm_tasks
+        WHERE task_type=? AND status IN ('queued','running') AND identifier LIKE ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        ("create_child_sentences", f'%"sentence_id": {sentence_id}%'),
+    ).fetchone()
+    if existing is not None:
+        return jsonify(ok=True, task_id=int(existing["id"]), status=existing["status"], deduped=True), 202
+
+    identifier = {"sentence_id": sentence_id, "lang_word_ids": lang_ids}
+    cur = db.execute(
+        """
+        INSERT INTO llm_tasks (parent_lang_word_id, task_type, identifier, payload, status)
+        VALUES (?, ?, ?, ?, 'queued')
+        """,
+        (int(lang_ids[0]), "create_child_sentences", json.dumps(identifier), json.dumps({})),
+    )
+    db.commit()
+    return jsonify(ok=True, task_id=int(cur.lastrowid)), 202
+
+
 @app.get("/api/child_sentences/<int:child_sentence_id>")
 def get_child_sentence(child_sentence_id: int):
     db = get_db()
@@ -1849,6 +2044,80 @@ def _process_one_task() -> None:
             )
             return
 
+        if task_type == "create_child_sentences":
+            ident = _json_loads_safe(task["identifier"], {})
+            sentence_id = int(ident.get("sentence_id") or 0)
+            lang_word_ids = ident.get("lang_word_ids") or []
+            lang_word_ids_int: list[int] = []
+            if isinstance(lang_word_ids, list):
+                for x in lang_word_ids:
+                    try:
+                        lang_word_ids_int.append(int(x))
+                    except Exception:
+                        pass
+
+            if not sentence_id:
+                raise ValueError("sentence_id missing in identifier for child sentences task")
+
+            sr = db.execute(
+                "SELECT lang_word_ids FROM lang_sentences WHERE id=?",
+                (sentence_id,),
+            ).fetchone()
+            if sr is None:
+                raise ValueError("Sentence not found.")
+
+            if not lang_word_ids_int:
+                lang_word_ids_int = _parse_int_list_json(sr["lang_word_ids"])
+            if not lang_word_ids_int:
+                raise ValueError("Sentence has no lang_word_ids.")
+
+            ontology_input = _build_child_sentence_ontology(db, lang_word_ids_int)
+            if not ontology_input:
+                raise ValueError("No ontology data available for provided lang_word_ids.")
+
+            prompt = CHILD_SENTENCE_PROMPT_TEMPLATE.format(ONTOLOGY_INPUT=ontology_input)
+            result_text, used_model, usage = call_openai_text(prompt, model=LLM_MODEL_CREATE_CHILD_SENTENCES)
+
+            items = _parse_child_sentence_output(result_text, lang_word_ids_int)
+            if not items:
+                raise ValueError("LLM returned no parsable child sentences.")
+
+            for item in items:
+                sentence = (item.get("sentence") or "").strip()
+                if not sentence:
+                    continue
+                lang_ids = item.get("lang_word_ids") or []
+                child_ids = item.get("child_word_ids") or []
+                if not lang_ids and not child_ids:
+                    lang_ids = lang_word_ids_int
+
+                db.execute(
+                    """
+                    INSERT INTO child_sentences (lang_sentence_id, child_word_ids, lang_word_ids, sentence)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (sentence_id, json.dumps(child_ids), json.dumps(lang_ids), sentence),
+                )
+
+            db.execute("UPDATE llm_tasks SET status='done', error=NULL, updated_at=datetime('now') WHERE id=?", (task_id,))
+            db.commit()
+
+            log_llm_usage(
+                ts=datetime.now().isoformat(),
+                app="lang",
+                model=used_model,
+                endpoint="/child_sentences/auto",
+                email=None,
+                request_id=str(task_id),
+                tokens_in=usage.input_tokens,
+                tokens_out=usage.output_tokens,
+                total_tokens=usage.total_tokens,
+                duration_ms=0,
+                cost_usd=0.0,
+                meta=json.dumps({"task": "create_child_sentences", "sentence_id": sentence_id})
+            )
+            return
+
         if task_type != "create_lang_words":
             raise ValueError(f"Unknown task_type: {task_type}")
 
@@ -1988,7 +2257,7 @@ def _run_create_lang_words_llm(primary_phrase: str, optional_modifier: Optional[
     return plan, resp.usage
 
 
-def call_openai_text(prompt: str) -> tuple[str, str, dict[str, Any]]:
+def call_openai_text(prompt: str, model: Optional[str] = None) -> tuple[str, str, dict[str, Any]]:
     """
     Call OpenAI to generate text from a prompt.
     Returns (text, model_used, usage_dict)
@@ -1999,8 +2268,9 @@ def call_openai_text(prompt: str) -> tuple[str, str, dict[str, Any]]:
         raise RuntimeError("OPENAI_API_KEY is not set.")
 
     client = OpenAI()
+    model_name = model or LLM_MODEL_CREATE_LANG_WORDS
     resp = client.responses.create(
-        model=LLM_MODEL_CREATE_LANG_WORDS,
+        model=model_name,
         input=[{"role": "user", "content": prompt}],
     )
 
@@ -2009,7 +2279,7 @@ def call_openai_text(prompt: str) -> tuple[str, str, dict[str, Any]]:
         raise RuntimeError("LLM returned no text output.")
 
     usage = resp.usage
-    return text_out, LLM_MODEL_CREATE_LANG_WORDS, usage
+    return text_out, model_name, usage
 
 
 @app.get("/api/admin/token_counts")
