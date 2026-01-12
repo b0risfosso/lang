@@ -59,27 +59,16 @@
 
       <div id="wordList" style="margin-top:10px;"></div>
 
-      <div class="card" style="margin-top:14px;">
-        <div class="row" style="justify-content:space-between;">
-          <strong>create sentence</strong>
-          <button id="refreshSentencesBtn" type="button">refresh</button>
-        </div>
-        <div class="muted tiny">requires admin key in localStorage "lang_admin_key"</div>
-        <div style="margin-top:10px;">
-          <textarea id="newSentenceInput" placeholder="new sentence…"></textarea>
-        </div>
-        <div class="row" style="margin-top:10px;">
-          <button id="createSentenceBtn" type="button" disabled>create</button>
-          <span class="muted tiny" id="createHint">select at least 1 word</span>
-        </div>
-      </div>
     </section>
 
     <!-- Right: sentences -->
     <section class="card">
       <div class="row" style="justify-content:space-between;">
         <strong>sentences</strong>
-        <span class="muted tiny" id="resultMeta">…</span>
+        <div class="row">
+          <span class="muted tiny" id="resultMeta">…</span>
+          <button id="refreshSentencesBtn" type="button">refresh</button>
+        </div>
       </div>
       <div id="sentenceList" style="margin-top:10px;"></div>
     </section>
@@ -132,8 +121,6 @@
 
   function updateSelectedUI() {
     $("selectedPill").textContent = `${selected.size} selected`;
-    $("createSentenceBtn").disabled = !(getAdminKey() && selected.size > 0 && ($("newSentenceInput").value || "").trim());
-    $("createHint").textContent = selected.size ? "ready" : "select at least 1 word";
     renderSentences();
   }
 
@@ -261,25 +248,7 @@
   $("refreshSentencesBtn").onclick = () => loadSentences();
   $("clearSelectionBtn").onclick = () => { selected.clear(); updateSelectedUI(); };
 
-  $("newSentenceInput").addEventListener("input", updateSelectedUI);
 
-  $("createSentenceBtn").onclick = async () => {
-    const sentence = ($("newSentenceInput").value || "").trim();
-    if (!sentence) return;
-    const ids = Array.from(selected);
-    if (!ids.length) return;
-
-    try {
-      $("createSentenceBtn").disabled = true;
-      await apiPost("/api/lang_sentences", { lang_word_ids: ids, sentence }, { admin: true });
-      $("newSentenceInput").value = "";
-      await loadSentences();
-    } catch (e) {
-      alert(String(e.message || e));
-    } finally {
-      updateSelectedUI();
-    }
-  };
 
   async function boot() {
     await refreshAdminStatus();

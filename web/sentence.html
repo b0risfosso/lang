@@ -30,6 +30,19 @@
     .tiny { font-size: 12px; }
     .loading { opacity: .8; font-style: italic; }
     .indent { margin-left: 14px; border-left: 2px solid color-mix(in oklab, currentColor 12%, transparent); padding-left: 12px; }
+
+    .overlay { position: fixed; inset: 0; background: color-mix(in oklab, black 35%, transparent); display:none; align-items:stretch; justify-content:flex-end; }
+    .panel { width: min(520px, 92vw); background: Canvas; border-left: 1px solid color-mix(in oklab, currentColor 18%, transparent); padding: 14px; overflow:auto; }
+    .panel h2 { font-size: 14px; margin: 0 0 10px 0; }
+    .list { margin-top:10px; max-height: 60vh; overflow:auto; border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 12px; padding: 8px; }
+    .list-item { display:flex; align-items:center; justify-content:space-between; gap:10px; padding: 6px 6px; border-radius: 10px; }
+    .list-item:hover { background: color-mix(in oklab, currentColor 7%, transparent); }
+    .btn-sm { padding: 4px 8px; font-size: 12px; border-radius: 10px; }
+    .danger { border-color: color-mix(in oklab, red 35%, currentColor 18%); }
+    textarea { width:100%; min-height:84px; }
+    .grid3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    @media (max-width: 980px) { .grid3 { grid-template-columns: 1fr; } }
+
   </style>
 </head>
 <body>
@@ -43,6 +56,12 @@
     <a href="write.html">write</a>
     <a href="lang.html">sentences</a>
   </nav>
+  <div class="row tiny" style="justify-content:flex-end; margin-top:8px;">
+    <span class="muted">admin key</span>
+    <input id="adminKeyInput" placeholder="lang_admin_key…" style="width:220px;" />
+    <button id="saveAdminKeyBtn" type="button">save</button>
+    <span class="muted" id="adminStatus">admin: unknown</span>
+  </div>
 </header>
 
 <main>
@@ -53,6 +72,7 @@
         <div class="row">
           <input id="sentenceIdInput" placeholder="sentence id…" style="width:140px;" />
           <button id="goBtn" type="button">open</button>
+          <button id="editWordsBtn" type="button" disabled>edit words</button>
         </div>
       </div>
       <div class="muted tiny" id="sentenceMeta">…</div>
@@ -67,8 +87,70 @@
       </div>
       <div id="wordsHost" style="margin-top:10px;"></div>
     </section>
+
+    <section class="card" style="grid-column: 1 / -1;">
+      <div class="row" style="justify-content:space-between;">
+        <strong>child sentences</strong>
+        <span class="muted tiny" id="childMeta">…</span>
+      </div>
+
+      <div class="card" style="margin-top:10px;">
+        <div class="row" style="justify-content:space-between;">
+          <strong class="tiny">create child sentence</strong>
+          <button id="createChildSentenceBtn" type="button" disabled>create</button>
+        </div>
+        <div class="muted tiny" id="childCreateHint">requires admin key; select ids and enter sentence text</div>
+
+        <div class="grid3" style="margin-top:10px;">
+          <div>
+            <div class="row" style="justify-content:space-between;">
+              <strong class="tiny">parent lang words</strong>
+              <span class="muted tiny" id="parentSelMeta">0</span>
+            </div>
+            <div id="parentPick" class="list"></div>
+          </div>
+          <div>
+            <div class="row" style="justify-content:space-between;">
+              <strong class="tiny">child lang words</strong>
+              <span class="muted tiny" id="childLangSelMeta">0</span>
+            </div>
+            <div id="childLangPick" class="list"></div>
+          </div>
+          <div>
+            <div class="row" style="justify-content:space-between;">
+              <strong class="tiny">child words</strong>
+              <span class="muted tiny" id="childWordSelMeta">0</span>
+            </div>
+            <div id="childWordPick" class="list"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:10px;">
+          <textarea id="childSentenceText" placeholder="child sentence text…"></textarea>
+        </div>
+      </div>
+
+      <div id="childSentenceList" style="margin-top:12px;"></div>
+    </section>
+
   </div>
 </main>
+
+
+<div class="overlay" id="wordPickerOverlay" role="dialog" aria-modal="true">
+  <div class="panel">
+    <div class="row" style="justify-content:space-between;">
+      <h2>add lang words</h2>
+      <button id="closeWordPickerBtn" type="button">close</button>
+    </div>
+    <div class="muted tiny" id="wordPickerHint">search and click add</div>
+    <div style="margin-top:10px;" class="row">
+      <input id="wordPickerSearch" placeholder="search lang words…" style="flex:1; min-width:200px;" />
+      <button id="wordPickerRefreshBtn" type="button">refresh</button>
+    </div>
+    <div class="list" id="wordPickerList"></div>
+  </div>
+</div>
 
 <script>
   const $ = (id) => document.getElementById(id);
@@ -82,30 +164,95 @@
       .replaceAll("'","&#039;");
   }
 
+  function getAdminKey() {
+    return localStorage.getItem("lang_admin_key") || "";
+  }
+  function setAdminKey(v) {
+    localStorage.setItem("lang_admin_key", v);
+  }
+  function updateAdminStatus() {
+    const has = !!getAdminKey();
+    $("adminStatus").textContent = has ? "admin: set" : "admin: not set";
+    $("editWordsBtn").disabled = !(has && currentSentenceId);
+    updateCreateChildEnabled();
+  }
+
   function getParam(name) {
     const u = new URL(window.location.href);
     return u.searchParams.get(name);
   }
-
   function setParam(name, value) {
     const u = new URL(window.location.href);
     if (value === null || value === undefined || value === "") u.searchParams.delete(name);
-    else u.searchParams.set(name, String(value));
-    history.pushState({}, "", u.toString());
+    else u.searchParams.set(name, value);
+    history.replaceState({}, "", u.toString());
   }
 
   async function apiGet(url) {
-    const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    const headers = { "Accept": "application/json" };
+    const k = getAdminKey();
+    if (k) headers["X-Admin-Key"] = k;
+    const res = await fetch(url, { headers });
     if (!res.ok) throw new Error(`GET ${url} failed (${res.status})`);
     return await res.json();
   }
 
+  async function apiJson(method, url, body) {
+    const headers = { "Accept": "application/json", "Content-Type": "application/json" };
+    const k = getAdminKey();
+    if (k) headers["X-Admin-Key"] = k;
+    const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    if (!res.ok) {
+      let msg = `${method} ${url} failed (${res.status})`;
+      try {
+        const j = await res.json();
+        if (j && (j.error || j.message)) msg += `: ${j.error || j.message}`;
+      } catch {}
+      throw new Error(msg);
+    }
+    return await res.json();
+  }
+  const apiPost = (url, body) => apiJson("POST", url, body);
+  const apiPut  = (url, body) => apiJson("PUT", url, body);
+
   let wordsIndex = new Map(); // lang_word_id -> {word, latest_version_id, ...}
+  const versionCache = new Map(); // version_id -> version payload
+  let currentSentenceId = null;
+  let currentLangWordIds = [];
+
+  // child sentence pick state
+  let selectedParent = new Set();
+  let selectedChildLang = new Set();
+  let selectedChildWord = new Set();
 
   async function loadWordsIndex() {
     const data = await apiGet("/api/lang_words");
     const arr = Array.isArray(data.words) ? data.words : [];
     wordsIndex = new Map(arr.map(w => [Number(w.lang_word_id), w]));
+  }
+
+  async function saveSentenceLangWords(newIds) {
+    if (!currentSentenceId) return;
+    await apiPut(`/api/lang_sentences/${currentSentenceId}`, { lang_word_ids: newIds });
+  }
+
+  async function removeLangWordFromSentence(langWordId) {
+    if (!getAdminKey()) return alert("Admin key required.");
+    const idn = Number(langWordId);
+    const next = currentLangWordIds.filter(x => Number(x) !== idn);
+    await saveSentenceLangWords(next);
+    await loadSentence(currentSentenceId);
+  }
+
+  async function addLangWordToSentence(langWordId) {
+    if (!getAdminKey()) return alert("Admin key required.");
+    const idn = Number(langWordId);
+    if (!Number.isFinite(idn)) return;
+    const set = new Set(currentLangWordIds.map(Number));
+    set.add(idn);
+    const next = Array.from(set.values()).sort((a,b) => a-b);
+    await saveSentenceLangWords(next);
+    await loadSentence(currentSentenceId);
   }
 
   async function loadSentence(sentenceId) {
@@ -114,28 +261,39 @@
     $("sentenceText").innerHTML = `<span class="loading">loading…</span>`;
     $("sentenceIds").textContent = "";
     $("wordsHost").innerHTML = "";
+    $("childSentenceList").innerHTML = "";
 
     const s = await apiGet(`/api/lang_sentences/${sentenceId}`);
     const ids = Array.isArray(s.lang_word_ids) ? s.lang_word_ids : [];
+    const idsInt = ids.map(x => Number(x)).filter(x => Number.isFinite(x));
+
+    currentSentenceId = Number(sentenceId);
+    currentLangWordIds = idsInt;
 
     $("sentenceMeta").textContent = `updated ${s.updated_at || ""}`;
     $("sentenceText").innerHTML = esc(s.sentence || "");
-    $("sentenceIds").innerHTML = `lang_word_ids: ${esc(JSON.stringify(ids))}`;
+    $("sentenceIds").innerHTML = `lang_word_ids: ${esc(JSON.stringify(idsInt))}`;
     $("sentenceIdInput").value = String(sentenceId);
 
-    $("wordsMeta").textContent = `${ids.length} word(s)`;
+    $("wordsMeta").textContent = `${idsInt.length} word(s)`;
+    $("wordsHost").innerHTML = "";
 
-    for (const wid of ids) {
+    for (const wid of idsInt) {
       const node = renderLangWordNode(Number(wid), 0);
       $("wordsHost").appendChild(node);
     }
 
-    if (!ids.length) {
+    if (!idsInt.length) {
       const p = document.createElement("div");
       p.className = "muted tiny";
       p.textContent = "no lang words linked to this sentence";
       $("wordsHost").appendChild(p);
     }
+
+    renderParentPick();
+    await refreshChildPicks();
+    await loadChildSentences();
+    updateAdminStatus();
   }
 
   function renderLangWordNode(langWordId, depth) {
@@ -148,8 +306,25 @@
     det.dataset.depth = String(depth);
 
     const sum = document.createElement("summary");
-    sum.innerHTML = `<strong>${esc(label)}</strong> <span class="muted tiny">${latestVersionId ? `v_id ${latestVersionId}` : "no version"}</span>`;
+    const rmBtnHtml = (getAdminKey() && currentSentenceId)
+      ? `<button class="btn-sm danger" data-remove="1" type="button">remove</button>`
+      : "";
+    sum.innerHTML = `
+      <span class="row" style="justify-content:space-between; width:100%;">
+        <span><strong>${esc(label)}</strong> <span class="muted tiny">${esc(latestVersionId ? `v_id ${latestVersionId}` : "no version")}</span></span>
+        <span class="row">${rmBtnHtml}</span>
+      </span>
+    `;
     det.appendChild(sum);
+
+    const rm = sum.querySelector('button[data-remove]');
+    if (rm) {
+      rm.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        removeLangWordFromSentence(langWordId).catch(err => alert(err.message || err));
+      });
+    }
 
     const inner = document.createElement("div");
     inner.className = depth ? "indent" : "";
@@ -168,22 +343,27 @@
 
       try {
         inner.innerHTML = `<div class="loading">loading children…</div>`;
-        const v = await apiGet(`/api/lang_words/${latestVersionId}`);
+        let v = versionCache.get(latestVersionId);
+        if (!v) {
+          v = await apiGet(`/api/lang_words/${latestVersionId}`);
+          versionCache.set(latestVersionId, v);
+        }
 
         const childLang = Array.isArray(v.child_lang_words) ? v.child_lang_words : [];
         const childWords = Array.isArray(v.child_words) ? v.child_words : [];
 
         const wrap = document.createElement("div");
+        wrap.className = "grid";
+        wrap.style.gridTemplateColumns = "1fr 1fr";
 
         const sectionA = document.createElement("div");
-        sectionA.className = "card";
-        sectionA.style.marginTop = "10px";
-        sectionA.innerHTML = `<div class="row" style="justify-content:space-between;"><strong>child lang words</strong><span class="pill">${childLang.length}</span></div>`;
+        sectionA.innerHTML = `<strong class="tiny">child lang words</strong>`;
         if (childLang.length) {
           const ul = document.createElement("ul");
-          for (const cw of childLang) {
+          ul.className = "tiny";
+          for (const c of childLang) {
             const li = document.createElement("li");
-            li.appendChild(renderLangWordNode(Number(cw.lang_word_id), depth + 1));
+            li.innerHTML = `${esc(c.word)} <span class="muted">(#${esc(c.lang_word_id)})</span>`;
             ul.appendChild(li);
           }
           sectionA.appendChild(ul);
@@ -195,15 +375,14 @@
         }
 
         const sectionB = document.createElement("div");
-        sectionB.className = "card";
-        sectionB.style.marginTop = "10px";
-        sectionB.innerHTML = `<div class="row" style="justify-content:space-between;"><strong>child words</strong><span class="pill">${childWords.length}</span></div>`;
+        sectionB.innerHTML = `<strong class="tiny">child words</strong>`;
         if (childWords.length) {
           const ul = document.createElement("ul");
+          ul.className = "tiny";
           for (const c of childWords) {
             const li = document.createElement("li");
-            const external = c.link ? ` • <a href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">link</a>` : "";
-            li.innerHTML = `<span>${esc(c.word)} <span class="muted tiny">(id ${esc(c.id)})</span></span>${external} • <a href="stars.html?child_word_id=${encodeURIComponent(c.id)}">stars</a>`;
+            const link = c.link ? ` • <a href="${esc(c.link)}" target="_blank" rel="noopener noreferrer">link</a>` : "";
+            li.innerHTML = `<span>${esc(c.word)} <span class="muted">(#${esc(c.id)})</span>${link}</span> • <a href="stars.html?child_word_id=${encodeURIComponent(c.id)}">stars</a>`;
             ul.appendChild(li);
           }
           sectionB.appendChild(ul);
@@ -226,49 +405,266 @@
     return det;
   }
 
-  function parseSentenceId() {
-    const raw = getParam("sentence_id") || "";
-    const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+  // ---------- word picker panel ----------
+  function openWordPicker() {
+    $("wordPickerOverlay").style.display = "flex";
+    $("wordPickerSearch").value = "";
+    renderWordPickerList();
+    $("wordPickerSearch").focus();
+  }
+  function closeWordPicker() {
+    $("wordPickerOverlay").style.display = "none";
+  }
+  function renderWordPickerList() {
+    const q = ($("wordPickerSearch").value || "").trim().toLowerCase();
+    const host = $("wordPickerList");
+    host.innerHTML = "";
+    const already = new Set(currentLangWordIds.map(Number));
+
+    const items = Array.from(wordsIndex.values())
+      .filter(w => {
+        if (!q) return true;
+        const s = String(w.word || "").toLowerCase();
+        return s.includes(q) || String(w.lang_word_id).includes(q);
+      })
+      .slice(0, 500);
+
+    for (const w of items) {
+      const row = document.createElement("div");
+      row.className = "list-item";
+      const left = document.createElement("div");
+      left.innerHTML = `<strong>${esc(w.word)}</strong> <span class="muted tiny">id ${esc(w.lang_word_id)}</span>`;
+      const btn = document.createElement("button");
+      btn.className = "btn-sm";
+      if (already.has(Number(w.lang_word_id))) {
+        btn.textContent = "added";
+        btn.disabled = true;
+      } else {
+        btn.textContent = "add";
+        btn.onclick = () => addLangWordToSentence(w.lang_word_id).catch(e => alert(e.message || e));
+      }
+      row.appendChild(left);
+      row.appendChild(btn);
+      host.appendChild(row);
+    }
+    if (!items.length) host.innerHTML = `<div class="muted tiny">no matches</div>`;
   }
 
-  $("goBtn").onclick = () => {
-    const n = Number(($("sentenceIdInput").value || "").trim());
-    if (!Number.isFinite(n) || n <= 0) return;
-    setParam("sentence_id", Math.floor(n));
-    boot().catch(err => console.error(err));
-  };
+  // ---------- child sentence creation ----------
+  function renderPick(hostId, items, selectedSet, onChange) {
+    const host = $(hostId);
+    host.innerHTML = "";
+    for (const it of items) {
+      const row = document.createElement("div");
+      row.className = "list-item";
+      const lab = document.createElement("label");
+      lab.style.display = "flex";
+      lab.style.gap = "8px";
+      lab.style.alignItems = "center";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = selectedSet.has(it.id);
+      cb.onchange = () => onChange(it.id, cb.checked);
+      const txt = document.createElement("span");
+      txt.innerHTML = `${esc(it.label)} <span class="muted tiny">id ${esc(it.id)}</span>`;
+      lab.appendChild(cb);
+      lab.appendChild(txt);
+      row.appendChild(lab);
+      host.appendChild(row);
+    }
+    if (!items.length) host.innerHTML = `<div class="muted tiny">none</div>`;
+  }
 
-  window.addEventListener("popstate", () => {
-    boot().catch(err => console.error(err));
-  });
+  function renderParentPick() {
+    selectedParent = new Set(currentLangWordIds.map(Number));
+    $("parentSelMeta").textContent = String(selectedParent.size);
+    const items = currentLangWordIds.map(id => {
+      const w = wordsIndex.get(Number(id));
+      return { id: Number(id), label: w ? w.word : `lang_word ${id}` };
+    });
+    renderPick("parentPick", items, selectedParent, async (id, checked) => {
+      if (checked) selectedParent.add(Number(id));
+      else selectedParent.delete(Number(id));
+      $("parentSelMeta").textContent = String(selectedParent.size);
+      await refreshChildPicks();
+    });
+  }
+
+  async function refreshChildPicks() {
+    selectedChildLang = new Set();
+    selectedChildWord = new Set();
+    $("childLangSelMeta").textContent = "0";
+    $("childWordSelMeta").textContent = "0";
+
+    const childLangMap = new Map();
+    const childWordMap = new Map();
+
+    for (const pid of selectedParent) {
+      const w = wordsIndex.get(Number(pid));
+      const vId = w ? w.latest_version_id : null;
+      if (!vId) continue;
+
+      let v = versionCache.get(vId);
+      if (!v) {
+        try {
+          v = await apiGet(`/api/lang_words/${vId}`);
+          versionCache.set(vId, v);
+        } catch {}
+      }
+      if (!v) continue;
+
+      const cl = Array.isArray(v.child_lang_words) ? v.child_lang_words : [];
+      const cw = Array.isArray(v.child_words) ? v.child_words : [];
+
+      for (const x of cl) {
+        const id = Number(x.lang_word_id);
+        if (!Number.isFinite(id)) continue;
+        childLangMap.set(id, x.word || `lang_word ${id}`);
+      }
+      for (const x of cw) {
+        const id = Number(x.id);
+        if (!Number.isFinite(id)) continue;
+        childWordMap.set(id, x.word || `child_word ${id}`);
+      }
+    }
+
+    const childLangItems = Array.from(childLangMap.entries()).map(([id, word]) => ({ id, label: word }));
+    const childWordItems = Array.from(childWordMap.entries()).map(([id, word]) => ({ id, label: word }));
+
+    renderPick("childLangPick", childLangItems, selectedChildLang, (id, checked) => {
+      if (checked) selectedChildLang.add(Number(id));
+      else selectedChildLang.delete(Number(id));
+      $("childLangSelMeta").textContent = String(selectedChildLang.size);
+      updateCreateChildEnabled();
+    });
+
+    renderPick("childWordPick", childWordItems, selectedChildWord, (id, checked) => {
+      if (checked) selectedChildWord.add(Number(id));
+      else selectedChildWord.delete(Number(id));
+      $("childWordSelMeta").textContent = String(selectedChildWord.size);
+      updateCreateChildEnabled();
+    });
+
+    updateCreateChildEnabled();
+  }
+
+  function updateCreateChildEnabled() {
+    const textOk = (($("childSentenceText").value || "").trim().length > 0);
+    const anyIds = (selectedParent.size + selectedChildLang.size + selectedChildWord.size) > 0;
+    $("createChildSentenceBtn").disabled = !(getAdminKey() && currentSentenceId && textOk && anyIds);
+  }
+
+  async function loadChildSentences() {
+    if (!currentSentenceId) return;
+    $("childMeta").textContent = "loading…";
+    const data = await apiGet(`/api/lang_sentences/${currentSentenceId}/child_sentences`);
+    const arr = Array.isArray(data.child_sentences) ? data.child_sentences : [];
+    $("childMeta").textContent = `${arr.length} item(s)`;
+
+    const host = $("childSentenceList");
+    host.innerHTML = "";
+
+    for (const cs of arr) {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.marginTop = "10px";
+      const lw = Array.isArray(cs.lang_word_ids) ? cs.lang_word_ids : [];
+      const cw = Array.isArray(cs.child_word_ids) ? cs.child_word_ids : [];
+      card.innerHTML = `
+        <div class="row" style="justify-content:space-between;">
+          <strong>#${esc(cs.id)}</strong>
+          <span class="muted tiny">updated ${esc(cs.updated_at || "")}</span>
+        </div>
+        <div class="mono" style="margin-top:8px;">${esc(cs.sentence || "")}</div>
+        <div class="muted tiny mono" style="margin-top:8px;">lang_word_ids: ${esc(JSON.stringify(lw))} • child_word_ids: ${esc(JSON.stringify(cw))}</div>
+      `;
+      host.appendChild(card);
+    }
+
+    if (!arr.length) host.innerHTML = `<div class="muted tiny">none</div>`;
+  }
+
+  async function createChildSentence() {
+    if (!getAdminKey()) return alert("Admin key required.");
+    if (!currentSentenceId) return;
+
+    const text = ($("childSentenceText").value || "").trim();
+    const langIds = Array.from(new Set([
+      ...Array.from(selectedParent.values()),
+      ...Array.from(selectedChildLang.values()),
+    ])).map(Number).filter(Number.isFinite);
+
+    const childIds = Array.from(selectedChildWord.values()).map(Number).filter(Number.isFinite);
+
+    await apiPost(`/api/lang_sentences/${currentSentenceId}/child_sentences`, {
+      lang_word_ids: langIds,
+      child_word_ids: childIds,
+      sentence: text
+    });
+
+    $("childSentenceText").value = "";
+    await loadChildSentences();
+    updateCreateChildEnabled();
+  }
 
   async function boot() {
     await loadWordsIndex();
 
-    const sid = parseSentenceId();
-    if (!sid) {
-      $("metaPill").textContent = "no sentence_id";
-      $("sentenceMeta").textContent = "add ?sentence_id=123 (or type an id above)";
-      $("sentenceText").textContent = "";
-      $("sentenceIds").textContent = "";
+    // admin
+    $("adminKeyInput").value = getAdminKey();
+    $("saveAdminKeyBtn").onclick = () => {
+      setAdminKey(($("adminKeyInput").value || "").trim());
+      updateAdminStatus();
+    };
+    updateAdminStatus();
+
+    // picker wiring
+    $("editWordsBtn").onclick = () => {
+      if (!currentSentenceId) return;
+      if (!getAdminKey()) return alert("Admin key required.");
+      openWordPicker();
+    };
+    $("closeWordPickerBtn").onclick = closeWordPicker;
+    $("wordPickerOverlay").addEventListener("click", (e) => {
+      if (e.target === $("wordPickerOverlay")) closeWordPicker();
+    });
+    $("wordPickerSearch").addEventListener("input", () => renderWordPickerList());
+    $("wordPickerRefreshBtn").onclick = async () => {
+      await loadWordsIndex();
+      renderWordPickerList();
+    };
+
+    // child sentence create wiring
+    $("childSentenceText").addEventListener("input", updateCreateChildEnabled);
+    $("createChildSentenceBtn").onclick = () => createChildSentence().catch(e => alert(e.message || e));
+
+    // open sentence from query param or input
+    const qid = getParam("sentence_id");
+    if (qid) {
+      const sid = Number(qid);
+      if (Number.isFinite(sid)) {
+        try { await loadSentence(sid); } catch (e) { console.error(e); }
+      }
+    } else {
+      $("metaPill").textContent = "—";
+      $("sentenceMeta").textContent = "no sentence loaded";
+      $("sentenceText").innerHTML = `<div class="muted tiny">open a sentence to begin</div>`;
       $("wordsHost").innerHTML = `<div class="muted tiny">no sentence loaded</div>`;
       $("wordsMeta").textContent = "—";
-      return;
+      $("childMeta").textContent = "—";
+      $("childSentenceList").innerHTML = `<div class="muted tiny">no sentence loaded</div>`;
     }
 
-    try {
-      await loadSentence(sid);
-    } catch (e) {
-      $("metaPill").textContent = `#${sid}`;
-      $("sentenceMeta").textContent = "error";
-      $("sentenceText").innerHTML = `<div class="muted tiny">error: ${esc(e.message || e)}</div>`;
-      $("wordsHost").innerHTML = ``;
-      $("wordsMeta").textContent = "—";
-    }
+    $("goBtn").onclick = async () => {
+      const sid = Number(($("sentenceIdInput").value || "").trim());
+      if (!Number.isFinite(sid)) return alert("Enter a valid sentence id");
+      setParam("sentence_id", String(sid));
+      try { await loadSentence(sid); } catch (e) { alert(e.message || e); }
+    };
   }
 
   boot().catch(err => console.error(err));
+
 </script>
 </body>
 </html>
