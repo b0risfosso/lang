@@ -130,6 +130,28 @@
   gap: 1.5rem; /* adjust spacing */
 }
 
+    .stream {
+      margin: 2rem auto 0;
+      max-width: 52rem;
+      text-align: left;
+      border: 1px solid color-mix(in oklab, currentColor 20%, transparent);
+      border-radius: 1rem;
+      padding: 1rem;
+      background: color-mix(in oklab, Canvas 95%, transparent);
+      box-shadow: 0 0 25px color-mix(in oklab, currentColor 10%, transparent);
+    }
+    .stream h2 { margin: 0 0 .5rem; font-size: 1rem; }
+    .stream .meta { font-size: .85rem; opacity: .7; margin-bottom: .75rem; }
+    .stream-list { display: grid; gap: .6rem; max-height: 55vh; overflow: auto; }
+    .stream-item {
+      padding: .6rem .75rem;
+      border-radius: .75rem;
+      border: 1px solid color-mix(in oklab, currentColor 25%, transparent);
+      background: color-mix(in oklab, Canvas 92%, transparent);
+    }
+    .stream-item .meta { font-size: .8rem; opacity: .7; }
+    .stream-item .text { margin-top: .35rem; }
+
   </style>
 </head>
 <body>
@@ -142,6 +164,72 @@
       </a>
     </p>
 
+    <section class="stream" aria-live="polite">
+      <h2>sentence stream</h2>
+      <div class="meta" id="sentenceStreamMeta">loading…</div>
+      <div class="stream-list" id="sentenceStream"></div>
+    </section>
   </main>
+  <script>
+    const streamHost = document.getElementById("sentenceStream");
+    const streamMeta = document.getElementById("sentenceStreamMeta");
+    const seenSentenceIds = new Set();
+
+    function esc(s) {
+      return String(s)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+
+    function renderSentenceCard(s, prepend) {
+      const card = document.createElement("div");
+      card.className = "stream-item";
+      card.dataset.sentenceId = String(s.id);
+      const ids = Array.isArray(s.lang_word_ids) ? s.lang_word_ids : [];
+      card.innerHTML = `
+        <div class="meta">#${esc(s.id)} • ${esc(s.updated_at || s.created_at || "")} • ids ${esc(JSON.stringify(ids))}</div>
+        <div class="text">${esc(s.sentence || "")}</div>
+      `;
+      if (prepend && streamHost.firstChild) streamHost.insertBefore(card, streamHost.firstChild);
+      else streamHost.appendChild(card);
+    }
+
+    async function loadSentences() {
+      try {
+        const res = await fetch("/api/lang_sentences");
+        if (!res.ok) throw new Error(`GET /api/lang_sentences failed (${res.status})`);
+        const data = await res.json();
+        const arr = Array.isArray(data.sentences) ? data.sentences : [];
+        if (!arr.length) {
+          streamMeta.textContent = "no sentences yet";
+          return;
+        }
+        let added = 0;
+        for (const s of arr) {
+          if (seenSentenceIds.has(s.id)) continue;
+          seenSentenceIds.add(s.id);
+          renderSentenceCard(s, true);
+          added += 1;
+        }
+        streamMeta.textContent = `${seenSentenceIds.size} loaded`;
+        if (!streamHost.children.length) {
+          streamHost.innerHTML = `<div class="meta">no sentences yet</div>`;
+        }
+        if (added > 0) {
+          while (streamHost.children.length > 200) {
+            streamHost.removeChild(streamHost.lastChild);
+          }
+        }
+      } catch (e) {
+        streamMeta.textContent = "error loading sentences";
+      }
+    }
+
+    loadSentences();
+    setInterval(loadSentences, 5000);
+  </script>
 </body>
 </html>
