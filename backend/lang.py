@@ -1313,6 +1313,59 @@ def get_lang_sentence(sentence_id: int):
     })
 
 
+@app.put("/api/lang_sentences/<int:sentence_id>")
+def update_lang_sentence(sentence_id: int):
+    require_admin_key()
+    db = get_db()
+
+    r = db.execute("SELECT id, sentence FROM lang_sentences WHERE id=?", (sentence_id,)).fetchone()
+    if r is None:
+        abort(404, description="Sentence not found.")
+
+    data = request.get_json(silent=True) or {}
+    ids = data.get("lang_word_ids", None)
+    sentence = data.get("sentence", None)
+
+    ids_int: list[int] = []
+    if ids is not None:
+        if not isinstance(ids, list):
+            abort(400, description="lang_word_ids must be a list.")
+        for x in ids:
+            try:
+                ids_int.append(int(x))
+            except Exception:
+                pass
+
+        # Ensure all words exist
+        for wid in ids_int:
+            w = db.execute("SELECT id FROM lang_words WHERE id=?", (wid,)).fetchone()
+            if w is None:
+                abort(400, description=f"lang_word_id {wid} does not exist.")
+
+    updates = []
+    params = []
+    if ids is not None:
+        updates.append("lang_word_ids=?")
+        params.append(json.dumps(ids_int))
+    if sentence is not None:
+        sentence_clean = (sentence or "").strip()
+        if not sentence_clean:
+            abort(400, description="Missing 'sentence'.")
+        updates.append("sentence=?")
+        params.append(sentence_clean)
+
+    if not updates:
+        abort(400, description="No fields to update.")
+
+    params.append(sentence_id)
+    db.execute(
+        f"UPDATE lang_sentences SET {', '.join(updates)} WHERE id=?",
+        tuple(params),
+    )
+    db.commit()
+    return jsonify(ok=True)
+
+
 # Optional child-sentence endpoints
 @app.get("/api/lang_sentences/<int:sentence_id>/child_sentences")
 def list_child_sentences(sentence_id: int):
