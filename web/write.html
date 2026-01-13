@@ -139,6 +139,7 @@
         <div class="row">
           <input id="modifierInput" placeholder="optional modifier…" style="flex:1; min-width: 240px;" />
           <button id="runBtn" type="button" disabled>generate themes</button>
+          <button id="orbitingBtn" type="button" disabled>generate orbiting</button>
         </div>
         <div class="muted tiny" id="runHint">needs a selected parent word + admin key</div>
       </div>
@@ -369,11 +370,13 @@
       $("adminStatus").textContent = "admin: ok";
       // enable admin-gated UI if a selection exists
       $("runBtn").disabled = !(getAdminKey() && selectedParentWordId);
+      $("orbitingBtn").disabled = !(getAdminKey() && selectedParentWordId);
       refreshManualEditUI();
       return true;
     } catch {
       $("adminStatus").textContent = "admin: invalid";
       $("runBtn").disabled = true;
+      $("orbitingBtn").disabled = true;
       refreshManualEditUI();
       return false;
     }
@@ -449,6 +452,7 @@
     selectedParentWordText = wordText;
     $("selectedParentPill").textContent = wordId ? `${wordText} (id ${wordId})` : "none";
     $("runBtn").disabled = !(getAdminKey() && selectedParentWordId);
+    $("orbitingBtn").disabled = !(getAdminKey() && selectedParentWordId);
     $("refreshWritingsBtn").disabled = !selectedParentWordId;
     refreshManualEditUI();
     loadWritings();
@@ -1046,6 +1050,7 @@
     const modifier = ($("modifierInput").value || "").trim();
     try {
       $("runBtn").disabled = true;
+      $("orbitingBtn").disabled = true;
       $("taskStatusPill").textContent = "queued";
       const res = await apiPost("/api/write/create_lang_words", {
         parent_lang_word_id: selectedParentWordId,
@@ -1061,6 +1066,31 @@
       alert(String(e.message || e));
     } finally {
       $("runBtn").disabled = !(getAdminKey() && selectedParentWordId);
+      $("orbitingBtn").disabled = !(getAdminKey() && selectedParentWordId);
+    }
+  };
+
+  $("orbitingBtn").onclick = async () => {
+    if (!selectedParentWordId) return;
+    const modifier = ($("modifierInput").value || "").trim();
+    try {
+      $("runBtn").disabled = true;
+      $("orbitingBtn").disabled = true;
+      $("taskStatusPill").textContent = "queued";
+      const res = await apiPost("/api/write/create_child_words", {
+        parent_lang_word_id: selectedParentWordId,
+        modifier
+      }, { admin: true });
+
+      const taskId = res.task_id;
+      await pollTask(taskId);
+      await loadWriteTree();
+    } catch (e) {
+      $("taskStatusPill").textContent = "error";
+      alert(String(e.message || e));
+    } finally {
+      $("runBtn").disabled = !(getAdminKey() && selectedParentWordId);
+      $("orbitingBtn").disabled = !(getAdminKey() && selectedParentWordId);
     }
   };
 
@@ -1216,6 +1246,7 @@
     localStorage.removeItem("lang_admin_key");
     refreshAdminStatus();
     $("runBtn").disabled = true;
+    $("orbitingBtn").disabled = true;
     $("createSentenceBtn").disabled = true;
   };
 
