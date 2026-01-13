@@ -871,6 +871,39 @@ def api_star_stuff_tasks():
     return jsonify({"task_ids": task_ids})
 
 
+@app.post("/api/star_stuff/manual")
+@require_admin
+def api_star_stuff_manual():
+    data = request.get_json(force=True) or {}
+    child_word_id = int(data.get("child_word_id") or 0)
+    prompt_type = (data.get("prompt_type") or "").strip()
+    text = (data.get("text") or "").strip()
+    model = (data.get("model") or "").strip()
+    modifier = (data.get("modifier") or "").strip()
+
+    if not child_word_id:
+        abort(400, description="child_word_id is required")
+    if not prompt_type:
+        abort(400, description="prompt_type is required")
+    if not text:
+        abort(400, description="text is required")
+
+    db = get_db()
+    cw = db.execute("SELECT id FROM child_words WHERE id=?", (child_word_id,)).fetchone()
+    if cw is None:
+        abort(404, description="child_word_id not found")
+
+    cur = db.execute(
+        """
+        INSERT INTO star_stuff (child_word_id, prompt_type, text, model, modifier, task_id)
+        VALUES (?, ?, ?, ?, ?, NULL)
+        """,
+        (child_word_id, prompt_type, text, model, modifier),
+    )
+    db.commit()
+    return jsonify(ok=True, id=int(cur.lastrowid)), 201
+
+
 # ---------------------------------------------------------------------
 # Words + versions + children
 # ---------------------------------------------------------------------

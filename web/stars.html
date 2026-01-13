@@ -143,6 +143,35 @@
       </div>
     </details>
 
+    <details>
+      <summary><strong>manual star stuff</strong> <span class="muted tiny">create for active child word</span></summary>
+
+      <div style="margin-top:10px;">
+        <div class="muted tiny">prompt type</div>
+        <input id="manualPromptTypeInput" placeholder="e.g. manual_notes" />
+      </div>
+
+      <div style="margin-top:10px;">
+        <div class="muted tiny">model (optional)</div>
+        <input id="manualModelInput" placeholder="e.g. gpt-5-mini-2025-08-07" />
+      </div>
+
+      <div style="margin-top:10px;">
+        <div class="muted tiny">modifier (optional)</div>
+        <input id="manualModifierInput" placeholder="optional modifier…" />
+      </div>
+
+      <div style="margin-top:10px;">
+        <div class="muted tiny">text</div>
+        <textarea id="manualTextInput" placeholder="paste or type star stuff…"></textarea>
+      </div>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="manualCreateBtn" type="button" disabled>create star stuff</button>
+        <span class="muted tiny">Uses the active child word on the right.</span>
+      </div>
+    </details>
+
     <div class="card">
       <div class="row" style="justify-content:space-between;">
         <div class="row">
@@ -229,9 +258,24 @@
 
   async function refreshAdminStatus() {
     const k = getAdminKey();
-    if (!k) { $("adminStatus").textContent = "admin: no key"; return false; }
-    try { await apiGet("/api/admin/ping", { admin: true }); $("adminStatus").textContent = "admin: ok"; return true; }
-    catch { $("adminStatus").textContent = "admin: invalid"; return false; }
+    if (!k) {
+      $("adminStatus").textContent = "admin: no key";
+      adminOk = false;
+      updateManualStarEnabled();
+      return false;
+    }
+    try {
+      await apiGet("/api/admin/ping", { admin: true });
+      $("adminStatus").textContent = "admin: ok";
+      adminOk = true;
+      updateManualStarEnabled();
+      return true;
+    } catch {
+      $("adminStatus").textContent = "admin: invalid";
+      adminOk = false;
+      updateManualStarEnabled();
+      return false;
+    }
   }
 
   async function pollTask(taskId) {
@@ -248,16 +292,24 @@
   let searchTerm = "";
   const latestVersionByWordId = new Map();
   const nodeCache = new Map();
+  const selectedReadVersionByWordId = new Map();
 
   const selectedChildWordIds = new Set();
   const selectedChildWordLabels = new Map();
   let activeChildWordId = null;
   const openDetailsIds = new Set();
+  let adminOk = false;
+
+  function updateManualStarEnabled() {
+    const ok = !!getAdminKey() && adminOk && !!activeChildWordId;
+    $("manualCreateBtn").disabled = !ok;
+  }
 
   function updateSelectionUI() {
     $("selectedPill").textContent = `${selectedChildWordIds.size} selected`;
     $("runBtn").disabled = !(getAdminKey() && selectedChildWordIds.size > 0);
     renderSelectedList();
+    updateManualStarEnabled();
   }
 
   function renderSelectedList() {
@@ -404,23 +456,71 @@
 
       const versions = Array.isArray(R.versions) ? R.versions : [];
       const latest = versions.length ? versions[0] : null;
+      const pid = Number(R.lang_word_id);
+
+      let selectedVersionId = selectedReadVersionByWordId.get(pid);
+      const selectedExists = versions.some(v => Number(v.version_id) === Number(selectedVersionId));
+      if (!selectedExists) {
+        selectedVersionId = latest ? latest.version_id : null;
+        if (selectedVersionId) selectedReadVersionByWordId.set(pid, selectedVersionId);
+        else selectedReadVersionByWordId.delete(pid);
+      }
+
+      const selectedVersion = versions.find(v => Number(v.version_id) === Number(selectedVersionId)) || null;
 
       const meta = document.createElement("div");
-      meta.className = "muted tiny";
+      meta.className = "row";
       meta.style.marginTop = "8px";
-      meta.textContent = latest ? `latest version: v${latest.version} (version_id ${latest.version_id})` : "no versions yet";
+
+      const metaLabel = document.createElement("span");
+      metaLabel.className = "muted tiny";
+      metaLabel.textContent = "version:";
+      meta.appendChild(metaLabel);
+
+      if (versions.length) {
+        const sel = document.createElement("select");
+        sel.style.marginLeft = "8px";
+        for (const v of versions) {
+          const opt = document.createElement("option");
+          opt.value = String(v.version_id);
+          opt.textContent = `v${v.version} (version_id ${v.version_id})`;
+          sel.appendChild(opt);
+        }
+        if (selectedVersionId) sel.value = String(selectedVersionId);
+        sel.onchange = () => {
+          const nextId = Number(sel.value);
+          selectedReadVersionByWordId.set(pid, nextId);
+          const v = versions.find(x => Number(x.version_id) === nextId);
+          if (v) {
+            nodeCache.set(pid, {
+              version_id: v.version_id,
+              version: v.version,
+              child_words: Array.isArray(v.child_words) ? v.child_words : [],
+              child_lang_words: Array.isArray(v.child_lang_words) ? v.child_lang_words : [],
+            });
+          } else {
+            nodeCache.delete(pid);
+          }
+          renderReadTree();
+        };
+        meta.appendChild(sel);
+      } else {
+        const none = document.createElement("span");
+        none.className = "muted tiny";
+        none.style.marginLeft = "8px";
+        none.textContent = "no versions yet";
+        meta.appendChild(none);
+      }
+
       d.appendChild(meta);
 
-      if (latest) {
-        if (!nodeCache.has(R.lang_word_id)) {
-          nodeCache.set(R.lang_word_id, {
-            version_id: latest.version_id,
-            version: latest.version,
-            child_words: Array.isArray(latest.child_words) ? latest.child_words : [],
-            child_lang_words: Array.isArray(latest.child_lang_words) ? latest.child_lang_words : [],
-          });
-          latestVersionByWordId.set(R.lang_word_id, latest.version_id);
-        }
+      if (selectedVersion) {
+        nodeCache.set(pid, {
+          version_id: selectedVersion.version_id,
+          version: selectedVersion.version,
+          child_words: Array.isArray(selectedVersion.child_words) ? selectedVersion.child_words : [],
+          child_lang_words: Array.isArray(selectedVersion.child_lang_words) ? selectedVersion.child_lang_words : [],
+        });
 
         const indent = document.createElement("div");
         indent.className = "indent";
@@ -465,7 +565,7 @@
 
         const vMeta = document.createElement("div");
         vMeta.className = "muted tiny";
-        if (node.version) vMeta.textContent = `latest v${node.version} (version_id ${node.version_id})`;
+        if (node.version) vMeta.textContent = `version v${node.version} (version_id ${node.version_id})`;
         else vMeta.textContent = "no versions yet";
         body.appendChild(vMeta);
 
@@ -618,6 +718,7 @@
       $("ctxMeta").textContent = "pick a child word on the left";
       $("stuff").innerHTML = `<div class="muted tiny">No active child word.</div>`;
       $("meta").textContent = "—";
+      updateManualStarEnabled();
       return;
     }
 
@@ -646,6 +747,7 @@
     }
 
     renderStuff(data.star_stuff || []);
+    updateManualStarEnabled();
   }
 
   function renderStuff(items) {
@@ -782,6 +884,33 @@
       alert(String(e.message || e));
     } finally {
       $("runBtn").disabled = !(getAdminKey() && selectedChildWordIds.size > 0);
+    }
+  };
+
+  $("manualCreateBtn").onclick = async () => {
+    if (!activeChildWordId) return alert("Select an active child word.");
+    if (!getAdminKey()) return alert("Admin key required.");
+    const promptType = ($("manualPromptTypeInput").value || "").trim();
+    const text = ($("manualTextInput").value || "").trim();
+    const model = ($("manualModelInput").value || "").trim();
+    const modifier = ($("manualModifierInput").value || "").trim();
+    if (!promptType) return alert("Prompt type is required.");
+    if (!text) return alert("Text is required.");
+    try {
+      $("manualCreateBtn").disabled = true;
+      await apiPost("/api/star_stuff/manual", {
+        child_word_id: activeChildWordId,
+        prompt_type: promptType,
+        text,
+        model,
+        modifier
+      }, { admin: true });
+      $("manualTextInput").value = "";
+      await loadActiveChild();
+    } catch (e) {
+      alert(String(e.message || e));
+    } finally {
+      updateManualStarEnabled();
     }
   };
 
