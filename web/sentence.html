@@ -252,6 +252,7 @@
   let currentLangWordIds = [];
   let selectedTempLangWordId = null;
   let autoChildRunning = false;
+  let childWordsOnlyMode = false;
 
   // child sentence pick state
   let selectedParent = new Set();
@@ -332,6 +333,49 @@
     await refreshChildPicks();
     await loadChildSentences();
     updateAdminStatus();
+  }
+
+  async function loadChildWordsOnly(sentenceId) {
+    $("metaPill").textContent = `#${sentenceId} child words`;
+    $("sentenceMeta").textContent = "loading…";
+    $("sentenceText").innerHTML = `<span class="loading">loading…</span>`;
+    $("sentenceIds").textContent = "";
+    $("wordsHost").innerHTML = "";
+    $("childWordsHost").innerHTML = "";
+    $("childWordsMeta").textContent = "—";
+    $("childSentenceList").innerHTML = "";
+    $("childAutoStatus").textContent = "";
+
+    const s = await apiGet(`/api/lang_sentences/${sentenceId}`);
+    currentSentenceId = Number(sentenceId);
+    currentChildSentenceId = null;
+    currentLangWordIds = Array.isArray(s.lang_word_ids) ? s.lang_word_ids : [];
+    autoChildRunning = false;
+
+    $("sentenceMeta").textContent = `child words only • updated ${s.updated_at || ""}`;
+    $("sentenceText").innerHTML = esc(s.sentence || "");
+    $("sentenceIds").innerHTML = `lang_word_ids: ${esc(JSON.stringify(currentLangWordIds))}`;
+    $("sentenceIdInput").value = String(sentenceId);
+
+    $("wordsMeta").textContent = "hidden";
+    $("wordsHost").innerHTML = `<div class="muted tiny">lang words hidden in child words only mode</div>`;
+
+    const data = await apiGet(`/api/lang_sentences/${sentenceId}/child_sentences`);
+    const arr = Array.isArray(data.child_sentences) ? data.child_sentences : [];
+    const allChildIds = new Set();
+    for (const cs of arr) {
+      const cw = Array.isArray(cs.child_word_ids) ? cs.child_word_ids : [];
+      for (const id of cw) {
+        const idn = Number(id);
+        if (Number.isFinite(idn)) allChildIds.add(idn);
+      }
+    }
+
+    await renderChildWordsByIds(Array.from(allChildIds.values()).sort((a,b) => a-b));
+    $("childMeta").textContent = "child words only";
+    $("childSentenceList").innerHTML = `<div class="muted tiny">${arr.length} child sentence(s) scanned</div>`;
+    updateAdminStatus();
+    updateCreateChildEnabled();
   }
 
   async function loadChildSentence(childSentenceId) {
@@ -930,8 +974,15 @@
         try { await loadChildSentence(cid); } catch (e) { console.error(e); }
       }
     } else {
+      const childOnly = getParam("child_words_only");
+      childWordsOnlyMode = childOnly === "1" || childOnly === "true";
       const qid = getParam("sentence_id");
-      if (qid) {
+      if (qid && childWordsOnlyMode) {
+        const sid = Number(qid);
+        if (Number.isFinite(sid)) {
+          try { await loadChildWordsOnly(sid); } catch (e) { console.error(e); }
+        }
+      } else if (qid) {
         const sid = Number(qid);
         if (Number.isFinite(sid)) {
           try { await loadSentence(sid); } catch (e) { console.error(e); }
