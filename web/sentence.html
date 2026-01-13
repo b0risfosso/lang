@@ -42,6 +42,10 @@
     textarea { width:100%; min-height:84px; }
     .grid3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
     @media (max-width: 980px) { .grid3 { grid-template-columns: 1fr; } }
+    .toggle { display:flex; align-items:center; gap:8px; font-size:12px; }
+    .toggle input { width: 40px; height: 20px; appearance: none; background: color-mix(in oklab, currentColor 18%, transparent); border-radius: 999px; position: relative; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); }
+    .toggle input::after { content: ""; position: absolute; top: 1px; left: 1px; width: 16px; height: 16px; border-radius: 50%; background: currentColor; transition: transform .2s ease; }
+    .toggle input:checked::after { transform: translateX(20px); }
 
   </style>
 </head>
@@ -70,6 +74,10 @@
       <div class="row" style="justify-content:space-between;">
         <strong>sentence</strong>
         <div class="row">
+          <label class="toggle muted">
+            <span>child words only</span>
+            <input id="childWordsToggle" type="checkbox" />
+          </label>
           <input id="sentenceIdInput" placeholder="sentence id…" style="width:140px;" />
           <button id="goBtn" type="button">open</button>
           <button id="editWordsBtn" type="button" disabled>edit words</button>
@@ -290,6 +298,7 @@
   }
 
   async function loadSentence(sentenceId) {
+    setChildWordsToggle(false);
     $("metaPill").textContent = `#${sentenceId}`;
     $("sentenceMeta").textContent = "loading…";
     $("sentenceText").innerHTML = `<span class="loading">loading…</span>`;
@@ -308,6 +317,7 @@
     currentChildSentenceId = null;
     currentLangWordIds = idsInt;
     autoChildRunning = false;
+    childWordsOnlyMode = false;
 
     $("sentenceMeta").textContent = `updated ${s.updated_at || ""}`;
     $("sentenceText").innerHTML = esc(s.sentence || "");
@@ -336,6 +346,7 @@
   }
 
   async function loadChildWordsOnly(sentenceId) {
+    setChildWordsToggle(true);
     $("metaPill").textContent = `#${sentenceId} child words`;
     $("sentenceMeta").textContent = "loading…";
     $("sentenceText").innerHTML = `<span class="loading">loading…</span>`;
@@ -351,6 +362,7 @@
     currentChildSentenceId = null;
     currentLangWordIds = Array.isArray(s.lang_word_ids) ? s.lang_word_ids : [];
     autoChildRunning = false;
+    childWordsOnlyMode = true;
 
     $("sentenceMeta").textContent = `child words only • updated ${s.updated_at || ""}`;
     $("sentenceText").innerHTML = esc(s.sentence || "");
@@ -379,6 +391,7 @@
   }
 
   async function loadChildSentence(childSentenceId) {
+    setChildWordsToggle(false, true);
     $("metaPill").textContent = `child #${childSentenceId}`;
     $("sentenceMeta").textContent = "loading…";
     $("sentenceText").innerHTML = `<span class="loading">loading…</span>`;
@@ -399,6 +412,7 @@
     currentChildSentenceId = Number(childSentenceId);
     currentLangWordIds = langIds;
     autoChildRunning = false;
+    childWordsOnlyMode = false;
 
     $("sentenceMeta").textContent = `child sentence • updated ${cs.updated_at || ""}`;
     $("sentenceText").innerHTML = esc(cs.sentence || "");
@@ -786,6 +800,13 @@
     $("createChildSentenceBtn").disabled = !(getAdminKey() && currentSentenceId && textOk && anyIds);
   }
 
+  function setChildWordsToggle(checked, disabled = false) {
+    const el = $("childWordsToggle");
+    if (!el) return;
+    el.checked = !!checked;
+    el.disabled = !!disabled;
+  }
+
   async function renderChildWordsByIds(childIds) {
     const host = $("childWordsHost");
     host.innerHTML = "";
@@ -965,6 +986,25 @@
     $("createChildSentenceBtn").onclick = () => createChildSentence().catch(e => alert(e.message || e));
     $("clearChildSentenceBtn").onclick = () => clearChildSentenceDraft().catch(e => alert(e.message || e));
     $("autoChildSentenceBtn").onclick = () => autoCreateChildSentences().catch(e => alert(e.message || e));
+    $("childWordsToggle").addEventListener("change", async () => {
+      if (currentChildSentenceId) {
+        setChildWordsToggle(false, true);
+        return alert("Child words only mode is unavailable in child sentence view.");
+      }
+      if (!currentSentenceId) {
+        setChildWordsToggle(false);
+        return;
+      }
+      const enabled = $("childWordsToggle").checked;
+      childWordsOnlyMode = enabled;
+      setParam("child_words_only", enabled ? "1" : "");
+      try {
+        if (enabled) await loadChildWordsOnly(currentSentenceId);
+        else await loadSentence(currentSentenceId);
+      } catch (e) {
+        alert(e.message || e);
+      }
+    });
 
     // open sentence from query param or input
     const childQid = getParam("child_sentence_id");
@@ -988,15 +1028,16 @@
           try { await loadSentence(sid); } catch (e) { console.error(e); }
         }
       } else {
-      $("metaPill").textContent = "—";
-      $("sentenceMeta").textContent = "no sentence loaded";
-      $("sentenceText").innerHTML = `<div class="muted tiny">open a sentence to begin</div>`;
-      $("wordsHost").innerHTML = `<div class="muted tiny">no sentence loaded</div>`;
-      $("wordsMeta").textContent = "—";
-      $("childWordsHost").innerHTML = `<div class="muted tiny">no sentence loaded</div>`;
-      $("childWordsMeta").textContent = "—";
-      $("childMeta").textContent = "—";
-      $("childSentenceList").innerHTML = `<div class="muted tiny">no sentence loaded</div>`;
+        $("metaPill").textContent = "—";
+        $("sentenceMeta").textContent = "no sentence loaded";
+        $("sentenceText").innerHTML = `<div class="muted tiny">open a sentence to begin</div>`;
+        $("wordsHost").innerHTML = `<div class="muted tiny">no sentence loaded</div>`;
+        $("wordsMeta").textContent = "—";
+        $("childWordsHost").innerHTML = `<div class="muted tiny">no sentence loaded</div>`;
+        $("childWordsMeta").textContent = "—";
+        $("childMeta").textContent = "—";
+        $("childSentenceList").innerHTML = `<div class="muted tiny">no sentence loaded</div>`;
+        setChildWordsToggle(false, true);
       }
     }
 
@@ -1005,7 +1046,15 @@
       if (!Number.isFinite(sid)) return alert("Enter a valid sentence id");
       setParam("child_sentence_id", "");
       setParam("sentence_id", String(sid));
-      try { await loadSentence(sid); } catch (e) { alert(e.message || e); }
+      const enabled = $("childWordsToggle").checked;
+      childWordsOnlyMode = enabled;
+      setParam("child_words_only", enabled ? "1" : "");
+      try {
+        if (enabled) await loadChildWordsOnly(sid);
+        else await loadSentence(sid);
+      } catch (e) {
+        alert(e.message || e);
+      }
     };
   }
 
