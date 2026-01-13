@@ -761,7 +761,13 @@
         if (!items.length) return;
         const all = items.map(it => {
           const header = `#${it.id} ${it.prompt_type}`;
-          const body = String(it.text || "");
+          const texts = (Array.isArray(it.texts) && it.texts.length)
+            ? it.texts
+            : [{ id: null, text: it.text || "", created_at: it.created_at || "" }];
+          const body = texts.map((t, idx) => {
+            const head = `text ${idx + 1}${t.created_at ? ` • ${t.created_at}` : ""}`;
+            return `${head}\n${String(t.text || "")}`.trim();
+          }).join("\n\n---\n\n");
           return `${header}\n${body}`.trim();
         }).join("\n\n---\n\n");
         try {
@@ -800,13 +806,61 @@
             </span>
           </div>
           ${it.modifier ? `<div class="muted tiny" style="margin-top:6px;">${escapeHtml(it.modifier)}</div>` : ""}
-          <pre>${escapeHtml(it.text || "")}</pre>
         `;
+        const texts = (Array.isArray(it.texts) && it.texts.length)
+          ? it.texts
+          : [{ id: null, text: it.text || "", created_at: it.created_at || "" }];
+        const textHost = document.createElement("div");
+        textHost.style.marginTop = "8px";
+        texts.forEach((t, idx) => {
+          const label = document.createElement("div");
+          label.className = "muted tiny";
+          label.textContent = `text ${idx + 1}${t.created_at ? ` • ${t.created_at}` : ""}`;
+          const pre = document.createElement("pre");
+          pre.textContent = String(t.text || "");
+          textHost.appendChild(label);
+          textHost.appendChild(pre);
+        });
+        card.appendChild(textHost);
+
+        const addWrap = document.createElement("div");
+        addWrap.style.marginTop = "10px";
+        const addLabel = document.createElement("div");
+        addLabel.className = "muted tiny";
+        addLabel.textContent = "add text";
+        const addTa = document.createElement("textarea");
+        addTa.placeholder = "new text entry…";
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.textContent = "add text";
+        addBtn.disabled = !adminOk;
+        addBtn.onclick = async () => {
+          const nextText = (addTa.value || "").trim();
+          if (!nextText) return alert("Text is required.");
+          try {
+            addBtn.disabled = true;
+            await apiPost(`/api/star_stuff/${it.id}/texts`, { text: nextText }, { admin: true });
+            addTa.value = "";
+            await loadActiveChild();
+          } catch (e) {
+            alert(String(e.message || e));
+          } finally {
+            addBtn.disabled = !adminOk;
+          }
+        };
+        addWrap.appendChild(addLabel);
+        addWrap.appendChild(addTa);
+        addWrap.appendChild(addBtn);
+        card.appendChild(addWrap);
         const copyBtn = card.querySelector('button[data-copy="1"]');
         if (copyBtn) {
           copyBtn.onclick = async () => {
             try {
-              await copyTextToClipboard(it.text || "");
+              const payload = texts.map((t, idx) => {
+                const head = `text ${idx + 1}${t.created_at ? ` • ${t.created_at}` : ""}`;
+                return `${head}\n${String(t.text || "")}`.trim();
+              }).join("\n\n---\n\n");
+              await copyTextToClipboard(payload);
               copyBtn.textContent = "copied";
               setTimeout(() => { copyBtn.textContent = "copy"; }, 1200);
             } catch (e) {

@@ -712,6 +712,30 @@ def ensure_schema(db: sqlite3.Connection) -> None:
     db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_child_word_id ON star_stuff(child_word_id);")
     db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_prompt_type ON star_stuff(prompt_type);")
     db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_created_at ON star_stuff(created_at);")
+    db.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS star_stuff_texts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          star_stuff_id INTEGER NOT NULL,
+          text TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (star_stuff_id) REFERENCES star_stuff(id) ON DELETE CASCADE
+        );
+        '''
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_texts_star_id ON star_stuff_texts(star_stuff_id);")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_star_stuff_texts_created_at ON star_stuff_texts(created_at);")
+    db.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_star_stuff_texts_updated_at
+        AFTER UPDATE ON star_stuff_texts
+        FOR EACH ROW
+        BEGIN
+          UPDATE star_stuff_texts SET updated_at = datetime('now') WHERE id = NEW.id;
+        END;
+        """
+    )
 
     db.commit()
 
@@ -805,6 +829,25 @@ def api_stars():
         (child_word_id,),
     ).fetchall()
 
+    text_rows = db.execute(
+        """
+        SELECT sst.id, sst.star_stuff_id, sst.text, sst.created_at
+        FROM star_stuff_texts sst
+        JOIN star_stuff ss ON ss.id = sst.star_stuff_id
+        WHERE ss.child_word_id=?
+        ORDER BY sst.created_at ASC, sst.id ASC
+        """,
+        (child_word_id,),
+    ).fetchall()
+    texts_by_star: dict[int, list[dict[str, Any]]] = {}
+    for tr in text_rows:
+        sid = int(tr["star_stuff_id"])
+        texts_by_star.setdefault(sid, []).append({
+            "id": int(tr["id"]),
+            "text": tr["text"],
+            "created_at": tr["created_at"],
+        })
+
     return jsonify(
         {
             **ctx,
@@ -819,6 +862,9 @@ def api_stars():
                     "task_id": r["task_id"],
                     "created_at": r["created_at"],
                     "updated_at": r["updated_at"],
+                    "texts": texts_by_star.get(int(r["id"]), []) or [
+                        {"id": None, "text": r["text"], "created_at": r["created_at"]}
+                    ],
                 }
                 for r in stuff
             ],
@@ -899,6 +945,32 @@ def api_star_stuff_manual():
         VALUES (?, ?, ?, ?, ?, NULL)
         """,
         (child_word_id, prompt_type, text, model, modifier),
+    )
+    star_id = int(cur.lastrowid)
+    db.execute(
+        "INSERT INTO star_stuff_texts (star_stuff_id, text) VALUES (?, ?)",
+        (star_id, text),
+    )
+    db.commit()
+    return jsonify(ok=True, id=star_id), 201
+
+
+@app.post("/api/star_stuff/<int:star_id>/texts")
+@require_admin
+def api_star_stuff_add_text(star_id: int):
+    data = request.get_json(force=True) or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        abort(400, description="text is required")
+
+    db = get_db()
+    row = db.execute("SELECT id FROM star_stuff WHERE id=?", (star_id,)).fetchone()
+    if row is None:
+        abort(404, description="star_stuff not found")
+
+    cur = db.execute(
+        "INSERT INTO star_stuff_texts (star_stuff_id, text) VALUES (?, ?)",
+        (star_id, text),
     )
     db.commit()
     return jsonify(ok=True, id=int(cur.lastrowid)), 201
@@ -994,6 +1066,31 @@ def create_lang_word_version(lang_word_id: int):
     )
     db.commit()
     return jsonify(ok=True, version_id=int(cur.lastrowid), version=next_version), 201
+
+
+@app.get("/api/lang_words/<int:lang_word_id>/versions")
+def list_lang_word_versions(lang_word_id: int):
+    db = get_db()
+    w = db.execute("SELECT id FROM lang_words WHERE id=?", (lang_word_id,)).fetchone()
+    if w is None:
+        abort(404, description="Lang word not found.")
+
+    rows = db.execute(
+        """
+        SELECT id AS version_id, version, created_at
+        FROM lang_word_versions
+        WHERE lang_word_id=?
+        ORDER BY version DESC
+        """,
+        (lang_word_id,),
+    ).fetchall()
+
+    out = [{
+        "version_id": int(r["version_id"]),
+        "version": int(r["version"]),
+        "created_at": r["created_at"],
+    } for r in rows]
+    return jsonify(versions=out)
 
 
 @app.get("/api/lang_words/<int:version_id>")
@@ -2126,12 +2223,17 @@ def _process_one_task() -> None:
 
             result_text, used_model, usage = call_openai_text(prompt)
 
-            db.execute(
+            cur = db.execute(
                 """
                 INSERT INTO star_stuff (child_word_id, prompt_type, text, model, modifier, task_id)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (child_word_id, task_type, result_text, used_model, modifier or "", task_id),
+            )
+            star_id = int(cur.lastrowid)
+            db.execute(
+                "INSERT INTO star_stuff_texts (star_stuff_id, text) VALUES (?, ?)",
+                (star_id, result_text),
             )
             db.execute("UPDATE llm_tasks SET status='done', error=NULL, updated_at=datetime('now') WHERE id=?", (task_id,))
             db.commit()

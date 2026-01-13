@@ -258,6 +258,8 @@
   let selectedTempLangWordId = null;
   let autoChildRunning = false;
   let childWordsOnlyMode = false;
+  const versionListCache = new Map(); // lang_word_id -> versions[]
+  const selectedParentVersionById = new Map(); // lang_word_id -> version_id
 
   // child sentence pick state
   let selectedParent = new Set();
@@ -336,7 +338,7 @@
       $("wordsHost").appendChild(p);
     }
 
-    renderParentPick();
+    await renderParentPick();
     await refreshChildPicks();
     await loadChildSentences();
     updateAdminStatus();
@@ -820,19 +822,97 @@
     if (!items.length) host.innerHTML = `<div class="muted tiny">none</div>`;
   }
 
-  function renderParentPick() {
+  async function getWordVersions(langWordId) {
+    if (versionListCache.has(langWordId)) return versionListCache.get(langWordId);
+    const data = await apiGet(`/api/lang_words/${langWordId}/versions`);
+    const arr = Array.isArray(data.versions) ? data.versions : [];
+    versionListCache.set(langWordId, arr);
+    return arr;
+  }
+
+  async function renderParentPick() {
     selectedParent = new Set(); // default: none selected
     $("parentSelMeta").textContent = String(selectedParent.size);
-    const items = currentLangWordIds.map(id => {
+    const host = $("parentPick");
+    host.innerHTML = "";
+    const ids = currentLangWordIds.map(id => Number(id)).filter(id => Number.isFinite(id));
+    const versionsById = new Map();
+    await Promise.all(ids.map(async (id) => {
+      try {
+        versionsById.set(id, await getWordVersions(id));
+      } catch {
+        versionsById.set(id, []);
+      }
+    }));
+
+    for (const id of ids) {
       const w = wordsIndex.get(Number(id));
-      return { id: Number(id), label: w ? w.word : `lang_word ${id}` };
-    });
-    renderPick("parentPick", items, selectedParent, async (id, checked) => {
-      if (checked) selectedParent.add(Number(id));
-      else selectedParent.delete(Number(id));
-      $("parentSelMeta").textContent = String(selectedParent.size);
-      await refreshChildPicks();
-    });
+      const label = w ? w.word : `lang_word ${id}`;
+
+      const row = document.createElement("div");
+      row.className = "list-item";
+
+      const lab = document.createElement("label");
+      lab.style.display = "flex";
+      lab.style.gap = "8px";
+      lab.style.alignItems = "center";
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = selectedParent.has(id);
+      cb.onchange = async () => {
+        if (cb.checked) selectedParent.add(id);
+        else selectedParent.delete(id);
+        $("parentSelMeta").textContent = String(selectedParent.size);
+        await refreshChildPicks();
+      };
+
+      const txt = document.createElement("span");
+      txt.innerHTML = `${esc(label)} <span class="muted tiny">id ${esc(id)}</span>`;
+
+      const versions = versionsById.get(id) || [];
+      const sel = document.createElement("select");
+      sel.style.marginLeft = "8px";
+      if (!versions.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "no versions";
+        sel.appendChild(opt);
+        sel.disabled = true;
+      } else {
+        for (const v of versions) {
+          const opt = document.createElement("option");
+          opt.value = String(v.version_id);
+          opt.textContent = `v${v.version} (id ${v.version_id})`;
+          sel.appendChild(opt);
+        }
+      }
+
+      let selectedVersionId = selectedParentVersionById.get(id);
+      const exists = versions.some(v => Number(v.version_id) === Number(selectedVersionId));
+      if (!exists) {
+        const latest = w && w.latest_version_id ? Number(w.latest_version_id) : null;
+        selectedVersionId = versions.some(v => Number(v.version_id) === latest)
+          ? latest
+          : (versions.length ? Number(versions[0].version_id) : null);
+        if (selectedVersionId) selectedParentVersionById.set(id, selectedVersionId);
+      }
+      if (selectedVersionId) sel.value = String(selectedVersionId);
+
+      sel.onchange = async () => {
+        const nextId = Number(sel.value);
+        if (Number.isFinite(nextId)) selectedParentVersionById.set(id, nextId);
+        if (selectedParent.has(id)) await refreshChildPicks();
+      };
+
+      lab.appendChild(cb);
+      lab.appendChild(txt);
+      lab.appendChild(sel);
+      row.appendChild(lab);
+      host.appendChild(row);
+    }
+
+    if (!ids.length) host.innerHTML = `<div class="muted tiny">none</div>`;
   }
 
   async function refreshChildPicks() {
@@ -846,7 +926,7 @@
 
     for (const pid of selectedParent) {
       const w = wordsIndex.get(Number(pid));
-      const vId = w ? w.latest_version_id : null;
+      const vId = selectedParentVersionById.get(Number(pid)) || (w ? w.latest_version_id : null);
       if (!vId) continue;
 
       let v = versionCache.get(vId);
@@ -948,7 +1028,7 @@
   async function clearChildSentenceDraft() {
     selectedParent = new Set();
     $("parentSelMeta").textContent = "0";
-    renderParentPick();
+    await renderParentPick();
     $("childSentenceText").value = "";
     await refreshChildPicks();
     updateCreateChildEnabled();
