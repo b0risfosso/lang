@@ -145,7 +145,10 @@
 
     <div class="card">
       <div class="row" style="justify-content:space-between;">
-        <strong>existing star stuff (active child)</strong>
+        <div class="row">
+          <strong>existing star stuff (active child)</strong>
+          <button id="copyAllStuffBtn" class="btn-sm" type="button" disabled>copy all</button>
+        </div>
         <span class="muted tiny" id="meta">…</span>
       </div>
       <div id="stuff" style="margin-top:10px;"></div>
@@ -185,6 +188,23 @@
       .replaceAll(">","&gt;")
       .replaceAll('"',"&quot;")
       .replaceAll("'","&#039;");
+  }
+
+  async function copyTextToClipboard(text) {
+    const value = String(text || "");
+    if (!value) return;
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+    const ta = document.createElement("textarea");
+    ta.value = value;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
   }
 
   function selectedPrompts() {
@@ -632,6 +652,25 @@
     $("meta").textContent = `${items.length} item(s)`;
     const host = $("stuff");
     host.innerHTML = "";
+    const copyAllBtn = $("copyAllStuffBtn");
+    if (copyAllBtn) {
+      copyAllBtn.disabled = !items.length;
+      copyAllBtn.onclick = async () => {
+        if (!items.length) return;
+        const all = items.map(it => {
+          const header = `#${it.id} ${it.prompt_type}`;
+          const body = String(it.text || "");
+          return `${header}\n${body}`.trim();
+        }).join("\n\n---\n\n");
+        try {
+          await copyTextToClipboard(all);
+          copyAllBtn.textContent = "copied";
+          setTimeout(() => { copyAllBtn.textContent = "copy all"; }, 1200);
+        } catch (e) {
+          alert(String(e.message || e));
+        }
+      };
+    }
     if (!items.length) { host.innerHTML = `<div class="muted tiny">No star stuff yet for this child word.</div>`; return; }
 
     const groups = {};
@@ -653,11 +692,26 @@
         card.innerHTML = `
           <div class="row" style="justify-content:space-between;">
             <div><strong>#${it.id}</strong> <span class="muted tiny">task ${it.task_id ?? "—"} • ${escapeHtml(it.created_at || "")}</span></div>
-            ${it.modifier ? `<span class="pill">modifier</span>` : `<span class="pill muted">no modifier</span>`}
+            <span class="row">
+              ${it.modifier ? `<span class="pill">modifier</span>` : `<span class="pill muted">no modifier</span>`}
+              <button class="btn-sm" data-copy="1" type="button">copy</button>
+            </span>
           </div>
           ${it.modifier ? `<div class="muted tiny" style="margin-top:6px;">${escapeHtml(it.modifier)}</div>` : ""}
           <pre>${escapeHtml(it.text || "")}</pre>
         `;
+        const copyBtn = card.querySelector('button[data-copy="1"]');
+        if (copyBtn) {
+          copyBtn.onclick = async () => {
+            try {
+              await copyTextToClipboard(it.text || "");
+              copyBtn.textContent = "copied";
+              setTimeout(() => { copyBtn.textContent = "copy"; }, 1200);
+            } catch (e) {
+              alert(String(e.message || e));
+            }
+          };
+        }
         d.appendChild(card);
       }
       host.appendChild(d);
