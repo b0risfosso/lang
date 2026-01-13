@@ -520,6 +520,7 @@
     const tempBtnsHtml = `
       <button class="btn-sm" data-temp-create="1" type="button">create temp</button>
       <button class="btn-sm" data-temp-open="1" type="button">temp writings</button>
+      <button class="btn-sm" data-child-create="1" type="button">create orbiting</button>
       <a class="btn-sm" href="${starsHref}" target="_blank" rel="noopener noreferrer">stars</a>
     `;
     sum.innerHTML = `
@@ -552,6 +553,21 @@
         e.preventDefault();
         e.stopPropagation();
         openTempWritings(langWordId).catch(err => alert(err.message || err));
+      });
+    }
+    const childCreate = sum.querySelector('button[data-child-create]');
+    if (childCreate) {
+      childCreate.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          childCreate.disabled = true;
+          await createChildWordsAuto(langWordId);
+        } catch (err) {
+          alert(err.message || err);
+        } finally {
+          childCreate.disabled = false;
+        }
       });
     }
 
@@ -689,6 +705,24 @@
     if (!confirm(`Enqueue temporary writings for ${label}?`)) return;
     await apiPost("/api/write/create_lang_words", { parent_lang_word_id: Number(langWordId), modifier: "" });
     alert("queued");
+  }
+
+  // ---------- child words (orbiting phrases) ----------
+  async function createChildWordsAuto(langWordId) {
+    if (!getAdminKey()) return alert("Admin key required.");
+    const w = wordsIndex.get(Number(langWordId));
+    const label = w ? `${w.word} (#${langWordId})` : `lang_word_id ${langWordId}`;
+    if (!confirm(`Enqueue orbiting phrases for ${label}?`)) return;
+    const data = await apiPost("/api/write/create_child_words", {
+      parent_lang_word_id: Number(langWordId),
+      modifier: ""
+    });
+    const taskId = data.task_id;
+    if (!taskId) throw new Error("No task id returned");
+    await waitForTask(taskId);
+    versionCache.clear();
+    await loadWordsIndex();
+    if (currentSentenceId) await loadSentence(currentSentenceId);
   }
 
   async function openTempWritings(langWordId) {

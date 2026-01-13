@@ -60,6 +60,7 @@ def check_admin() -> bool:
 # LLM config
 LLM_MODEL_CREATE_LANG_WORDS = os.environ.get("LLM_MODEL_CREATE_LANG_WORDS", "gpt-5-mini-2025-08-07")
 LLM_MODEL_CREATE_CHILD_SENTENCES = os.environ.get("LLM_MODEL_CREATE_CHILD_SENTENCES", LLM_MODEL_CREATE_LANG_WORDS)
+LLM_MODEL_CREATE_CHILD_WORDS = os.environ.get("LLM_MODEL_CREATE_CHILD_WORDS", LLM_MODEL_CREATE_LANG_WORDS)
 
 
 # ---------------------------------------------------------------------
@@ -1760,6 +1761,58 @@ def enqueue_create_lang_words():
     return jsonify(ok=True, task_id=int(cur.lastrowid)), 202
 
 
+@app.post("/api/write/create_child_words")
+def enqueue_create_child_words():
+    """
+    Queue an LLM job to create child words (orbiting phrases) under a selected lang word.
+    Body: { parent_lang_word_id: int, modifier: str? }
+    """
+    require_admin_key()
+    db = get_db()
+
+    data = request.get_json(silent=True) or {}
+    parent_lang_word_id = data.get("parent_lang_word_id", None)
+    modifier = (data.get("modifier") or "").strip()
+
+    if parent_lang_word_id is None:
+        abort(400, description="Missing parent_lang_word_id.")
+    try:
+        parent_lang_word_id = int(parent_lang_word_id)
+    except Exception:
+        abort(400, description="Invalid parent_lang_word_id.")
+
+    pr = db.execute("SELECT id FROM lang_words WHERE id=?", (parent_lang_word_id,)).fetchone()
+    if pr is None:
+        abort(404, description="Parent lang word not found.")
+
+    existing = db.execute(
+        """
+        SELECT id, status
+        FROM llm_tasks
+        WHERE parent_lang_word_id=? AND task_type=? AND status IN ('queued','running')
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (parent_lang_word_id, "create_child_words"),
+    ).fetchone()
+
+    if existing is not None:
+        return jsonify(ok=True, task_id=int(existing["id"]), status=existing["status"], deduped=True), 202
+
+    identifier = {"parent_lang_word_id": parent_lang_word_id}
+    payload = {"modifier": modifier}
+
+    cur = db.execute(
+        """
+        INSERT INTO llm_tasks (parent_lang_word_id, task_type, identifier, payload, status)
+        VALUES (?, ?, ?, ?, 'queued')
+        """,
+        (parent_lang_word_id, "create_child_words", json.dumps(identifier), json.dumps(payload)),
+    )
+    db.commit()
+    return jsonify(ok=True, task_id=int(cur.lastrowid)), 202
+
+
 
 @app.get("/api/tasks/<int:task_id>")
 def api_task_status(task_id: int):
@@ -2141,6 +2194,51 @@ def _process_one_task() -> None:
             )
             return
 
+        if task_type == "create_child_words":
+            pr = db.execute("SELECT word FROM lang_words WHERE id=?", (parent_id,)).fetchone()
+            if pr is None:
+                raise ValueError("Parent lang word not found.")
+            primary_phrase = pr["word"]
+
+            phrases, usage = _run_create_child_words_llm(
+                primary_phrase=primary_phrase,
+                optional_modifier=modifier,
+            )
+
+            version_id = ensure_word_has_v1(db, parent_id)
+            seen: set[str] = set()
+            for phrase in phrases:
+                word = (str(phrase) or "").strip()
+                if not word or word in seen:
+                    continue
+                seen.add(word)
+                db.execute(
+                    "INSERT INTO child_words (lang_word_version_id, word, link) VALUES (?, ?, NULL)",
+                    (version_id, word),
+                )
+
+            db.execute(
+                "UPDATE llm_tasks SET status='done', error=NULL, updated_at=datetime('now') WHERE id=?",
+                (task_id,),
+            )
+            db.commit()
+
+            log_llm_usage(
+                ts=datetime.now().isoformat(),
+                app="lang",
+                model=LLM_MODEL_CREATE_CHILD_WORDS,
+                endpoint="/create_child_words",
+                email=None,
+                request_id=str(task_id),
+                tokens_in=usage.input_tokens,
+                tokens_out=usage.output_tokens,
+                total_tokens=usage.total_tokens,
+                duration_ms=0,
+                cost_usd=0.0,
+                meta=json.dumps({"task": "create_child_words", "primary_phrase": primary_phrase, "modifier": modifier})
+            )
+            return
+
         if task_type != "create_lang_words":
             raise ValueError(f"Unknown task_type: {task_type}")
 
@@ -2278,6 +2376,73 @@ def _run_create_lang_words_llm(primary_phrase: str, optional_modifier: Optional[
         raise RuntimeError("LLM output 'themes' must be a list.")
 
     return plan, resp.usage
+
+
+def _run_create_child_words_llm(primary_phrase: str, optional_modifier: Optional[str]) -> tuple[list[str], dict[str, Any]]:
+    """
+    Produce a plan:
+      { "orbiting_phrases": ["...", ...] }
+    Returns (orbiting_phrases, usage)
+    """
+    if OpenAI is None:
+        raise RuntimeError("openai package not installed in this environment.")
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY is not set.")
+
+    modifier_txt = (optional_modifier or "").strip()
+    system = (
+        "You create concise orbiting phrases for a phrase.\n"
+        "Return ONLY valid JSON with the schema:\n"
+        "{ \"orbiting_phrases\": [string, ...] }\n"
+        "Do not include markdown or extra keys."
+    )
+
+    user = f"Primary phrase: {primary_phrase}\n"
+    if modifier_txt:
+        user += f"Modifier: {modifier_txt}\n"
+    user += (
+        "Provide 3-12 orbiting_phrases (short phrases) that relate to that primary phrase.\n"
+        "Keep everything lower-case unless a proper noun.\n"
+    )
+
+    client = OpenAI()
+    resp = client.responses.create(
+        model=LLM_MODEL_CREATE_CHILD_WORDS,
+        input=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    )
+
+    text_out = ""
+    try:
+        text_out = getattr(resp, "output_text", "") or ""
+    except Exception:
+        text_out = ""
+
+    text_out = text_out.strip()
+    if not text_out:
+        try:
+            text_out = json.dumps(resp.model_dump(), ensure_ascii=False)
+        except Exception:
+            raise RuntimeError("LLM returned no text output.")
+
+    plan = None
+    try:
+        plan = json.loads(text_out)
+    except Exception:
+        start = text_out.find("{")
+        end = text_out.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            plan = json.loads(text_out[start:end+1])
+
+    if not isinstance(plan, dict) or "orbiting_phrases" not in plan:
+        raise RuntimeError("LLM output did not match expected JSON schema.")
+    phrases = plan.get("orbiting_phrases")
+    if not isinstance(phrases, list):
+        raise RuntimeError("LLM output 'orbiting_phrases' must be a list.")
+
+    return phrases, resp.usage
 
 
 def call_openai_text(prompt: str, model: Optional[str] = None) -> tuple[str, str, dict[str, Any]]:
