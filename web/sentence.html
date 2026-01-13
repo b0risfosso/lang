@@ -86,6 +86,13 @@
         <span class="muted tiny" id="wordsMeta">…</span>
       </div>
       <div id="wordsHost" style="margin-top:10px;"></div>
+      <div style="margin-top:12px;">
+        <div class="row" style="justify-content:space-between;">
+          <strong class="tiny">child words</strong>
+          <span class="muted tiny" id="childWordsMeta">—</span>
+        </div>
+        <div id="childWordsHost" style="margin-top:6px;"></div>
+      </div>
     </section>
 
     <section class="card" style="grid-column: 1 / -1;">
@@ -241,6 +248,7 @@
   let wordsIndex = new Map(); // lang_word_id -> {word, latest_version_id, ...}
   const versionCache = new Map(); // version_id -> version payload
   let currentSentenceId = null;
+  let currentChildSentenceId = null;
   let currentLangWordIds = [];
   let selectedTempLangWordId = null;
   let autoChildRunning = false;
@@ -286,6 +294,8 @@
     $("sentenceText").innerHTML = `<span class="loading">loading…</span>`;
     $("sentenceIds").textContent = "";
     $("wordsHost").innerHTML = "";
+    $("childWordsHost").innerHTML = "";
+    $("childWordsMeta").textContent = "—";
     $("childSentenceList").innerHTML = "";
     $("childAutoStatus").textContent = "";
 
@@ -294,6 +304,7 @@
     const idsInt = ids.map(x => Number(x)).filter(x => Number.isFinite(x));
 
     currentSentenceId = Number(sentenceId);
+    currentChildSentenceId = null;
     currentLangWordIds = idsInt;
     autoChildRunning = false;
 
@@ -321,6 +332,56 @@
     await refreshChildPicks();
     await loadChildSentences();
     updateAdminStatus();
+  }
+
+  async function loadChildSentence(childSentenceId) {
+    $("metaPill").textContent = `child #${childSentenceId}`;
+    $("sentenceMeta").textContent = "loading…";
+    $("sentenceText").innerHTML = `<span class="loading">loading…</span>`;
+    $("sentenceIds").textContent = "";
+    $("wordsHost").innerHTML = "";
+    $("childWordsHost").innerHTML = "";
+    $("childWordsMeta").textContent = "—";
+    $("childSentenceList").innerHTML = "";
+    $("childAutoStatus").textContent = "";
+
+    const cs = await apiGet(`/api/child_sentences/${childSentenceId}`);
+    const lw = Array.isArray(cs.lang_word_ids) ? cs.lang_word_ids : [];
+    const cw = Array.isArray(cs.child_word_ids) ? cs.child_word_ids : [];
+    const langIds = lw.map(x => Number(x)).filter(x => Number.isFinite(x));
+    const childIds = cw.map(x => Number(x)).filter(x => Number.isFinite(x));
+
+    currentSentenceId = null;
+    currentChildSentenceId = Number(childSentenceId);
+    currentLangWordIds = langIds;
+    autoChildRunning = false;
+
+    $("sentenceMeta").textContent = `child sentence • updated ${cs.updated_at || ""}`;
+    $("sentenceText").innerHTML = esc(cs.sentence || "");
+    $("sentenceIds").innerHTML = `lang_word_ids: ${esc(JSON.stringify(langIds))} • child_word_ids: ${esc(JSON.stringify(childIds))}`;
+    $("sentenceIdInput").value = "";
+
+    $("wordsMeta").textContent = `${langIds.length} word(s)`;
+    $("wordsHost").innerHTML = "";
+
+    for (const wid of langIds) {
+      const node = renderLangWordNode(Number(wid), 0);
+      $("wordsHost").appendChild(node);
+    }
+
+    if (!langIds.length) {
+      const p = document.createElement("div");
+      p.className = "muted tiny";
+      p.textContent = "no lang words linked to this child sentence";
+      $("wordsHost").appendChild(p);
+    }
+
+    await renderChildWordsByIds(childIds);
+
+    $("childMeta").textContent = "child sentence view";
+    $("childSentenceList").innerHTML = `<div class="muted tiny">open a parent sentence to view child sentences</div>`;
+    updateAdminStatus();
+    updateCreateChildEnabled();
   }
 
   function renderLangWordNode(langWordId, depth) {
@@ -681,6 +742,41 @@
     $("createChildSentenceBtn").disabled = !(getAdminKey() && currentSentenceId && textOk && anyIds);
   }
 
+  async function renderChildWordsByIds(childIds) {
+    const host = $("childWordsHost");
+    host.innerHTML = "";
+    if (!childIds.length) {
+      $("childWordsMeta").textContent = "0";
+      host.innerHTML = `<div class="muted tiny">none</div>`;
+      return;
+    }
+
+    $("childWordsMeta").textContent = String(childIds.length);
+    const list = document.createElement("ul");
+    list.className = "tiny";
+
+    const results = await Promise.all(childIds.map(async (id) => {
+      try {
+        return await apiGet(`/api/child_words/${id}`);
+      } catch (e) {
+        return { id, word: null, link: "" };
+      }
+    }));
+
+    for (const r of results) {
+      const li = document.createElement("li");
+      if (r.word) {
+        const link = r.link ? ` • <a href="${esc(r.link)}" target="_blank" rel="noopener noreferrer">link</a>` : "";
+        li.innerHTML = `${esc(r.word)} <span class="muted">(#${esc(r.id)})</span>${link}`;
+      } else {
+        li.innerHTML = `child_word_id ${esc(r.id)}`;
+      }
+      list.appendChild(li);
+    }
+
+    host.appendChild(list);
+  }
+
   function updateAutoChildEnabled() {
     $("autoChildSentenceBtn").disabled = !(getAdminKey() && currentSentenceId && !autoChildRunning);
   }
@@ -717,6 +813,9 @@
         </div>
         <div class="mono" style="margin-top:8px;">${esc(cs.sentence || "")}</div>
         <div class="muted tiny mono" style="margin-top:8px;">lang_word_ids: ${esc(JSON.stringify(lw))} • child_word_ids: ${esc(JSON.stringify(cw))}</div>
+        <div class="row" style="margin-top:8px; justify-content:flex-end;">
+          <a class="tiny" href="sentence.html?child_sentence_id=${encodeURIComponent(cs.id)}">open child sentence</a>
+        </div>
       `;
       host.appendChild(card);
     }
@@ -824,25 +923,36 @@
     $("autoChildSentenceBtn").onclick = () => autoCreateChildSentences().catch(e => alert(e.message || e));
 
     // open sentence from query param or input
-    const qid = getParam("sentence_id");
-    if (qid) {
-      const sid = Number(qid);
-      if (Number.isFinite(sid)) {
-        try { await loadSentence(sid); } catch (e) { console.error(e); }
+    const childQid = getParam("child_sentence_id");
+    if (childQid) {
+      const cid = Number(childQid);
+      if (Number.isFinite(cid)) {
+        try { await loadChildSentence(cid); } catch (e) { console.error(e); }
       }
     } else {
+      const qid = getParam("sentence_id");
+      if (qid) {
+        const sid = Number(qid);
+        if (Number.isFinite(sid)) {
+          try { await loadSentence(sid); } catch (e) { console.error(e); }
+        }
+      } else {
       $("metaPill").textContent = "—";
       $("sentenceMeta").textContent = "no sentence loaded";
       $("sentenceText").innerHTML = `<div class="muted tiny">open a sentence to begin</div>`;
       $("wordsHost").innerHTML = `<div class="muted tiny">no sentence loaded</div>`;
       $("wordsMeta").textContent = "—";
+      $("childWordsHost").innerHTML = `<div class="muted tiny">no sentence loaded</div>`;
+      $("childWordsMeta").textContent = "—";
       $("childMeta").textContent = "—";
       $("childSentenceList").innerHTML = `<div class="muted tiny">no sentence loaded</div>`;
+      }
     }
 
     $("goBtn").onclick = async () => {
       const sid = Number(($("sentenceIdInput").value || "").trim());
       if (!Number.isFinite(sid)) return alert("Enter a valid sentence id");
+      setParam("child_sentence_id", "");
       setParam("sentence_id", String(sid));
       try { await loadSentence(sid); } catch (e) { alert(e.message || e); }
     };

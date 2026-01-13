@@ -1221,6 +1221,29 @@ def update_child_word(child_id: int):
     return jsonify(ok=True)
 
 
+@app.get("/api/child_words/<int:child_id>")
+def get_child_word(child_id: int):
+    db = get_db()
+    r = db.execute(
+        """
+        SELECT id, lang_word_version_id, word, link, created_at, updated_at
+        FROM child_words
+        WHERE id=?
+        """,
+        (child_id,),
+    ).fetchone()
+    if r is None:
+        abort(404, description="Child word not found.")
+    return jsonify({
+        "id": int(r["id"]),
+        "lang_word_version_id": int(r["lang_word_version_id"]),
+        "word": r["word"],
+        "link": r["link"] or "",
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+    })
+
+
 @app.delete("/api/child_words/<int:child_id>")
 def delete_child_word(child_id: int):
     require_admin_key()
