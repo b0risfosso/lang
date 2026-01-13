@@ -724,6 +724,11 @@
   });
 
   async function boot() {
+    const searchParam = (new URL(location.href)).searchParams.get("search");
+    if (searchParam) {
+      $("searchInput").value = searchParam;
+      searchTerm = String(searchParam || "").toLowerCase();
+    }
     await refreshAdminStatus();
     await loadWriteTree();
 

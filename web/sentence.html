@@ -507,6 +507,7 @@
     const w = wordsIndex.get(langWordId);
     const label = w ? `${w.word} (id ${langWordId})` : `lang_word_id ${langWordId}`;
     const latestVersionId = w ? w.latest_version_id : null;
+    const starsHref = w && w.word ? `stars.html?search=${encodeURIComponent(w.word)}` : "stars.html";
 
     const det = document.createElement("details");
     det.dataset.langWordId = String(langWordId);
@@ -519,6 +520,7 @@
     const tempBtnsHtml = `
       <button class="btn-sm" data-temp-create="1" type="button">create temp</button>
       <button class="btn-sm" data-temp-open="1" type="button">temp writings</button>
+      <a class="btn-sm" href="${starsHref}" target="_blank" rel="noopener noreferrer">stars</a>
     `;
     sum.innerHTML = `
       <span class="row" style="justify-content:space-between; width:100%;">
