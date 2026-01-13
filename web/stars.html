@@ -356,12 +356,26 @@
     host.innerHTML = "";
 
     const q = (searchTerm || "").toLowerCase().trim();
-    const filteredRoots = roots.filter(r => !q || String(r.word || "").toLowerCase().includes(q));
-    $("treeMeta").textContent = q ? `${filteredRoots.length} of ${roots.length} parent(s)` : `${roots.length} parent(s)`;
+    const searchMode = q.length > 0;
+    if (searchMode) openDetailsIds.clear();
+
+    const filteredRoots = roots.filter(r => {
+      if (!searchMode) return !q || String(r.word || "").toLowerCase().includes(q);
+      const nameMatch = String(r.word || "").toLowerCase().includes(q);
+      const latest = Array.isArray(r.versions) ? r.versions[0] : null;
+      const kids = latest && Array.isArray(latest.child_lang_words) ? latest.child_lang_words : [];
+      const childMatch = kids.some(k => String(k.word || "").toLowerCase().includes(q));
+      return nameMatch || childMatch;
+    });
+
+    $("treeMeta").textContent = searchMode
+      ? `${filteredRoots.length} of ${roots.length} parent(s)`
+      : `${roots.length} parent(s)`;
 
     for (const R of filteredRoots) {
       const d = document.createElement("details");
       d.setAttribute('data-lang-word-id', R.lang_word_id);
+      if (searchMode) openDetailsIds.add(R.lang_word_id);
       d.open = openDetailsIds.has(R.lang_word_id);
 
       const s = document.createElement("summary");
@@ -539,6 +553,10 @@
         body.innerHTML = `<div class="card danger">${escapeHtml(String(e.message || e))}</div>`;
       }
     });
+
+    if (nodeDetails.open && !loaded) {
+      nodeDetails.dispatchEvent(new Event("toggle"));
+    }
 
     hostEl.appendChild(nodeDetails);
   }
