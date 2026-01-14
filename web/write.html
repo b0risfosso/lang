@@ -9,18 +9,21 @@
     body { margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; line-height: 1.35; }
     header { padding: 14px 16px; border-bottom: 1px solid color-mix(in oklab, currentColor 22%, transparent); display:flex; align-items:baseline; justify-content:space-between; gap: 12px; }
     h1 { font-size: 18px; margin: 0; }
-    main { max-width: 70rem; margin: 0 auto; padding: 16px; }
+    main { max-width: 74rem; margin: 0 auto; padding: 16px; }
     .row { display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
     .pill { display:inline-block; border: 1px solid color-mix(in oklab, currentColor 60%, transparent); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
     .muted { opacity: .75; }
     .card { border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 14px; padding: 12px; margin: 12px 0; }
     button { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; cursor: pointer; }
     button:disabled { opacity: .5; cursor: not-allowed; }
-    textarea, input { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; }
+    textarea, input, select { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; }
     textarea { width: 100%; min-height: 110px; resize: vertical; }
-    .danger { border-color: color-mix(in oklab, red 55%, currentColor 18%); }
-    .entry { padding: 10px; border-radius: 12px; border: 1px solid color-mix(in oklab, currentColor 18%, transparent); }
+    .entry { padding: 12px; border-radius: 14px; border: 1px solid color-mix(in oklab, currentColor 18%, transparent); }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .stars { margin-top: 10px; padding-top: 10px; border-top: 1px dashed color-mix(in oklab, currentColor 22%, transparent); }
+    .star { padding: 10px; border-radius: 12px; border: 1px solid color-mix(in oklab, currentColor 18%, transparent); margin-top: 8px; }
+    .two { display:grid; grid-template-columns: 220px 1fr; gap: 10px; }
+    @media (max-width: 720px) { .two { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -76,17 +79,9 @@
 <script>
   const $ = (id) => document.getElementById(id);
 
-  function getAdminKey() {
-    return localStorage.getItem("lang_admin_key") || "";
-  }
-
-  function setAdminKey(v) {
-    localStorage.setItem("lang_admin_key", v);
-  }
-
-  function clearAdminKey() {
-    localStorage.removeItem("lang_admin_key");
-  }
+  function getAdminKey() { return localStorage.getItem("lang_admin_key") || ""; }
+  function setAdminKey(v) { localStorage.setItem("lang_admin_key", v); }
+  function clearAdminKey() { localStorage.removeItem("lang_admin_key"); }
 
   function withAdminHeaders(h = {}) {
     const k = getAdminKey();
@@ -155,7 +150,7 @@
 
   async function loadEntries() {
     $("listHost").innerHTML = `<div class="muted">loading…</div>`;
-    const data = await apiGet("/api/lang");
+    const data = await apiGet("/api/lang?include_stars=1");
     const entries = Array.isArray(data.entries) ? data.entries : [];
     $("listMeta").textContent = `${entries.length} shown`;
 
@@ -164,26 +159,109 @@
       const div = document.createElement("div");
       div.className = "entry";
       div.style.marginTop = "10px";
+
+      const stars = Array.isArray(e.stars) ? e.stars : [];
+
       div.innerHTML = `
         <div class="row" style="justify-content:space-between;">
           <div class="muted mono">#${esc(e.id)} • ${esc(e.updated_at || e.created_at || "")}</div>
-          <button data-del="${esc(e.id)}" type="button">delete</button>
+          <button data-del-lang="${esc(e.id)}" type="button">delete entry</button>
         </div>
+
         <div style="margin-top:8px; white-space:pre-wrap;">${esc(e.text)}</div>
+
+        <div class="stars">
+          <div class="row" style="justify-content:space-between;">
+            <strong>star stuff</strong>
+            <span class="muted">${stars.length} items</span>
+          </div>
+
+          <div class="two" style="margin-top:10px;">
+            <input placeholder="type (e.g. note, prompt, tag)" data-star-type="${esc(e.id)}" />
+            <input placeholder="text…" data-star-text="${esc(e.id)}" />
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button data-add-star="${esc(e.id)}" type="button">add star stuff</button>
+            <span class="muted" data-star-status="${esc(e.id)}"></span>
+          </div>
+
+          <div data-stars-host="${esc(e.id)}" style="margin-top:10px;"></div>
+        </div>
       `;
+
       $("listHost").appendChild(div);
+
+      // render stars list
+      const host = div.querySelector(`[data-stars-host="${CSS.escape(String(e.id))}"]`);
+      host.innerHTML = stars.map(s => `
+        <div class="star">
+          <div class="row" style="justify-content:space-between;">
+            <div class="muted mono">★ #${esc(s.id)} • ${esc(s.type)} • ${esc(s.updated_at || s.created_at || "")}</div>
+            <button data-del-star="${esc(s.id)}" type="button">delete</button>
+          </div>
+          <div style="margin-top:8px; white-space:pre-wrap;">${esc(s.text)}</div>
+        </div>
+      `).join("") || `<div class="muted">no star stuff yet</div>`;
     }
 
-    // wire deletes
-    for (const btn of document.querySelectorAll("button[data-del]")) {
+    // wire lang deletes
+    for (const btn of document.querySelectorAll("button[data-del-lang]")) {
       btn.addEventListener("click", async () => {
-        const id = btn.getAttribute("data-del");
+        const id = btn.getAttribute("data-del-lang");
         if (!id) return;
-        if (!confirm(`Delete #${id}?`)) return;
+        if (!confirm(`Delete lang entry #${id} (and all its star stuff)?`)) return;
         try {
           await apiDelete(`/api/lang/${encodeURIComponent(id)}`, { admin: true });
           await loadEntries();
         } catch (e) {
+          alert(e.message || String(e));
+        }
+      });
+    }
+
+    // wire star deletes
+    for (const btn of document.querySelectorAll("button[data-del-star]")) {
+      btn.addEventListener("click", async () => {
+        const id = btn.getAttribute("data-del-star");
+        if (!id) return;
+        if (!confirm(`Delete star #${id}?`)) return;
+        try {
+          await apiDelete(`/api/stars/${encodeURIComponent(id)}`, { admin: true });
+          await loadEntries();
+        } catch (e) {
+          alert(e.message || String(e));
+        }
+      });
+    }
+
+    // wire add star
+    for (const btn of document.querySelectorAll("button[data-add-star]")) {
+      btn.addEventListener("click", async () => {
+        const langId = btn.getAttribute("data-add-star");
+        if (!langId) return;
+
+        const typeEl = document.querySelector(`[data-star-type="${CSS.escape(String(langId))}"]`);
+        const textEl = document.querySelector(`[data-star-text="${CSS.escape(String(langId))}"]`);
+        const statusEl = document.querySelector(`[data-star-status="${CSS.escape(String(langId))}"]`);
+
+        const type = (typeEl?.value || "").trim();
+        const text = (textEl?.value || "").trim();
+
+        if (!type || !text) {
+          alert("Provide both star type and star text.");
+          return;
+        }
+
+        statusEl.textContent = "adding…";
+        try {
+          await apiPost(`/api/lang/${encodeURIComponent(langId)}/stars`, { type, text }, { admin: true });
+          typeEl.value = "";
+          textEl.value = "";
+          statusEl.textContent = "added";
+          setTimeout(() => statusEl.textContent = "", 900);
+          await loadEntries();
+        } catch (e) {
+          statusEl.textContent = "";
           alert(e.message || String(e));
         }
       });
@@ -210,8 +288,8 @@
   $("setKeyBtn").addEventListener("click", async () => {
     const v = prompt("Enter admin key:");
     if (v) setAdminKey(v);
-    await refreshAdmin();
-    if (getAdminKey()) await loadEntries();
+    const ok = await refreshAdmin();
+    if (ok) await loadEntries();
   });
 
   $("clearKeyBtn").addEventListener("click", async () => {
@@ -231,7 +309,7 @@
   (async function init(){
     const ok = await refreshAdmin();
     if (ok) await loadEntries();
-    $("meta").textContent = "POST /api/lang • GET /api/lang";
+    $("meta").textContent = "POST /api/lang • POST /api/lang/:id/stars";
   })();
 </script>
 </body>
