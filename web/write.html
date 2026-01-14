@@ -7,267 +7,85 @@
   <style>
     :root { color-scheme: light dark; }
     body { margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; line-height: 1.35; }
-    header { padding: 14px 16px; border-bottom: 1px solid color-mix(in oklab, currentColor 22%, transparent); display:flex; gap:12px; align-items:baseline; justify-content:space-between; }
-    header h1 { font-size: 18px; margin: 0; }
-    header nav a { margin-right: 10px; }
-    a { text-decoration: none; border-bottom: 1px solid currentColor; }
-    .wrap { display: grid; grid-template-columns: 1fr 1fr; min-height: calc(100vh - 60px); }
-    .panel { padding: 16px; overflow:auto; }
-    .panel + .panel { border-left: 1px solid color-mix(in oklab, currentColor 22%, transparent); }
+    header { padding: 14px 16px; border-bottom: 1px solid color-mix(in oklab, currentColor 22%, transparent); display:flex; align-items:baseline; justify-content:space-between; gap: 12px; }
+    h1 { font-size: 18px; margin: 0; }
+    main { max-width: 70rem; margin: 0 auto; padding: 16px; }
     .row { display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
-    .muted { opacity: .75; }
     .pill { display:inline-block; border: 1px solid color-mix(in oklab, currentColor 60%, transparent); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+    .muted { opacity: .75; }
+    .card { border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 14px; padding: 12px; margin: 12px 0; }
     button { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; cursor: pointer; }
     button:disabled { opacity: .5; cursor: not-allowed; }
-    input, textarea, select { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; }
-    textarea { width: 100%; min-height: 80px; resize: vertical; }
-    details { border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 14px; padding: 10px 12px; margin: 10px 0; }
-    details details { margin: 8px 0 0; }
-    summary { cursor: pointer; user-select: none; }
-    ul { margin: 8px 0; padding-left: 18px; }
-    li { margin: 4px 0; }
-    .card { border: 1px solid color-mix(in oklab, currentColor 18%, transparent); border-radius: 14px; padding: 12px; margin: 10px 0; }
+    textarea, input { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); background: transparent; }
+    textarea { width: 100%; min-height: 110px; resize: vertical; }
     .danger { border-color: color-mix(in oklab, red 55%, currentColor 18%); }
-    .tabs { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    .tab { padding: 6px 10px; border-radius: 999px; border: 1px solid color-mix(in oklab, currentColor 30%, transparent); cursor:pointer; }
-    .tab[aria-selected="true"] { background: color-mix(in oklab, currentColor 12%, transparent); }
-    pre { white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; font-size: 12px; opacity: .9; }
-    .tiny { font-size: 12px; }
-    .spacer { height: 8px; }
-    .indent { margin-left: 14px; border-left: 2px solid color-mix(in oklab, currentColor 12%, transparent); padding-left: 12px; }
-    .loading { opacity: .8; font-style: italic; }
+    .entry { padding: 10px; border-radius: 12px; border: 1px solid color-mix(in oklab, currentColor 18%, transparent); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
   </style>
 </head>
 <body>
 <header>
   <div class="row">
     <h1>write</h1>
-    <span class="pill" id="modePill">word mode</span>
+    <span class="pill" id="adminPill">admin: …</span>
   </div>
-  <nav class="tiny">
-    <a href="./">home</a>
-    <a href="lang.html">sentences</a>
-  </nav>
+  <div class="row">
+    <button id="setKeyBtn" type="button">set admin key</button>
+    <button id="clearKeyBtn" type="button">clear key</button>
+    <button id="refreshBtn" type="button">refresh</button>
+  </div>
 </header>
 
-<div class="wrap">
-  <!-- READ -->
-  <section class="panel">
+<main>
+  <section class="card" id="lockedCard">
     <div class="row" style="justify-content:space-between;">
-      <div class="row">
-        <strong>read</strong>
-        <span class="muted tiny" id="readMeta">…</span>
-      </div>
-      <div class="row">
-        <input id="searchInput" placeholder="search words…" style="min-width: 150px;" />
-        <button id="refreshBtn" type="button">refresh</button>
-      </div>
+      <strong>locked</strong>
+      <span class="muted">This page is admin-protected.</span>
     </div>
-      <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:8px;">
-        <select id="rootFilterSelect" style="min-width: 260px;">
-          <option value="all">all parent words</option>
-          <option value="has_temp">has temporary writings</option>
-          <option value="needs_gen">no child lang words + no temporary writings</option>
-        </select>
-        <button id="selectAllFilteredBtn" type="button">select all (filtered)</button>
-        <button id="clearSelectedParentsBtn" type="button">clear selected</button>
-        <span class="pill" id="selectedParentsPill">0 selected</span>
-      </div>
-      <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:8px;">
-        <button id="applySelectedTempBtn" type="button" disabled>apply selected temporary writings</button>
-        <button id="createTempForSelectedBtn" type="button" disabled>create temporary writings (enqueue)</button>
-        <span class="muted tiny" id="batchHint">batch actions require admin key</span>
-      </div>
-
-    <div class="spacer"></div>
-
-    <div class="tabs" role="tablist" aria-label="mode">
-      <div class="tab" role="tab" tabindex="0" id="tabWord" aria-selected="true">word</div>
-      <div class="tab" role="tab" tabindex="0" id="tabSentence" aria-selected="false">sentence</div>
-      <span class="muted tiny" id="adminStatus">admin: unknown</span>
+    <div class="muted" style="margin-top:8px;">
+      Set <span class="mono">localStorage.lang_admin_key</span> to unlock.
     </div>
-
-    <div class="spacer"></div>
-
-    <div class="card">
-      <div class="row" style="justify-content:space-between;">
-        <div>
-          <strong>selected parent lang word</strong>
-          <div class="muted tiny">the parent word acts like the old “lang” selector</div>
-        </div>
-        <span class="pill" id="selectedParentPill">none</span>
-      </div>
-      <div class="spacer"></div>
-
-      <div class="row">
-        <input id="newParentInput" placeholder="create parent lang word…" style="flex:1; min-width: 220px;" />
-        <button id="createParentBtn" type="button">create</button>
-      </div>
-      <div class="muted tiny" id="createParentHint">requires admin key in localStorage "lang_admin_key"</div>
-    </div>
-
-    <div id="readTree"></div>
   </section>
 
-  <!-- WRITE -->
-  <section class="panel">
+  <section class="card" id="composerCard" style="display:none;">
     <div class="row" style="justify-content:space-between;">
+      <strong>new lang entry</strong>
+      <span class="muted" id="meta">…</span>
+    </div>
+    <div style="margin-top:10px;">
+      <textarea id="textInput" placeholder="type text…"></textarea>
+    </div>
+    <div class="row" style="margin-top:10px; justify-content:space-between;">
       <div class="row">
-        <strong>write</strong>
-        <span class="muted tiny" id="writeMeta">…</span>
+        <button id="createBtn" type="button">create</button>
+        <button id="clearBtn" type="button">clear</button>
       </div>
-      <div class="row">
-        <button id="clearKeyBtn" type="button">clear admin key</button>
-      </div>
+      <span class="muted" id="status"></span>
     </div>
-
-    <div class="spacer"></div>
-
-    <!-- WORD MODE -->
-    <div id="wordMode">
-      <div class="card">
-        <div class="row" style="justify-content:space-between;">
-          <div>
-            <strong>generate child lang words (themes)</strong>
-            <div class="muted tiny">creates themes under the selected parent word; each theme gets orbiting phrases as child words</div>
-          </div>
-          <span class="pill" id="taskStatusPill">idle</span>
-        </div>
-
-        <div class="spacer"></div>
-
-        <div class="row">
-          <input id="modifierInput" placeholder="optional modifier…" style="flex:1; min-width: 240px;" />
-          <button id="runBtn" type="button" disabled>generate themes</button>
-          <button id="orbitingBtn" type="button" disabled>generate orbiting</button>
-        </div>
-        <div class="muted tiny" id="runHint">needs a selected parent word + admin key</div>
-      </div>
-
-      <div class="card" id="manualEditCard">
-        <div class="row" style="justify-content:space-between;">
-          <div>
-            <strong>manual edit selected parent</strong>
-            <div class="muted tiny">create versions, add child lang words, and add child words for a specific version</div>
-          </div>
-          <span class="pill" id="manualMetaPill">—</span>
-        </div>
-
-        <div class="spacer"></div>
-
-        <div class="row">
-          <select id="manualVersionSelect" style="flex:1; min-width:240px;"></select>
-          <button id="createVersionBtn" type="button" disabled>new version</button>
-        </div>
-        <div class="muted tiny">Pick a version to add items to. Creating a version requires admin key + selected parent.</div>
-
-        <div class="spacer"></div>
-
-        <details>
-          <summary><strong>add child lang word</strong> <span class="muted tiny">(links an existing lang_word_id)</span></summary>
-          <div style="margin-top:10px;" class="row">
-            <input id="addChildLangWordIdInput" placeholder="existing child lang_word_id…" style="flex:1; min-width:220px;" />
-            <button id="addChildLangWordBtn" type="button" disabled>add</button>
-          </div>
-          <div class="muted tiny">This creates a link in <code class="inline">lang_word_children</code> for the selected version.</div>
-
-          <div class="spacer"></div>
-
-          <div class="muted tiny">or create a new lang word + link it:</div>
-          <div style="margin-top:6px;" class="row">
-            <input id="createAndLinkLangWordInput" placeholder="new child lang word text…" style="flex:1; min-width:220px;" />
-            <button id="createAndLinkLangWordBtn" type="button" disabled>create + link</button>
-          </div>
-        </details>
-
-        <details style="margin-top:10px;">
-          <summary><strong>add child word</strong> <span class="muted tiny">(orbiting phrase)</span></summary>
-          <div style="margin-top:10px;" class="row">
-            <input id="addChildWordInput" placeholder="child word…" style="flex:1; min-width:220px;" />
-            <input id="addChildWordLinkInput" placeholder="optional link…" style="flex:1; min-width:220px;" />
-            <button id="addChildWordBtn" type="button" disabled>add</button>
-          </div>
-        </details>
-
-        <details style="margin-top:10px;">
-          <summary><strong>batch add child lang words</strong> <span class="muted tiny">(multiple lines, each a new word)</span></summary>
-          <div style="margin-top:10px;">
-            <textarea id="batchChildLangWordsTextarea" placeholder="word1\nword2\nword3" style="width:100%; min-height:80px;"></textarea>
-            <div style="margin-top:8px;" class="row">
-              <button id="batchAddChildLangWordsBtn" type="button" disabled>batch add</button>
-            </div>
-            <div class="muted tiny">Each line becomes a child lang word (created if doesn't exist).</div>
-          </div>
-        </details>
-
-        <details style="margin-top:10px;">
-          <summary><strong>batch add child words</strong> <span class="muted tiny">(multiple lines, each a new orbiting phrase)</span></summary>
-          <div style="margin-top:10px;">
-            <textarea id="batchChildWordsTextarea" placeholder="phrase1\nphrase2\nphrase3" style="width:100%; min-height:80px;"></textarea>
-            <div style="margin-top:8px;" class="row">
-              <button id="batchAddChildWordsBtn" type="button" disabled>batch add</button>
-            </div>
-            <div class="muted tiny">Each line becomes a child word (orbiting phrase).</div>
-          </div>
-        </details>
-      </div>
-
-      <div class="card">
-        <div class="row" style="justify-content:space-between;">
-          <strong>temporary writings</strong>
-          <button id="refreshWritingsBtn" type="button" disabled>refresh</button>
-        </div>
-        <div class="muted tiny">review and apply to create child lang words + orbiting child words</div>
-        <div id="writings"></div>
-      </div>
-    </div>
-
-    <!-- SENTENCE MODE -->
-    <div id="sentenceMode" style="display:none;">
-      <div class="card">
-        <div class="row" style="justify-content:space-between;">
-          <div>
-            <strong>sentence mode</strong>
-            <div class="muted tiny">select lang words, filter sentences, and (admin) create sentences</div>
-          </div>
-          <span class="pill" id="selectedWordsPill">0 selected</span>
-        </div>
-
-        <div class="spacer"></div>
-
-        <div class="row">
-          <input id="sentenceTextInput" placeholder="new sentence…" style="flex:1; min-width: 240px;" />
-          <button id="createSentenceBtn" type="button" disabled>create sentence</button>
-        </div>
-        <div class="muted tiny">creating requires admin key and at least 1 selected word</div>
-
-        <div class="spacer"></div>
-
-        <div class="row">
-          <button id="clearWordsBtn" type="button">clear all selections</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="row" style="justify-content:space-between;">
-          <strong>sentences</strong>
-          <button id="refreshSentencesBtn" type="button">refresh</button>
-        </div>
-        <div id="sentences"></div>
-      </div>
-    </div>
-
   </section>
-</div>
+
+  <section class="card" id="listCard" style="display:none;">
+    <div class="row" style="justify-content:space-between;">
+      <strong>entries</strong>
+      <span class="muted" id="listMeta">…</span>
+    </div>
+    <div id="listHost" style="margin-top:10px;"></div>
+  </section>
+</main>
 
 <script>
-  // -------------------------
-  // Helpers
-  // -------------------------
   const $ = (id) => document.getElementById(id);
 
   function getAdminKey() {
     return localStorage.getItem("lang_admin_key") || "";
+  }
+
+  function setAdminKey(v) {
+    localStorage.setItem("lang_admin_key", v);
+  }
+
+  function clearAdminKey() {
+    localStorage.removeItem("lang_admin_key");
   }
 
   function withAdminHeaders(h = {}) {
@@ -284,50 +102,25 @@
     return await res.json();
   }
 
-  async function apiPost(url, body = {}, { admin = false } = {}) {
-    const headers = {
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-    };
+  async function apiJson(method, url, body, { admin = false } = {}) {
+    const headers = { "Accept": "application/json", "Content-Type": "application/json" };
     if (admin) Object.assign(headers, withAdminHeaders());
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-
-    const text = await res.text();
+    const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    const txt = await res.text();
     let data = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = null;
-    }
-
+    try { data = txt ? JSON.parse(txt) : null; } catch {}
     if (!res.ok) {
-      throw new Error(
-        (data && (data.description || data.error)) ||
-        `POST ${url} failed (${res.status})`
-      );
+      const msg = (data && (data.description || data.error)) || `${method} ${url} failed (${res.status})`;
+      throw new Error(msg);
     }
-
     return data;
   }
 
-  async function apiDelete(url, { admin = false } = {}) {
-    const headers = { "Accept": "application/json" };
-    if (admin) Object.assign(headers, withAdminHeaders());
-    const res = await fetch(url, { method: "DELETE", headers });
-    const text = await res.text();
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-    if (!res.ok) throw new Error((data && (data.description || data.error)) || `DELETE ${url} failed (${res.status})`);
-    return data;
-  }
+  const apiPost = (url, body, opts) => apiJson("POST", url, body, opts);
+  const apiDelete = (url, opts) => apiJson("DELETE", url, null, opts);
 
-  function escapeHtml(s) {
-    return String(s)
+  function esc(s) {
+    return String(s ?? "")
       .replaceAll("&","&amp;")
       .replaceAll("<","&lt;")
       .replaceAll(">","&gt;")
@@ -335,1179 +128,111 @@
       .replaceAll("'","&#039;");
   }
 
-  // -------------------------
-  // State
-  // -------------------------
-  let mode = "word"; // "word" | "sentence"
-  let roots = [];
-  let selectedParentWordId = null;
-  let selectedParentWordText = null;
-  const selectedReadVersionByWordId = new Map();
-
-  // Batch actions / filters (word mode)
-  let rootFilterMode = "all"; // "all" | "has_temp" | "needs_gen"
-  const selectedParentIds = new Set(); // multi-select parent lang_word_id
-  const tempWritingCountByParentId = new Map(); // parent_id -> count (admin only)
-  let tempCountsLoaded = false;
-
-
-  const selectedSentenceWordIds = new Set();
-  let allSentences = [];
-
-  // Word metadata cache (for recursive expansion)
-  // latestVersionByWordId: { [lang_word_id]: latest_version_id }
-  const latestVersionByWordId = new Map();
-  // nodeCache: { [lang_word_id]: { version_id, version, child_words, child_lang_words } }
-  const nodeCache = new Map();
-
-  // -------------------------
-  // Admin
-  // -------------------------
-  async function refreshAdminStatus() {
+  async function refreshAdmin() {
     const k = getAdminKey();
-    if (!k) { $("adminStatus").textContent = "admin: no key"; return false; }
+    if (!k) {
+      $("adminPill").textContent = "admin: no key";
+      $("lockedCard").style.display = "";
+      $("composerCard").style.display = "none";
+      $("listCard").style.display = "none";
+      return false;
+    }
     try {
       await apiGet("/api/admin/ping", { admin: true });
-      $("adminStatus").textContent = "admin: ok";
-      // enable admin-gated UI if a selection exists
-      $("runBtn").disabled = !(getAdminKey() && selectedParentWordId);
-      $("orbitingBtn").disabled = !(getAdminKey() && selectedParentWordId);
-      refreshManualEditUI();
+      $("adminPill").textContent = "admin: ok";
+      $("lockedCard").style.display = "none";
+      $("composerCard").style.display = "";
+      $("listCard").style.display = "";
       return true;
     } catch {
-      $("adminStatus").textContent = "admin: invalid";
-      $("runBtn").disabled = true;
-      $("orbitingBtn").disabled = true;
-      refreshManualEditUI();
+      $("adminPill").textContent = "admin: invalid";
+      $("lockedCard").style.display = "";
+      $("composerCard").style.display = "none";
+      $("listCard").style.display = "none";
       return false;
     }
   }
 
-  // -------------------------
-  // Mode switching
-  // -------------------------
-  function setMode(next) {
-    mode = next;
-    $("modePill").textContent = next === "word" ? "word mode" : "sentence mode";
-    $("tabWord").setAttribute("aria-selected", next === "word" ? "true" : "false");
-    $("tabSentence").setAttribute("aria-selected", next === "sentence" ? "true" : "false");
-    $("wordMode").style.display = next === "word" ? "" : "none";
-    $("sentenceMode").style.display = next === "sentence" ? "" : "none";
-    updateSelectedParentsUI();
-    renderReadTree();
-    if (next === "sentence") loadSentences();
-  }
-
-  $("tabWord").onclick = () => setMode("word");
-  $("tabSentence").onclick = () => setMode("sentence");
-
-  // -------------------------
-  // Parent selection
-  // -------------------------
-  let selectedManualVersionId = null;
-
-  function getSelectedParentRoot() {
-    if (!selectedParentWordId) return null;
-    return (Array.isArray(roots) ? roots : []).find(r => Number(r.lang_word_id) === Number(selectedParentWordId)) || null;
-  }
-
-  function refreshManualEditUI({ preferVersionId = null } = {}) {
-    const root = getSelectedParentRoot();
-    const sel = $("manualVersionSelect");
-    if (!sel) return;
-
-    const versions = root && Array.isArray(root.versions) ? root.versions : [];
-    sel.innerHTML = "";
-
-    for (const v of versions) {
-      const opt = document.createElement("option");
-      opt.value = String(v.version_id);
-      const cw = Array.isArray(v.child_words) ? v.child_words.length : 0;
-      const clw = Array.isArray(v.child_lang_words) ? v.child_lang_words.length : 0;
-      opt.textContent = `v${v.version} • version_id ${v.version_id} • ${clw} child lang • ${cw} child words`;
-      sel.appendChild(opt);
-    }
-
-    // Choose selection
-    const desired = preferVersionId ? Number(preferVersionId) : (selectedManualVersionId ? Number(selectedManualVersionId) : null);
-    const hasDesired = desired && versions.some(v => Number(v.version_id) === desired);
-    if (hasDesired) sel.value = String(desired);
-    else if (versions.length) sel.value = String(versions[0].version_id);
-    else sel.value = "";
-
-    selectedManualVersionId = sel.value ? Number(sel.value) : null;
-
-    $("manualMetaPill").textContent = root ? `parent: ${root.word} (id ${root.lang_word_id})` : "—";
-
-    const adminOk = !!getAdminKey();
-    $("createVersionBtn").disabled = !(adminOk && selectedParentWordId);
-    $("addChildLangWordBtn").disabled = !(adminOk && selectedManualVersionId);
-    $("createAndLinkLangWordBtn").disabled = !(adminOk && selectedManualVersionId);
-    $("addChildWordBtn").disabled = !(adminOk && selectedManualVersionId);
-    $("batchAddChildLangWordsBtn").disabled = !(adminOk && selectedManualVersionId);
-    $("batchAddChildWordsBtn").disabled = !(adminOk && selectedManualVersionId);
-  }
-
-  function setSelectedParent(wordId, wordText) {
-    selectedParentWordId = wordId;
-    selectedParentWordText = wordText;
-    $("selectedParentPill").textContent = wordId ? `${wordText} (id ${wordId})` : "none";
-    $("runBtn").disabled = !(getAdminKey() && selectedParentWordId);
-    $("orbitingBtn").disabled = !(getAdminKey() && selectedParentWordId);
-    $("refreshWritingsBtn").disabled = !selectedParentWordId;
-    refreshManualEditUI();
-    loadWritings();
-  }
-
-  // -------------------------
-  // Recursive node loading
-  // -------------------------
-  async function refreshWordIndex() {
-    // Build latestVersionByWordId
-    const data = await apiGet("/api/lang_words");
-    const words = Array.isArray(data.words) ? data.words : [];
-    latestVersionByWordId.clear();
-    for (const w of words) {
-      if (w && w.lang_word_id && w.latest_version_id) {
-        latestVersionByWordId.set(Number(w.lang_word_id), Number(w.latest_version_id));
-      }
-    }
-  }
-
-  async function loadNodeLatest(langWordId) {
-    // If already cached, return.
-    if (nodeCache.has(langWordId)) return nodeCache.get(langWordId);
-
-    // Ensure we know latest version id
-    if (!latestVersionByWordId.has(langWordId)) {
-      await refreshWordIndex();
-    }
-    const versionId = latestVersionByWordId.get(langWordId);
-    if (!versionId) {
-      // No versions yet
-      const empty = { version_id: null, version: null, child_words: [], child_lang_words: [] };
-      nodeCache.set(langWordId, empty);
-      return empty;
-    }
-
-    const v = await apiGet(`/api/lang_words/${versionId}`);
-    const node = {
-      version_id: v.version_id,
-      version: v.version,
-      child_words: Array.isArray(v.child_words) ? v.child_words : [],
-      child_lang_words: Array.isArray(v.child_lang_words) ? v.child_lang_words : [],
-    };
-    nodeCache.set(langWordId, node);
-    return node;
-  }
-
-  // -------------------------
-  // Read tree rendering
-  // -------------------------
-  function renderReadTree() {
-    const host = $("readTree");
-    host.innerHTML = "";
-
-    if (!Array.isArray(roots)) roots = [];
-
-    const q = (searchTerm || "").trim().toLowerCase();
-
-    const filteredRoots = roots.filter(r => {
-      if (q && !String(r.word || "").toLowerCase().includes(q)) return false;
-
-      if (mode !== "word") return true; // filters only apply to word mode
-
-      if (rootFilterMode === "has_temp") {
-        const n = Number(tempWritingCountByParentId.get(Number(r.lang_word_id)) || 0);
-        return n > 0;
-      }
-
-      if (rootFilterMode === "needs_gen") {
-        const versions = Array.isArray(r.versions) ? r.versions : [];
-        const latest = versions.length ? versions[0] : null;
-        const childLangCount = latest && Array.isArray(latest.child_lang_words) ? latest.child_lang_words.length : 0;
-        const tempCount = Number(tempWritingCountByParentId.get(Number(r.lang_word_id)) || 0);
-        return childLangCount === 0 && tempCount === 0;
-      }
-
-      return true; // "all"
-    });
-
-    $("readMeta").textContent = q ? `${filteredRoots.length} of ${roots.length} parent word(s)` : `${roots.length} parent word(s)`;
-
-    // keep selection pill in sync
-    updateSelectedParentsUI();
-
-    for (const R of filteredRoots) {
-      const d = document.createElement("details");
-      d.open = false;
-
-      const s = document.createElement("summary");
-      s.innerHTML = `<strong>${escapeHtml(R.word)}</strong> <span class="muted tiny">(id ${R.lang_word_id})</span>`;
-
-      // Parent multi-select toggle (word mode only)
-      if (mode === "word") {
-        const pid = Number(R.lang_word_id);
-        const pickBtn = document.createElement("button");
-        pickBtn.type = "button";
-        pickBtn.textContent = selectedParentIds.has(pid) ? "✓" : "+";
-        pickBtn.style.padding = "2px 8px";
-        pickBtn.style.borderRadius = "999px";
-        pickBtn.style.marginLeft = "8px";
-        pickBtn.onclick = (ev) => {
-          ev.preventDefault();
-          ev.stopPropagation();
-          toggleParentSelection(pid);
-        };
-        s.appendChild(pickBtn);
-
-        // Show temp writing count badge if we know it
-        const tempCount = Number(tempWritingCountByParentId.get(pid) || 0);
-        if (tempCountsLoaded) {
-          const badge = document.createElement("span");
-          badge.className = "pill";
-          badge.style.marginLeft = "8px";
-          badge.textContent = `${tempCount} tmp`;
-          s.appendChild(badge);
-        }
-      }
-
-      // Select word button on summary line for sentence mode
-      if (mode === "sentence") {
-        const toggleBtn = document.createElement("button");
-        toggleBtn.type = "button";
-        const key = R.lang_word_id;
-        const isOn = selectedSentenceWordIds.has(key);
-        toggleBtn.textContent = isOn ? "✓" : "+";
-        toggleBtn.style.padding = "2px 8px";
-        toggleBtn.style.borderRadius = "999px";
-        toggleBtn.style.marginLeft = "8px";
-        toggleBtn.onclick = () => {
-          if (selectedSentenceWordIds.has(key)) selectedSentenceWordIds.delete(key);
-          else selectedSentenceWordIds.add(key);
-          updateSelectedWordsPill();
-          renderReadTree();
-          renderSentences();
-        };
-        s.appendChild(toggleBtn);
-      }
-
-      d.appendChild(s);
-
-      const btnRow = document.createElement("div");
-      btnRow.className = "row";
-      btnRow.style.marginTop = "8px";
-
-      // Word mode: allow selecting this parent for the right-side panels
-      if (mode === "word") {
-        const selBtn = document.createElement("button");
-        selBtn.type = "button";
-        selBtn.textContent = (selectedParentWordId === R.lang_word_id) ? "selected" : "select";
-        selBtn.onclick = () => {
-          setSelectedParent(R.lang_word_id, R.word);
-          refreshManualEditUI();
-        };
-        btnRow.appendChild(selBtn);
-
-        // Delete parent word button
-        const deleteBtn = document.createElement("button");
-        deleteBtn.type = "button";
-        deleteBtn.textContent = "delete";
-        deleteBtn.style.marginLeft = "8px";
-        deleteBtn.onclick = async () => {
-          if (!confirm(`Delete parent lang word "${R.word}" and all its versions/children?`)) return;
-          try {
-            await apiDelete(`/api/lang_words/${R.lang_word_id}`, { admin: true });
-            nodeCache.clear(); // clear all cache
-            await loadWriteTree();
-            if (selectedParentWordId === R.lang_word_id) {
-              setSelectedParent(null, null);
-            }
-          } catch (e) {
-            alert(String(e.message || e));
-          }
-        };
-        btnRow.appendChild(deleteBtn);
-      }
-
-      d.appendChild(btnRow);
-
-      if (mode === "word") {
-        // Allow selecting which version to display.
-        const versions = Array.isArray(R.versions) ? R.versions : [];
-        const latest = versions.length ? versions[0] : null;
-        const pid = Number(R.lang_word_id);
-
-        let selectedVersionId = selectedReadVersionByWordId.get(pid);
-        const selectedExists = versions.some(v => Number(v.version_id) === Number(selectedVersionId));
-        if (!selectedExists) {
-          selectedVersionId = latest ? latest.version_id : null;
-          if (selectedVersionId) selectedReadVersionByWordId.set(pid, selectedVersionId);
-          else selectedReadVersionByWordId.delete(pid);
-        }
-
-        const selectedVersion = versions.find(v => Number(v.version_id) === Number(selectedVersionId)) || null;
-
-        const meta = document.createElement("div");
-        meta.className = "row";
-        meta.style.marginTop = "8px";
-
-        const metaLabel = document.createElement("span");
-        metaLabel.className = "muted tiny";
-        metaLabel.textContent = "version:";
-        meta.appendChild(metaLabel);
-
-        if (versions.length) {
-          const sel = document.createElement("select");
-          sel.style.marginLeft = "8px";
-          for (const v of versions) {
-            const opt = document.createElement("option");
-            opt.value = String(v.version_id);
-            opt.textContent = `v${v.version} (version_id ${v.version_id})`;
-            sel.appendChild(opt);
-          }
-          if (selectedVersionId) sel.value = String(selectedVersionId);
-          sel.onchange = () => {
-            const nextId = Number(sel.value);
-            selectedReadVersionByWordId.set(pid, nextId);
-            const v = versions.find(x => Number(x.version_id) === nextId);
-            if (v) {
-              nodeCache.set(pid, {
-                version_id: v.version_id,
-                version: v.version,
-                child_words: Array.isArray(v.child_words) ? v.child_words : [],
-                child_lang_words: Array.isArray(v.child_lang_words) ? v.child_lang_words : [],
-              });
-            } else {
-              nodeCache.delete(pid);
-            }
-            renderReadTree();
-          };
-          meta.appendChild(sel);
-        } else {
-          const none = document.createElement("span");
-          none.className = "muted tiny";
-          none.style.marginLeft = "8px";
-          none.textContent = "no versions yet";
-          meta.appendChild(none);
-        }
-
-        d.appendChild(meta);
-
-        if (selectedVersion) {
-          nodeCache.set(pid, {
-            version_id: selectedVersion.version_id,
-            version: selectedVersion.version,
-            child_words: Array.isArray(selectedVersion.child_words) ? selectedVersion.child_words : [],
-            child_lang_words: Array.isArray(selectedVersion.child_lang_words) ? selectedVersion.child_lang_words : [],
-          });
-
-          const indent = document.createElement("div");
-          indent.className = "indent";
-          d.appendChild(indent);
-
-          // Render children recursively
-          renderNodeRecursive(R.lang_word_id, R.word, indent, 0);
-        }
-      } else {
-        // Sentence mode: show current children as pickers
-        const kids = Array.isArray(R.current_child_lang_words) ? R.current_child_lang_words : [];
-        const kidsMeta = document.createElement("div");
-        kidsMeta.className = "muted tiny";
-        kidsMeta.style.marginTop = "8px";
-        kidsMeta.textContent = kids.length ? "child lang words (pickable):" : "no child lang words";
-        d.appendChild(kidsMeta);
-
-        if (kids.length) {
-          const ul = document.createElement("ul");
-          for (const k of kids) {
-            const li = document.createElement("li");
-            const key = k.lang_word_id;
-            const on = selectedSentenceWordIds.has(key);
-
-            const b = document.createElement("button");
-            b.type = "button";
-            b.textContent = on ? "✓" : "+";
-            b.style.padding = "2px 8px";
-            b.style.borderRadius = "999px";
-            b.onclick = () => {
-              if (selectedSentenceWordIds.has(key)) selectedSentenceWordIds.delete(key);
-              else selectedSentenceWordIds.add(key);
-              updateSelectedWordsPill();
-              renderReadTree();
-              renderSentences();
-            };
-
-            const label = document.createElement("span");
-            label.style.marginLeft = "8px";
-            label.textContent = `${k.word} (id ${k.lang_word_id})`;
-
-            li.appendChild(b);
-            li.appendChild(label);
-            ul.appendChild(li);
-          }
-          d.appendChild(ul);
-        }
-      }
-
-      host.appendChild(d);
-    }
-  }
-
-  function renderNodeRecursive(langWordId, wordText, hostEl, depth) {
-    // Render one node as a details item that lazy-loads its own latest children.
-    const nodeDetails = document.createElement("details");
-    nodeDetails.open = false;
-
-    const nodeSummary = document.createElement("summary");
-    nodeSummary.innerHTML = `<span>${escapeHtml(wordText)}</span> <span class="muted tiny">(id ${langWordId})</span>`;
-    nodeDetails.appendChild(nodeSummary);
-
-    const body = document.createElement("div");
-    body.className = "indent";
-    body.innerHTML = `<div class="muted tiny loading">expand to load…</div>`;
-    nodeDetails.appendChild(body);
-
-    let loaded = false;
-
-    nodeDetails.addEventListener("toggle", async () => {
-      if (!nodeDetails.open) return;
-      if (loaded) return;
-      loaded = true;
-
-      body.innerHTML = `<div class="muted tiny loading">loading…</div>`;
-      try {
-        const node = await loadNodeLatest(langWordId);
-        body.innerHTML = "";
-
-        const vMeta = document.createElement("div");
-        vMeta.className = "muted tiny";
-        if (node.version) vMeta.textContent = `version v${node.version} (version_id ${node.version_id})`;
-        else vMeta.textContent = "no versions yet";
-        body.appendChild(vMeta);
-
-        const kids = Array.isArray(node.child_lang_words) ? node.child_lang_words : [];
-        const orb = Array.isArray(node.child_words) ? node.child_words : [];
-
-        if (kids.length) {
-          const label = document.createElement("div");
-          label.className = "muted tiny";
-          label.style.marginTop = "8px";
-          label.textContent = "child lang words:";
-          body.appendChild(label);
-
-          for (const k of kids) {
-            const childContainer = document.createElement("div");
-            childContainer.style.display = "flex";
-            childContainer.style.alignItems = "center";
-            childContainer.style.gap = "8px";
-            childContainer.style.marginTop = "4px";
-            
-            // Delete button
-            const deleteBtn = document.createElement("button");
-            deleteBtn.type = "button";
-            deleteBtn.textContent = "×";
-            deleteBtn.style.padding = "2px 6px";
-            deleteBtn.style.borderRadius = "999px";
-            deleteBtn.style.fontSize = "12px";
-            deleteBtn.title = "Delete child lang word link";
-            deleteBtn.onclick = async () => {
-              if (!confirm(`Delete child lang word "${k.word}" from this version?`)) return;
-              try {
-                await apiDelete(`/api/lang_word_versions/${node.version_id}/child_lang_words/${k.lang_word_id}`, { admin: true });
-                nodeCache.delete(langWordId); // clear cache
-                await loadWriteTree();
-              } catch (e) {
-                alert(String(e.message || e));
-              }
-            };
-            childContainer.appendChild(deleteBtn);
-            
-            // recurse: render child node as expandable details
-            renderNodeRecursive(Number(k.lang_word_id), k.word, childContainer, depth + 1);
-            body.appendChild(childContainer);
-          }
-        }
-
-        if (orb.length) {
-          const label = document.createElement("div");
-          label.className = "muted tiny";
-          label.style.marginTop = "8px";
-          label.textContent = "child words (open in stars):";
-          body.appendChild(label);
-
-          const ul = document.createElement("ul");
-          for (const c of orb) {
-            const li = document.createElement("li");
-            li.style.display = "flex";
-            li.style.alignItems = "center";
-            li.style.gap = "8px";
-            
-            // Delete button
-            const deleteBtn = document.createElement("button");
-            deleteBtn.type = "button";
-            deleteBtn.textContent = "×";
-            deleteBtn.style.padding = "2px 6px";
-            deleteBtn.style.borderRadius = "999px";
-            deleteBtn.style.fontSize = "12px";
-            deleteBtn.title = "Delete child word";
-            deleteBtn.onclick = async () => {
-              if (!confirm(`Delete child word "${c.word}"?`)) return;
-              try {
-                await apiDelete(`/api/child_words/${c.id}`, { admin: true });
-                nodeCache.delete(langWordId); // clear cache
-                await loadWriteTree();
-              } catch (e) {
-                alert(String(e.message || e));
-              }
-            };
-            li.appendChild(deleteBtn);
-            
-            const link = `stars.html?child_word_id=${encodeURIComponent(c.id)}`;
-            const linkEl = document.createElement("a");
-            linkEl.href = link;
-            linkEl.textContent = escapeHtml(c.word);
-            li.appendChild(linkEl);
-            
-            if (c.link) {
-              li.appendChild(document.createTextNode(" "));
-              const dot = document.createElement("span");
-              dot.className = "muted tiny";
-              dot.textContent = "·";
-              li.appendChild(dot);
-              li.appendChild(document.createTextNode(" "));
-              const sourceLink = document.createElement("a");
-              sourceLink.className = "muted tiny";
-              sourceLink.href = escapeHtml(c.link);
-              sourceLink.target = "_blank";
-              sourceLink.rel = "noopener noreferrer";
-              sourceLink.textContent = "source";
-              li.appendChild(sourceLink);
-            }
-            
-            ul.appendChild(li);
-          }
-          body.appendChild(ul);
-        }
-
-        if (!kids.length && !orb.length) {
-          const p = document.createElement("div");
-          p.className = "muted tiny";
-          p.style.marginTop = "8px";
-          p.textContent = "no children";
-          body.appendChild(p);
-        }
-      } catch (e) {
-        body.innerHTML = `<div class="card danger">${escapeHtml(String(e.message || e))}</div>`;
-      }
-    });
-
-    hostEl.appendChild(nodeDetails);
-  }
-
-  // -------------------------
-  // Load write tree
-  // -------------------------
-  async function loadWriteTree() {
-    $("readMeta").textContent = "loading…";
-    const data = await apiGet("/api/write");
-    roots = Array.isArray(data.roots) ? data.roots : [];
-
-    // refresh index for recursion; also clear cache when tree refreshes
-    nodeCache.clear();
-    await refreshWordIndex();
-
-    // prime cache for roots latest versions (fast path)
-    for (const R of roots) {
-      const versions = Array.isArray(R.versions) ? R.versions : [];
-      const latest = versions.length ? versions[0] : null;
-      if (latest) {
-        latestVersionByWordId.set(R.lang_word_id, latest.version_id);
-        nodeCache.set(R.lang_word_id, {
-          version_id: latest.version_id,
-          version: latest.version,
-          child_words: Array.isArray(latest.child_words) ? latest.child_words : [],
-          child_lang_words: Array.isArray(latest.child_lang_words) ? latest.child_lang_words : [],
-        });
-      }
-    }
-
-    renderReadTree();
-    refreshTempWritingCounts().catch(() => {});
-    // keep manual edit panel in sync if a parent is already selected
-    refreshManualEditUI();
-  }
-
-  $("refreshBtn").onclick = () => loadWriteTree();
-
-  // -------------------------
-  // Create parent word
-  // -------------------------
-  $("createParentBtn").onclick = async () => {
-    const word = ($("newParentInput").value || "").trim();
-    if (!word) return;
-
-    try {
-      await apiPost("/api/lang_words/parents", { word }, { admin: true });
-      $("newParentInput").value = "";
-      await loadWriteTree();
-      const hit = roots.find(r => r.word === word);
-      if (hit) setSelectedParent(hit.lang_word_id, hit.word);
-    } catch (e) {
-      alert(String(e.message || e));
-    }
-  };
-
-  // -------------------------
-  // Manual editing (word mode)
-  // -------------------------
-  $("manualVersionSelect").onchange = () => {
-    selectedManualVersionId = $("manualVersionSelect").value ? Number($("manualVersionSelect").value) : null;
-    refreshManualEditUI();
-  };
-
-  $("createVersionBtn").onclick = async () => {
-    if (!selectedParentWordId) return;
-    try {
-      const res = await apiPost(`/api/lang_words/${selectedParentWordId}/versions`, {}, { admin: true });
-      await loadWriteTree();
-      // keep selection and focus new version
-      const root = roots.find(r => Number(r.lang_word_id) === Number(selectedParentWordId));
-      if (root) setSelectedParent(root.lang_word_id, root.word);
-      refreshManualEditUI({ preferVersionId: res && res.version_id ? res.version_id : null });
-    } catch (e) {
-      alert(String(e.message || e));
-    }
-  };
-
-  $("addChildLangWordBtn").onclick = async () => {
-    const versionId = selectedManualVersionId;
-    if (!versionId) return;
-    const raw = ($("addChildLangWordIdInput").value || "").trim();
-    if (!raw) return;
-    const childId = Number(raw);
-    if (!childId) return alert("invalid child lang_word_id");
-    try {
-      await apiPost(`/api/lang_word_versions/${versionId}/child_lang_words`, { child_lang_word_id: childId }, { admin: true });
-      $("addChildLangWordIdInput").value = "";
-      nodeCache.clear(); // clear cache
-      await loadWriteTree();
-      refreshManualEditUI({ preferVersionId: versionId });
-      renderReadTree();
-    } catch (e) {
-      alert(String(e.message || e));
-    }
-  };
-
-  $("createAndLinkLangWordBtn").onclick = async () => {
-    const versionId = selectedManualVersionId;
-    if (!versionId) return;
-    const word = ($("createAndLinkLangWordInput").value || "").trim();
-    if (!word) return;
-    try {
-      const w = await apiPost(`/api/lang_words`, { word }, { admin: true });
-      await apiPost(`/api/lang_word_versions/${versionId}/child_lang_words`, { child_lang_word_id: w.lang_word_id }, { admin: true });
-      $("createAndLinkLangWordInput").value = "";
-      nodeCache.clear(); // clear cache
-      await loadWriteTree();
-      refreshManualEditUI({ preferVersionId: versionId });
-      renderReadTree();
-    } catch (e) {
-      alert(String(e.message || e));
-    }
-  };
-
-  $("addChildWordBtn").onclick = async () => {
-    const versionId = selectedManualVersionId;
-    if (!versionId) return;
-    const word = ($("addChildWordInput").value || "").trim();
-    const link = ($("addChildWordLinkInput").value || "").trim();
-    if (!word) return;
-    try {
-      await apiPost(`/api/lang_word_versions/${versionId}/child_words`, { word, link }, { admin: true });
-      $("addChildWordInput").value = "";
-      $("addChildWordLinkInput").value = "";
-      nodeCache.clear(); // clear cache
-      await loadWriteTree();
-      refreshManualEditUI({ preferVersionId: versionId });
-      renderReadTree();
-    } catch (e) {
-      alert(String(e.message || e));
-    }
-  };
-
-  $("batchAddChildLangWordsBtn").onclick = async () => {
-    const versionId = selectedManualVersionId;
-    if (!versionId) return;
-    const text = ($("batchChildLangWordsTextarea").value || "").trim();
-    if (!text) return;
-    const words = text.split('\n').map(w => w.trim()).filter(w => w);
-    if (!words.length) return;
-    try {
-      await apiPost(`/api/lang_word_versions/${versionId}/child_lang_words/batch`, { words }, { admin: true });
-      $("batchChildLangWordsTextarea").value = "";
-      nodeCache.clear(); // clear cache
-      await loadWriteTree();
-      refreshManualEditUI({ preferVersionId: versionId });
-      renderReadTree();
-    } catch (e) {
-      alert(String(e.message || e));
-    }
-  };
-
-  $("batchAddChildWordsBtn").onclick = async () => {
-    const versionId = selectedManualVersionId;
-    if (!versionId) return;
-    const text = ($("batchChildWordsTextarea").value || "").trim();
-    if (!text) return;
-    const words = text.split('\n').map(w => w.trim()).filter(w => w);
-    if (!words.length) return;
-    try {
-      await apiPost(`/api/lang_word_versions/${versionId}/child_words/batch`, { words }, { admin: true });
-      $("batchChildWordsTextarea").value = "";
-      nodeCache.clear(); // clear cache
-      await loadWriteTree();
-      refreshManualEditUI({ preferVersionId: versionId });
-      renderReadTree();
-    } catch (e) {
-      alert(String(e.message || e));
-    }
-  };
-
-  // -------------------------
-  // Generate themes (enqueue + poll)
-  // -------------------------
-  async function pollTask(taskId) {
-    $("taskStatusPill").textContent = "running";
-    while (true) {
-      const t = await apiGet(`/api/write/tasks/${taskId}`);
-      if (t.status === "done") {
-        $("taskStatusPill").textContent = "done";
-        return t;
-      }
-      if (t.status === "error") {
-        $("taskStatusPill").textContent = "error";
-        throw new Error(t.error || "task failed");
-      }
-      await new Promise(r => setTimeout(r, 1200));
-    }
-  }
-
-  $("runBtn").onclick = async () => {
-    if (!selectedParentWordId) return;
-    const modifier = ($("modifierInput").value || "").trim();
-    try {
-      $("runBtn").disabled = true;
-      $("orbitingBtn").disabled = true;
-      $("taskStatusPill").textContent = "queued";
-      const res = await apiPost("/api/write/create_lang_words", {
-        parent_lang_word_id: selectedParentWordId,
-        modifier
-      }, { admin: true });
-
-      const taskId = res.task_id;
-      await pollTask(taskId);
-      await loadWritings();
-      await loadWriteTree();
-    } catch (e) {
-      $("taskStatusPill").textContent = "error";
-      alert(String(e.message || e));
-    } finally {
-      $("runBtn").disabled = !(getAdminKey() && selectedParentWordId);
-      $("orbitingBtn").disabled = !(getAdminKey() && selectedParentWordId);
-    }
-  };
-
-  $("orbitingBtn").onclick = async () => {
-    if (!selectedParentWordId) return;
-    const modifier = ($("modifierInput").value || "").trim();
-    try {
-      $("runBtn").disabled = true;
-      $("orbitingBtn").disabled = true;
-      $("taskStatusPill").textContent = "queued";
-      const res = await apiPost("/api/write/create_child_words", {
-        parent_lang_word_id: selectedParentWordId,
-        modifier
-      }, { admin: true });
-
-      const taskId = res.task_id;
-      await pollTask(taskId);
-      await loadWriteTree();
-    } catch (e) {
-      $("taskStatusPill").textContent = "error";
-      alert(String(e.message || e));
-    } finally {
-      $("runBtn").disabled = !(getAdminKey() && selectedParentWordId);
-      $("orbitingBtn").disabled = !(getAdminKey() && selectedParentWordId);
-    }
-  };
-
-  // -------------------------
-  // Temporary writings
-  // -------------------------
-  $("refreshWritingsBtn").onclick = () => loadWritings();
-
-  async function loadWritings() {
-    const host = $("writings");
-    host.innerHTML = "";
-    if (!selectedParentWordId) return;
-
-    try {
-      const data = await apiGet(`/api/temporary_writings?parent_lang_word_id=${selectedParentWordId}`, { admin: true });
-      const arr = Array.isArray(data.writings) ? data.writings : [];
-      $("writeMeta").textContent = `${arr.length} writing(s)`;
-
-      for (const w of arr) {
-        const card = document.createElement("div");
-        card.className = "card";
-
-        const top = document.createElement("div");
-        top.className = "row";
-        top.style.justifyContent = "space-between";
-        top.innerHTML = `<div><strong>writing #${w.id}</strong> <span class="muted tiny">task ${w.task_id ?? "—"} • ${escapeHtml(w.created_at || "")}</span></div>`;
-        card.appendChild(top);
-
-        const pre = document.createElement("pre");
-        pre.textContent = JSON.stringify(w.text, null, 2);
-        card.appendChild(pre);
-
-        const btnRow = document.createElement("div");
-        btnRow.className = "row";
-        btnRow.style.marginTop = "10px";
-
-        const applyBtn = document.createElement("button");
-        applyBtn.type = "button";
-        applyBtn.textContent = "create writing (apply)";
-        applyBtn.onclick = async () => {
-          if (!confirm("Apply this writing? This will create a NEW parent version and link ONLY the new themes.")) return;
-          try {
-            applyBtn.disabled = true;
-            await apiPost(`/api/temporary_writings/${w.id}/apply_create_lang_words`, {}, { admin: true });
-            await loadWritings();
-            await loadWriteTree();
-          } catch (e) {
-            alert(String(e.message || e));
-          } finally {
-            applyBtn.disabled = false;
-          }
-        };
-
-        btnRow.appendChild(applyBtn);
-        card.appendChild(btnRow);
-        host.appendChild(card);
-      }
-
-      if (!arr.length) {
-        const p = document.createElement("div");
-        p.className = "muted tiny";
-        p.textContent = "no temporary writings yet";
-        host.appendChild(p);
-      }
-    } catch (e) {
-      $("writeMeta").textContent = "error";
-      const p = document.createElement("div");
-      p.className = "card danger";
-      p.textContent = String(e.message || e);
-      host.appendChild(p);
-    }
-  }
-
-  // -------------------------
-  // Sentence mode
-  // -------------------------
-  function updateSelectedWordsPill() {
-    $("selectedWordsPill").textContent = `${selectedSentenceWordIds.size} selected`;
-    $("createSentenceBtn").disabled = !(getAdminKey() && selectedSentenceWordIds.size > 0 && ($("sentenceTextInput").value || "").trim());
-  }
-
-  $("sentenceTextInput").addEventListener("input", updateSelectedWordsPill);
-
-  $("refreshSentencesBtn").onclick = () => loadSentences();
-
-  async function loadSentences() {
-    const data = await apiGet("/api/lang_sentences");
-    allSentences = Array.isArray(data.sentences) ? data.sentences : [];
-    renderSentences();
-  }
-
-  function renderSentences() {
-    const host = $("sentences");
-    host.innerHTML = "";
-
-    const selected = Array.from(selectedSentenceWordIds);
-    const filtered = allSentences.filter(s => {
-      const ids = Array.isArray(s.lang_word_ids) ? s.lang_word_ids : [];
-      for (const need of selected) {
-        if (!ids.includes(need)) return false;
-      }
-      return true;
-    });
-
-    const meta = document.createElement("div");
-    meta.className = "muted tiny";
-    meta.textContent = `${filtered.length} sentence(s) match`;
-    host.appendChild(meta);
-
-    for (const s of filtered) {
-      const card = document.createElement("div");
-      card.className = "card";
-      const ids = Array.isArray(s.lang_word_ids) ? s.lang_word_ids : [];
-      card.innerHTML = `
+  async function loadEntries() {
+    $("listHost").innerHTML = `<div class="muted">loading…</div>`;
+    const data = await apiGet("/api/lang");
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    $("listMeta").textContent = `${entries.length} shown`;
+
+    $("listHost").innerHTML = "";
+    for (const e of entries) {
+      const div = document.createElement("div");
+      div.className = "entry";
+      div.style.marginTop = "10px";
+      div.innerHTML = `
         <div class="row" style="justify-content:space-between;">
-          <div><strong><a href="sentence.html?sentence_id=${s.id}">#${s.id}</a></strong> <span class="muted tiny">updated ${escapeHtml(s.updated_at || "")}</span></div>
-          <span class="pill">${ids.length} word(s)</span>
+          <div class="muted mono">#${esc(e.id)} • ${esc(e.updated_at || e.created_at || "")}</div>
+          <button data-del="${esc(e.id)}" type="button">delete</button>
         </div>
-        <div style="margin-top:8px;">${escapeHtml(s.sentence || "")}</div>
-        <div class="muted tiny" style="margin-top:8px;">lang_word_ids: ${escapeHtml(JSON.stringify(ids))}</div>
+        <div style="margin-top:8px; white-space:pre-wrap;">${esc(e.text)}</div>
       `;
-      host.appendChild(card);
+      $("listHost").appendChild(div);
     }
 
-    if (!filtered.length) {
-      const p = document.createElement("div");
-      p.className = "muted tiny";
-      p.textContent = "no sentences match the selected words";
-      host.appendChild(p);
+    // wire deletes
+    for (const btn of document.querySelectorAll("button[data-del]")) {
+      btn.addEventListener("click", async () => {
+        const id = btn.getAttribute("data-del");
+        if (!id) return;
+        if (!confirm(`Delete #${id}?`)) return;
+        try {
+          await apiDelete(`/api/lang/${encodeURIComponent(id)}`, { admin: true });
+          await loadEntries();
+        } catch (e) {
+          alert(e.message || String(e));
+        }
+      });
     }
   }
 
-  $("createSentenceBtn").onclick = async () => {
-    const sentence = ($("sentenceTextInput").value || "").trim();
-    if (!sentence) return;
-    const ids = Array.from(selectedSentenceWordIds);
-    if (!ids.length) return;
-
+  async function createEntry() {
+    const text = ($("textInput").value || "").trim();
+    if (!text) return;
+    $("status").textContent = "creating…";
     try {
-      await apiPost("/api/lang_sentences", { lang_word_ids: ids, sentence }, { admin: true });
-      $("sentenceTextInput").value = "";
-      updateSelectedWordsPill();
-      await loadSentences();
+      await apiPost("/api/lang", { text }, { admin: true });
+      $("textInput").value = "";
+      await loadEntries();
+      $("status").textContent = "created";
+      setTimeout(() => ($("status").textContent = ""), 900);
     } catch (e) {
-      alert(String(e.message || e));
+      $("status").textContent = "";
+      alert(e.message || String(e));
     }
-  };
+  }
 
-  // -------------------------
-  // Admin key clear
-  // -------------------------
-  $("clearKeyBtn").onclick = () => {
-    localStorage.removeItem("lang_admin_key");
-    refreshAdminStatus();
-    $("runBtn").disabled = true;
-    $("orbitingBtn").disabled = true;
-    $("createSentenceBtn").disabled = true;
-  };
-
-  // -------------------------
-  // Sentence mode clear
-  // -------------------------
-  $("clearWordsBtn").onclick = () => {
-    selectedSentenceWordIds.clear();
-    updateSelectedWordsPill();
-    renderReadTree();
-    renderSentences();
-  };
-
-  // -------------------------
-  // Search
-  // -------------------------
-  let searchTerm = "";
-  $("searchInput").addEventListener("input", (e) => {
-    searchTerm = (e.target.value || "").trim().toLowerCase();
-    renderReadTree();
+  // UI wiring
+  $("setKeyBtn").addEventListener("click", async () => {
+    const v = prompt("Enter admin key:");
+    if (v) setAdminKey(v);
+    await refreshAdmin();
+    if (getAdminKey()) await loadEntries();
   });
 
+  $("clearKeyBtn").addEventListener("click", async () => {
+    clearAdminKey();
+    await refreshAdmin();
+  });
 
-  // -------------------------
-  // Word-mode filters + batch actions
-  // -------------------------
-  function updateSelectedParentsUI() {
-    $("selectedParentsPill").textContent = `${selectedParentIds.size} selected`;
+  $("refreshBtn").addEventListener("click", async () => {
+    const ok = await refreshAdmin();
+    if (ok) await loadEntries();
+  });
 
-    const hasAdmin = !!getAdminKey();
-    $("rootFilterSelect").disabled = !hasAdmin;
-    $("selectAllFilteredBtn").disabled = !hasAdmin;
-    $("clearSelectedParentsBtn").disabled = selectedParentIds.size === 0;
+  $("createBtn").addEventListener("click", createEntry);
+  $("clearBtn").addEventListener("click", () => ($("textInput").value = ""));
 
-    // Enable/disable batch buttons based on filter
-    const f = rootFilterMode || "all";
-    $("applySelectedTempBtn").style.display = (mode === "word" && f === "has_temp") ? "" : "none";
-    $("createTempForSelectedBtn").style.display = (mode === "word" && f === "needs_gen") ? "" : "none";
-
-    $("applySelectedTempBtn").disabled = !(hasAdmin && selectedParentIds.size > 0);
-    $("createTempForSelectedBtn").disabled = !(hasAdmin && selectedParentIds.size > 0);
-
-    $("batchHint").textContent = hasAdmin
-      ? (tempCountsLoaded ? "tmp counts loaded" : "loading tmp counts…")
-      : "batch actions require admin key";
-  }
-
-  function toggleParentSelection(parentId) {
-    const pid = Number(parentId);
-    if (!Number.isFinite(pid)) return;
-    if (selectedParentIds.has(pid)) selectedParentIds.delete(pid);
-    else selectedParentIds.add(pid);
-    updateSelectedParentsUI();
-    renderReadTree();
-  }
-
-  function clearSelectedParents() {
-    selectedParentIds.clear();
-    updateSelectedParentsUI();
-    renderReadTree();
-  }
-
-  function getFilteredRootsNow() {
-    const q = (searchTerm || "").trim().toLowerCase();
-    return (Array.isArray(roots) ? roots : []).filter(r => {
-      if (q && !String(r.word || "").toLowerCase().includes(q)) return false;
-
-      if (mode !== "word") return true;
-
-      if (rootFilterMode === "has_temp") {
-        const n = Number(tempWritingCountByParentId.get(Number(r.lang_word_id)) || 0);
-        return n > 0;
-      }
-      if (rootFilterMode === "needs_gen") {
-        const versions = Array.isArray(r.versions) ? r.versions : [];
-        const latest = versions.length ? versions[0] : null;
-        const childLangCount = latest && Array.isArray(latest.child_lang_words) ? latest.child_lang_words.length : 0;
-        const tempCount = Number(tempWritingCountByParentId.get(Number(r.lang_word_id)) || 0);
-        return childLangCount === 0 && tempCount === 0;
-      }
-      return true;
-    });
-  }
-
-  function selectAllFiltered() {
-    for (const r of getFilteredRootsNow()) {
-      selectedParentIds.add(Number(r.lang_word_id));
-    }
-    updateSelectedParentsUI();
-    renderReadTree();
-  }
-
-  async function refreshTempWritingCounts() {
-    // Only meaningful in word mode and with admin key.
-    if (!getAdminKey()) {
-      tempWritingCountByParentId.clear();
-      tempCountsLoaded = false;
-      updateSelectedParentsUI();
-      renderReadTree();
-      return;
-    }
-
-    tempCountsLoaded = false;
-    updateSelectedParentsUI();
-
-    const rs = Array.isArray(roots) ? roots : [];
-    const parentIds = rs.map(r => Number(r.lang_word_id)).filter(x => Number.isFinite(x));
-
-    // Small concurrency to avoid spamming the server
-    const concurrency = 6;
-    let i = 0;
-    async function worker() {
-      while (i < parentIds.length) {
-        const pid = parentIds[i++];
-        try {
-          const data = await apiGet(`/api/temporary_writings?parent_lang_word_id=${pid}`, { admin: true });
-          const arr = Array.isArray(data.writings) ? data.writings : [];
-          tempWritingCountByParentId.set(pid, arr.length);
-        } catch (e) {
-          // If this fails (e.g. admin key missing/invalid), stop trying to be clever.
-          tempWritingCountByParentId.set(pid, 0);
-        }
-      }
-    }
-
-    const workers = [];
-    for (let k = 0; k < concurrency; k++) workers.push(worker());
-    await Promise.all(workers);
-
-    tempCountsLoaded = true;
-    updateSelectedParentsUI();
-    renderReadTree();
-  }
-
-  async function applyAllTempForParents(parentIds) {
-    // For each selected parent, load its temp writings then apply them all.
-    for (const pid of parentIds) {
-      const data = await apiGet(`/api/temporary_writings?parent_lang_word_id=${pid}`, { admin: true });
-      const arr = Array.isArray(data.writings) ? data.writings : [];
-      for (const w of arr) {
-        await apiPost(`/api/temporary_writings/${w.id}/apply_create_lang_words`, {}, { admin: true });
-      }
-    }
-  }
-
-  async function enqueueTempForParents(parentIds) {
-    for (const pid of parentIds) {
-      await apiPost("/api/write/create_lang_words", { parent_lang_word_id: pid, modifier: "" }, { admin: true });
-    }
-  }
-
-  $("rootFilterSelect").onchange = () => {
-    rootFilterMode = $("rootFilterSelect").value || "all";
-    clearSelectedParents();
-    updateSelectedParentsUI();
-    renderReadTree();
-  };
-
-  $("selectAllFilteredBtn").onclick = () => selectAllFiltered();
-  $("clearSelectedParentsBtn").onclick = () => clearSelectedParents();
-
-  $("applySelectedTempBtn").onclick = async () => {
-    if (!getAdminKey()) return;
-    const ids = Array.from(selectedParentIds);
-    if (!ids.length) return;
-
-    if (!confirm(`Apply ALL temporary writings for ${ids.length} selected parent word(s)? This will create new versions + delete the temporary writings.`)) return;
-
-    $("applySelectedTempBtn").disabled = true;
-    try {
-      await applyAllTempForParents(ids);
-      clearSelectedParents();
-      await loadWriteTree();
-      await loadWritings();
-    } catch (e) {
-      alert(String(e.message || e));
-    } finally {
-      $("applySelectedTempBtn").disabled = false;
-    }
-  };
-
-  $("createTempForSelectedBtn").onclick = async () => {
-    if (!getAdminKey()) return;
-    const ids = Array.from(selectedParentIds);
-    if (!ids.length) return;
-
-    if (!confirm(`Enqueue theme-generation for ${ids.length} selected parent word(s)?`)) return;
-
-    $("createTempForSelectedBtn").disabled = true;
-    try {
-      await enqueueTempForParents(ids);
-      clearSelectedParents();
-      // Tasks run async; refresh tree to update badges (may still be 0 until tasks finish)
-      await loadWriteTree();
-    } catch (e) {
-      alert(String(e.message || e));
-    } finally {
-      $("createTempForSelectedBtn").disabled = false;
-    }
-  };
-
-
-  // -------------------------
-  // Boot
-  // -------------------------
-  async function boot() {
-    await refreshAdminStatus();
-    updateSelectedParentsUI();
-    updateSelectedWordsPill();
-    await loadWriteTree();
-  }
-
-  boot().catch(err => console.error(err));
+  // init
+  (async function init(){
+    const ok = await refreshAdmin();
+    if (ok) await loadEntries();
+    $("meta").textContent = "POST /api/lang • GET /api/lang";
+  })();
 </script>
 </body>
 </html>
