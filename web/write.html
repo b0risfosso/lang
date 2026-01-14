@@ -22,6 +22,11 @@
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
     .stars { margin-top: 10px; padding-top: 10px; border-top: 1px dashed color-mix(in oklab, currentColor 22%, transparent); }
     .star { padding: 10px; border-radius: 12px; border: 1px solid color-mix(in oklab, currentColor 18%, transparent); margin-top: 8px; }
+    .startext {
+      width: 100%;
+      min-height: 90px;
+      resize: vertical;
+    }
     .two { display:grid; grid-template-columns: 220px 1fr; gap: 10px; }
     @media (max-width: 720px) { .two { grid-template-columns: 1fr; } }
   </style>
@@ -178,7 +183,7 @@
 
           <div class="two" style="margin-top:10px;">
             <input placeholder="type (e.g. note, prompt, tag)" data-star-type="${esc(e.id)}" />
-            <input placeholder="text…" data-star-text="${esc(e.id)}" />
+            <textarea class="startext" placeholder="text…" data-star-text="${esc(e.id)}"></textarea>
           </div>
           <div class="row" style="margin-top:10px;">
             <button data-add-star="${esc(e.id)}" type="button">add star stuff</button>
