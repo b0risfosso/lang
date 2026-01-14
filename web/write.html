@@ -185,6 +185,7 @@
     $("listMeta").textContent = focusedLangId
       ? `focused: #${focusedLangId}`
       : `${entries.length} shown`;
+    $("composerCard").style.display = focusedLangId ? "none" : "";
 
     $("listHost").innerHTML = "";
     for (const e of entries) {
