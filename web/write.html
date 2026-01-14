@@ -147,6 +147,66 @@
       .replaceAll("'","&#039;");
   }
 
+  function countStars(nodes) {
+    let count = 0;
+    for (const node of nodes) {
+      count += 1;
+      if (Array.isArray(node.children) && node.children.length) {
+        count += countStars(node.children);
+      }
+    }
+    return count;
+  }
+
+  function renderStar(node, depth) {
+    const texts = Array.isArray(node.texts) ? node.texts : [];
+    const children = Array.isArray(node.children) ? node.children : [];
+    const textHtml = texts.map(t => `
+      <div style="margin-top:8px; white-space:pre-wrap;">${esc(t.text)}</div>
+    `).join("") || `<div class="muted">no texts yet</div>`;
+    const childrenHtml = children.map(c => renderStar(c, depth + 1)).join("");
+
+    return `
+      <div class="star" style="margin-left:${depth * 18}px;">
+        <div class="row" style="justify-content:space-between;">
+          <div class="muted mono">★ #${esc(node.id)} • ${esc(node.type)} • ${esc(node.updated_at || node.created_at || "")}</div>
+          <button data-del-star="${esc(node.id)}" type="button">delete branch</button>
+        </div>
+        ${textHtml}
+        <div style="margin-top:8px;">
+          <textarea class="startext" placeholder="append text…" data-append-text="${esc(node.id)}"></textarea>
+          <div class="row" style="margin-top:6px;">
+            <button data-append-star="${esc(node.id)}" type="button">append text</button>
+            <span class="muted" data-append-status="${esc(node.id)}"></span>
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="two">
+            <input placeholder="child type (e.g. note, prompt, tag)" data-child-type="${esc(node.id)}" />
+            <textarea class="startext" placeholder="child text…" data-child-text="${esc(node.id)}"></textarea>
+          </div>
+          <div class="row" style="margin-top:6px;">
+            <button data-add-child-star="${esc(node.id)}" data-lang-id="${esc(node.lang_id)}" type="button">add child star</button>
+            <span class="muted" data-child-status="${esc(node.id)}"></span>
+          </div>
+        </div>
+        ${childrenHtml ? `<div style="margin-top:10px;">${childrenHtml}</div>` : ""}
+      </div>
+    `;
+  }
+
+  async function loadStarTree(langId, hostEl, countEl) {
+    hostEl.innerHTML = `<div class="muted">loading…</div>`;
+    try {
+      const data = await apiGet(`/api/lang/${encodeURIComponent(langId)}/stars/tree`);
+      const stars = Array.isArray(data.stars) ? data.stars : [];
+      if (countEl) countEl.textContent = `${countStars(stars)} items`;
+      hostEl.innerHTML = stars.map(s => renderStar(s, 0)).join("") || `<div class="muted">no star stuff yet</div>`;
+    } catch (e) {
+      hostEl.innerHTML = `<div class="muted">failed to load stars</div>`;
+    }
+  }
+
   async function refreshAdmin() {
     const k = getAdminKey();
     if (!k) {
@@ -174,7 +234,7 @@
 
   async function loadEntries() {
     $("listHost").innerHTML = `<div class="muted">loading…</div>`;
-    const data = await apiGet("/api/lang?include_stars=1");
+    const data = await apiGet("/api/lang?include_stars=0");
     let entries = Array.isArray(data.entries) ? data.entries : [];
     const allEntries = entries;
 
@@ -193,8 +253,6 @@
       div.className = "entry";
       div.style.marginTop = "10px";
 
-      const stars = Array.isArray(e.stars) ? e.stars : [];
-
       div.innerHTML = `
         <div class="row" style="justify-content:space-between;">
           <div class="muted mono">#${esc(e.id)} • ${esc(e.updated_at || e.created_at || "")}</div>
@@ -209,16 +267,16 @@
         <div class="stars">
           <div class="row" style="justify-content:space-between;">
             <strong>star stuff</strong>
-            <span class="muted">${stars.length} items</span>
+            <span class="muted" data-star-count="${esc(e.id)}">…</span>
           </div>
 
           <div class="two" style="margin-top:10px;">
-            <input placeholder="type (e.g. note, prompt, tag)" data-star-type="${esc(e.id)}" />
-            <textarea class="startext" placeholder="text…" data-star-text="${esc(e.id)}"></textarea>
+            <input placeholder="root type (e.g. note, prompt, tag)" data-root-star-type="${esc(e.id)}" />
+            <textarea class="startext" placeholder="root text…" data-root-star-text="${esc(e.id)}"></textarea>
           </div>
           <div class="row" style="margin-top:10px;">
-            <button data-add-star="${esc(e.id)}" type="button">add star stuff</button>
-            <span class="muted" data-star-status="${esc(e.id)}"></span>
+            <button data-add-root-star="${esc(e.id)}" type="button">add root star</button>
+            <span class="muted" data-root-star-status="${esc(e.id)}"></span>
           </div>
 
           <div data-stars-host="${esc(e.id)}" style="margin-top:10px;"></div>
@@ -227,17 +285,9 @@
 
       $("listHost").appendChild(div);
 
-      // render stars list
       const host = div.querySelector(`[data-stars-host="${CSS.escape(String(e.id))}"]`);
-      host.innerHTML = stars.map(s => `
-        <div class="star">
-          <div class="row" style="justify-content:space-between;">
-            <div class="muted mono">★ #${esc(s.id)} • ${esc(s.type)} • ${esc(s.updated_at || s.created_at || "")}</div>
-            <button data-del-star="${esc(s.id)}" type="button">delete</button>
-          </div>
-          <div style="margin-top:8px; white-space:pre-wrap;">${esc(s.text)}</div>
-        </div>
-      `).join("") || `<div class="muted">no star stuff yet</div>`;
+      const countEl = div.querySelector(`[data-star-count="${CSS.escape(String(e.id))}"]`);
+      await loadStarTree(e.id, host, countEl);
     }
 
     // wire lang deletes
@@ -260,7 +310,7 @@
       btn.addEventListener("click", async () => {
         const id = btn.getAttribute("data-del-star");
         if (!id) return;
-        if (!confirm(`Delete star #${id}?`)) return;
+        if (!confirm(`Delete star branch #${id} (and all children)?`)) return;
         try {
           await apiDelete(`/api/stars/${encodeURIComponent(id)}`, { admin: true });
           await loadEntries();
@@ -270,15 +320,15 @@
       });
     }
 
-    // wire add star
-    for (const btn of document.querySelectorAll("button[data-add-star]")) {
+    // wire add root star
+    for (const btn of document.querySelectorAll("button[data-add-root-star]")) {
       btn.addEventListener("click", async () => {
-        const langId = btn.getAttribute("data-add-star");
+        const langId = btn.getAttribute("data-add-root-star");
         if (!langId) return;
 
-        const typeEl = document.querySelector(`[data-star-type="${CSS.escape(String(langId))}"]`);
-        const textEl = document.querySelector(`[data-star-text="${CSS.escape(String(langId))}"]`);
-        const statusEl = document.querySelector(`[data-star-status="${CSS.escape(String(langId))}"]`);
+        const typeEl = document.querySelector(`[data-root-star-type="${CSS.escape(String(langId))}"]`);
+        const textEl = document.querySelector(`[data-root-star-text="${CSS.escape(String(langId))}"]`);
+        const statusEl = document.querySelector(`[data-root-star-status="${CSS.escape(String(langId))}"]`);
 
         const type = (typeEl?.value || "").trim();
         const text = (textEl?.value || "").trim();
@@ -290,7 +340,82 @@
 
         statusEl.textContent = "adding…";
         try {
-          await apiPost(`/api/lang/${encodeURIComponent(langId)}/stars`, { type, text }, { admin: true });
+          await apiPost(
+            `/api/lang/${encodeURIComponent(langId)}/stars`,
+            { type, text, parent_star_id: null },
+            { admin: true },
+          );
+          typeEl.value = "";
+          textEl.value = "";
+          statusEl.textContent = "added";
+          setTimeout(() => statusEl.textContent = "", 900);
+          await loadEntries();
+        } catch (e) {
+          statusEl.textContent = "";
+          alert(e.message || String(e));
+        }
+      });
+    }
+
+    // wire append text
+    for (const btn of document.querySelectorAll("button[data-append-star]")) {
+      btn.addEventListener("click", async () => {
+        const starId = btn.getAttribute("data-append-star");
+        if (!starId) return;
+
+        const textEl = document.querySelector(`[data-append-text="${CSS.escape(String(starId))}"]`);
+        const statusEl = document.querySelector(`[data-append-status="${CSS.escape(String(starId))}"]`);
+        const text = (textEl?.value || "").trim();
+
+        if (!text) {
+          alert("Provide star text to append.");
+          return;
+        }
+
+        statusEl.textContent = "adding…";
+        try {
+          await apiPost(
+            `/api/stars/${encodeURIComponent(starId)}/texts`,
+            { text },
+            { admin: true },
+          );
+          textEl.value = "";
+          statusEl.textContent = "added";
+          setTimeout(() => statusEl.textContent = "", 900);
+          await loadEntries();
+        } catch (e) {
+          statusEl.textContent = "";
+          alert(e.message || String(e));
+        }
+      });
+    }
+
+    // wire add child star
+    for (const btn of document.querySelectorAll("button[data-add-child-star]")) {
+      btn.addEventListener("click", async () => {
+        const parentId = btn.getAttribute("data-add-child-star");
+        const langId = btn.getAttribute("data-lang-id");
+        if (!parentId || !langId) return;
+
+        const typeEl = document.querySelector(`[data-child-type="${CSS.escape(String(parentId))}"]`);
+        const textEl = document.querySelector(`[data-child-text="${CSS.escape(String(parentId))}"]`);
+        const statusEl = document.querySelector(`[data-child-status="${CSS.escape(String(parentId))}"]`);
+
+        const type = (typeEl?.value || "").trim();
+        const text = (textEl?.value || "").trim();
+
+        if (!type || !text) {
+          alert("Provide both child type and child text.");
+          return;
+        }
+
+        statusEl.textContent = "adding…";
+        try {
+          await apiPost(
+            `/api/lang/${encodeURIComponent(langId)}/stars`,
+            { type, text, parent_star_id: parentId },
+            { admin: true },
+          );
           typeEl.value = "";
           textEl.value = "";
           statusEl.textContent = "added";
@@ -362,7 +487,7 @@
     readFocusFromUrl();
     const ok = await refreshAdmin();
     if (ok) await loadEntries();
-    $("meta").textContent = "POST /api/lang • POST /api/lang/:id/stars";
+    $("meta").textContent = "POST /api/lang • POST /api/lang/:id/stars • POST /api/stars/:id/texts";
   })();
 </script>
 </body>
