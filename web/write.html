@@ -41,6 +41,7 @@
     <button id="setKeyBtn" type="button">set admin key</button>
     <button id="clearKeyBtn" type="button">clear key</button>
     <button id="refreshBtn" type="button">refresh</button>
+    <button id="showAllBtn" type="button" style="display:none;">show all</button>
   </div>
 </header>
 
@@ -83,6 +84,24 @@
 
 <script>
   const $ = (id) => document.getElementById(id);
+
+  let focusedLangId = null;
+
+  function setFocus(id) {
+    focusedLangId = id ? String(id) : null;
+    const url = new URL(window.location.href);
+    if (focusedLangId) url.searchParams.set("focus", focusedLangId);
+    else url.searchParams.delete("focus");
+    window.history.replaceState({}, "", url.toString());
+    $("showAllBtn").style.display = focusedLangId ? "" : "none";
+  }
+
+  function readFocusFromUrl() {
+    const url = new URL(window.location.href);
+    const f = url.searchParams.get("focus");
+    focusedLangId = f ? String(f) : null;
+    $("showAllBtn").style.display = focusedLangId ? "" : "none";
+  }
 
   function getAdminKey() { return localStorage.getItem("lang_admin_key") || ""; }
   function setAdminKey(v) { localStorage.setItem("lang_admin_key", v); }
@@ -156,8 +175,16 @@
   async function loadEntries() {
     $("listHost").innerHTML = `<div class="muted">loading…</div>`;
     const data = await apiGet("/api/lang?include_stars=1");
-    const entries = Array.isArray(data.entries) ? data.entries : [];
-    $("listMeta").textContent = `${entries.length} shown`;
+    let entries = Array.isArray(data.entries) ? data.entries : [];
+    const allEntries = entries;
+
+    if (focusedLangId) {
+      entries = allEntries.filter(e => String(e.id) === String(focusedLangId));
+    }
+
+    $("listMeta").textContent = focusedLangId
+      ? `focused: #${focusedLangId}`
+      : `${entries.length} shown`;
 
     $("listHost").innerHTML = "";
     for (const e of entries) {
@@ -170,7 +197,10 @@
       div.innerHTML = `
         <div class="row" style="justify-content:space-between;">
           <div class="muted mono">#${esc(e.id)} • ${esc(e.updated_at || e.created_at || "")}</div>
-          <button data-del-lang="${esc(e.id)}" type="button">delete entry</button>
+          <div class="row">
+            <button data-focus-lang="${esc(e.id)}" type="button">focus</button>
+            <button data-del-lang="${esc(e.id)}" type="button">delete entry</button>
+          </div>
         </div>
 
         <div style="margin-top:8px; white-space:pre-wrap;">${esc(e.text)}</div>
@@ -271,6 +301,17 @@
         }
       });
     }
+
+    // wire focus
+    for (const btn of document.querySelectorAll("button[data-focus-lang]")) {
+      btn.addEventListener("click", async () => {
+        const id = btn.getAttribute("data-focus-lang");
+        if (!id) return;
+        setFocus(id);
+        await loadEntries();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
   }
 
   async function createEntry() {
@@ -307,11 +348,17 @@
     if (ok) await loadEntries();
   });
 
+  $("showAllBtn").addEventListener("click", async () => {
+    setFocus(null);
+    await loadEntries();
+  });
+
   $("createBtn").addEventListener("click", createEntry);
   $("clearBtn").addEventListener("click", () => ($("textInput").value = ""));
 
   // init
   (async function init(){
+    readFocusFromUrl();
     const ok = await refreshAdmin();
     if (ok) await loadEntries();
     $("meta").textContent = "POST /api/lang • POST /api/lang/:id/stars";
