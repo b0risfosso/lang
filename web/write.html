@@ -27,6 +27,8 @@
       min-height: 90px;
       resize: vertical;
     }
+    .star-inputs { display: none; }
+    .star-inputs.is-open { display: block; }
     .two { display:grid; grid-template-columns: 220px 1fr; gap: 10px; }
     @media (max-width: 720px) { .two { grid-template-columns: 1fr; } }
   </style>
@@ -170,17 +172,20 @@
       <div class="star" style="margin-left:${depth * 18}px;">
         <div class="row" style="justify-content:space-between;">
           <div class="muted mono">★ #${esc(node.id)} • ${esc(node.type)} • ${esc(node.updated_at || node.created_at || "")}</div>
-          <button data-del-star="${esc(node.id)}" type="button">delete branch</button>
+          <div class="row">
+            <button data-toggle-star-inputs="${esc(node.id)}" type="button">write</button>
+            <button data-del-star="${esc(node.id)}" type="button">delete branch</button>
+          </div>
         </div>
         ${textHtml}
-        <div style="margin-top:8px;">
+        <div class="star-inputs" data-star-inputs="${esc(node.id)}" style="margin-top:8px;">
           <textarea class="startext" placeholder="append text…" data-append-text="${esc(node.id)}"></textarea>
           <div class="row" style="margin-top:6px;">
             <button data-append-star="${esc(node.id)}" type="button">append text</button>
             <span class="muted" data-append-status="${esc(node.id)}"></span>
           </div>
         </div>
-        <div style="margin-top:10px;">
+        <div class="star-inputs" data-star-inputs-child="${esc(node.id)}" style="margin-top:10px;">
           <div class="two">
             <input placeholder="child type (e.g. note, prompt, tag)" data-child-type="${esc(node.id)}" />
             <textarea class="startext" placeholder="child text…" data-child-text="${esc(node.id)}"></textarea>
@@ -270,13 +275,19 @@
             <span class="muted" data-star-count="${esc(e.id)}">…</span>
           </div>
 
-          <div class="two" style="margin-top:10px;">
-            <input placeholder="root type (e.g. note, prompt, tag)" data-root-star-type="${esc(e.id)}" />
-            <textarea class="startext" placeholder="root text…" data-root-star-text="${esc(e.id)}"></textarea>
-          </div>
           <div class="row" style="margin-top:10px;">
-            <button data-add-root-star="${esc(e.id)}" type="button">add root star</button>
+            <button data-toggle-root-star="${esc(e.id)}" type="button">create star</button>
             <span class="muted" data-root-star-status="${esc(e.id)}"></span>
+          </div>
+
+          <div class="star-inputs" data-root-star-inputs="${esc(e.id)}" style="margin-top:10px;">
+            <div class="two">
+              <input placeholder="root type (e.g. note, prompt, tag)" data-root-star-type="${esc(e.id)}" />
+              <textarea class="startext" placeholder="root text…" data-root-star-text="${esc(e.id)}"></textarea>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <button data-add-root-star="${esc(e.id)}" type="button">add root star</button>
+            </div>
           </div>
 
           <div data-stars-host="${esc(e.id)}" style="margin-top:10px;"></div>
@@ -436,6 +447,33 @@
         setFocus(id);
         await loadEntries();
         window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
+
+    // toggle root star inputs
+    for (const btn of document.querySelectorAll("button[data-toggle-root-star]")) {
+      btn.addEventListener("click", () => {
+        const langId = btn.getAttribute("data-toggle-root-star");
+        if (!langId) return;
+        const inputs = document.querySelector(`[data-root-star-inputs="${CSS.escape(String(langId))}"]`);
+        if (!inputs) return;
+        const showing = inputs.classList.contains("is-open");
+        inputs.classList.toggle("is-open");
+        btn.textContent = showing ? "create star" : "hide star";
+      });
+    }
+
+    // toggle star inputs
+    for (const btn of document.querySelectorAll("button[data-toggle-star-inputs]")) {
+      btn.addEventListener("click", () => {
+        const starId = btn.getAttribute("data-toggle-star-inputs");
+        if (!starId) return;
+        const inputs = document.querySelector(`[data-star-inputs="${CSS.escape(String(starId))}"]`);
+        const childInputs = document.querySelector(`[data-star-inputs-child="${CSS.escape(String(starId))}"]`);
+        const showing = inputs && inputs.classList.contains("is-open");
+        if (inputs) inputs.classList.toggle("is-open");
+        if (childInputs) childInputs.classList.toggle("is-open");
+        btn.textContent = showing ? "write" : "hide";
       });
     }
   }
