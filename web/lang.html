@@ -32,7 +32,6 @@
 <body>
 <header>
   <div class="row">
-    <h1>sentences</h1>
     <span class="pill" id="metaPill">…</span>
   </div>
   <nav class="tiny">
@@ -42,37 +41,7 @@
 </header>
 
 <main>
-  <div class="grid">
-    <!-- Left: word selector -->
-    <section class="card">
-      <div class="row" style="justify-content:space-between;">
-        <strong>filter by lang words</strong>
-        <button id="refreshWordsBtn" type="button">refresh</button>
-      </div>
-      <div class="muted tiny" id="adminStatus">admin: unknown</div>
-      <div class="muted tiny" style="margin-top:6px;">Select words; results show sentences containing all selected word ids.</div>
-
-      <div style="margin-top:10px;" class="row">
-        <span class="pill" id="selectedPill">0 selected</span>
-        <button id="clearSelectionBtn" type="button">clear</button>
-      </div>
-
-      <div id="wordList" style="margin-top:10px;"></div>
-
-    </section>
-
-    <!-- Right: sentences -->
-    <section class="card">
-      <div class="row" style="justify-content:space-between;">
-        <strong>sentences</strong>
-        <div class="row">
-          <span class="muted tiny" id="resultMeta">…</span>
-          <button id="refreshSentencesBtn" type="button">refresh</button>
-        </div>
-      </div>
-      <div id="sentenceList" style="margin-top:10px;"></div>
-    </section>
-  </div>
+  words and stars
 </main>
 
 <script>
